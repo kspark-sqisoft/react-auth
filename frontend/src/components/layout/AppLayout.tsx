@@ -1,6 +1,25 @@
-import { Link, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
+
+function headerNavClass({ isActive }: { isActive: boolean }) {
+  return cn(
+    "rounded-md px-1.5 py-1 transition-colors",
+    isActive
+      ? "font-semibold text-primary"
+      : "text-muted-foreground hover:text-foreground",
+  );
+}
+
+function footerNavClass({ isActive }: { isActive: boolean }) {
+  return cn(
+    "transition-colors",
+    isActive
+      ? "font-semibold text-primary"
+      : "text-muted-foreground hover:text-foreground",
+  );
+}
 
 /** 공통 헤더·푸터와 `<Outlet />`으로 자식 라우트만 갈아 끼웁니다. */
 export function AppLayout() {
@@ -10,17 +29,17 @@ export function AppLayout() {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm">
         <div className="mx-auto flex h-12 max-w-3xl items-center justify-between gap-4 px-4">
-          <nav className="flex items-center gap-4 text-sm font-medium">
-            <Link to="/" className="text-foreground hover:text-primary">
+          <nav className="flex items-center gap-2 text-sm font-medium sm:gap-3">
+            <NavLink to="/" end className={headerNavClass}>
               홈
-            </Link>
-            <Link to="/posts" className="text-muted-foreground hover:text-foreground">
+            </NavLink>
+            <NavLink to="/posts" className={headerNavClass}>
               글
-            </Link>
+            </NavLink>
             {user ? (
-              <Link to="/me" className="text-muted-foreground hover:text-foreground">
+              <NavLink to="/me" className={headerNavClass}>
                 내 정보
-              </Link>
+              </NavLink>
             ) : null}
           </nav>
           <div className="flex items-center gap-2">
@@ -61,24 +80,24 @@ export function AppLayout() {
             className="flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-muted-foreground"
             aria-label="푸터 내비게이션"
           >
-            <Link to="/" className="transition-colors hover:text-foreground">
+            <NavLink to="/" end className={footerNavClass}>
               홈
-            </Link>
-            <Link to="/posts" className="transition-colors hover:text-foreground">
+            </NavLink>
+            <NavLink to="/posts" className={footerNavClass}>
               글
-            </Link>
+            </NavLink>
             {user ? (
-              <Link to="/me" className="transition-colors hover:text-foreground">
+              <NavLink to="/me" className={footerNavClass}>
                 내 정보
-              </Link>
+              </NavLink>
             ) : (
               <>
-                <Link to="/login" className="transition-colors hover:text-foreground">
+                <NavLink to="/login" className={footerNavClass}>
                   로그인
-                </Link>
-                <Link to="/signup" className="transition-colors hover:text-foreground">
+                </NavLink>
+                <NavLink to="/signup" className={footerNavClass}>
                   회원가입
-                </Link>
+                </NavLink>
               </>
             )}
           </nav>

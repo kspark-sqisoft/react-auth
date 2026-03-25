@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { ImageOff, Search, X } from "lucide-react";
+import { Search, X } from "lucide-react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { fetchPostsPage, POST_PAGE_DEFAULT, type Post } from "@/lib/api";
@@ -318,88 +318,95 @@ export function PostListPage() {
       ) : null}
 
       <ul className="space-y-3">
-        {posts.map((post) => (
-          <li key={post.id}>
-            <Card className="group/card gap-0 overflow-hidden p-0 py-0 transition-colors hover:bg-muted/40">
-              <div className="flex flex-col sm:flex-row sm:items-stretch">
-                <Link
-                  to={`/posts/${post.id}`}
-                  className="flex min-w-0 flex-1 flex-col justify-center gap-1.5 px-4 py-3 sm:py-3.5"
-                >
-                  <h3 className="font-heading text-base font-semibold leading-snug text-foreground transition-colors group-hover/card:text-primary">
-                    {post.title}
-                  </h3>
-                  <p className="text-xs text-muted-foreground">
-                    {post.author.name} · {formatDate(post.createdAt)}
-                  </p>
-                  <p className="line-clamp-2 text-sm text-muted-foreground whitespace-pre-wrap">
-                    {post.content}
-                  </p>
-                </Link>
+        {posts.map((post) => {
+          const likeButton = (
+            <PostLikeButton
+              postId={post.id}
+              likeCount={post.likeCount}
+              likedByMe={post.likedByMe}
+              className="h-8 border border-border/40 bg-background/35 text-foreground shadow-sm backdrop-blur-md hover:bg-background/50"
+              onPatch={(patch) => {
+                setLikeActionError(null);
+                setPosts((prev) =>
+                  prev.map((p) => (p.id === post.id ? { ...p, ...patch } : p)),
+                );
+              }}
+              onApplied={(state) => {
+                setPosts((prev) =>
+                  prev.map((p) =>
+                    p.id === post.id
+                      ? {
+                          ...p,
+                          likeCount: state.likeCount,
+                          likedByMe: state.likedByMe,
+                        }
+                      : p,
+                  ),
+                );
+              }}
+              onSyncError={setLikeActionError}
+            />
+          );
+
+          return (
+            <li key={post.id}>
+              <Card className="group/card !gap-0 overflow-hidden !p-0 !py-0 transition-colors hover:bg-muted/40">
                 <div
-                  className="relative isolate h-28 w-full shrink-0 overflow-hidden border-border bg-muted/50 max-sm:border-t sm:h-auto sm:w-28 sm:shrink-0 sm:border-s max-sm:rounded-b-xl sm:rounded-e-xl sm:rounded-b-none"
+                  className={
+                    post.imageUrl
+                      ? "grid min-h-0 w-full grid-cols-1 sm:grid-cols-[minmax(0,1fr)_7rem] sm:grid-rows-1 sm:items-stretch sm:min-h-[7.5rem]"
+                      : "grid min-h-0 w-full grid-cols-1 sm:min-h-[7.5rem]"
+                  }
                 >
-                  <Link
-                    to={`/posts/${post.id}`}
-                    className="absolute inset-0 z-0 block outline-none ring-inset ring-transparent transition-[box-shadow] focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label={`${post.title} 상세 보기`}
-                  >
-                    {post.imageUrl ? (
-                      <img
-                        src={post.imageUrl}
-                        alt=""
-                        className="h-full w-full object-cover"
-                        loading="lazy"
-                      />
-                    ) : (
-                      <div className="flex h-full w-full flex-col items-center justify-center gap-1.5 px-2 text-center">
-                        <ImageOff
-                          className="size-8 text-muted-foreground/55"
-                          aria-hidden
-                        />
-                        <span className="text-[11px] font-medium leading-tight text-muted-foreground">
-                          빈 이미지
-                        </span>
+                  <div className="relative isolate min-h-0 min-w-0">
+                    <Link
+                      to={`/posts/${post.id}`}
+                      className={
+                        post.imageUrl
+                          ? "flex h-full min-h-0 min-w-0 flex-col justify-center gap-1.5 px-4 py-3 sm:py-3.5"
+                          : "flex h-full min-h-[7.5rem] min-w-0 flex-col justify-center gap-1.5 px-4 py-3 pb-10 pr-14 sm:min-h-0 sm:py-3.5"
+                      }
+                    >
+                      <h3 className="font-heading line-clamp-1 h-6 shrink-0 text-base font-semibold leading-6 text-foreground transition-colors group-hover/card:text-primary">
+                        {post.title}
+                      </h3>
+                      <p className="line-clamp-1 h-4 shrink-0 truncate text-xs leading-4 text-muted-foreground">
+                        {post.author.name} · {formatDate(post.createdAt)}
+                      </p>
+                      <p className="line-clamp-2 h-10 max-h-10 shrink-0 overflow-hidden text-sm leading-5 break-words text-muted-foreground">
+                        {post.content}
+                      </p>
+                    </Link>
+                    {!post.imageUrl ? (
+                      <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-end p-2">
+                        <div className="pointer-events-auto">{likeButton}</div>
                       </div>
-                    )}
-                  </Link>
-                  <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-start p-2">
-                    <div className="pointer-events-auto">
-                      <PostLikeButton
-                        postId={post.id}
-                        likeCount={post.likeCount}
-                        likedByMe={post.likedByMe}
-                        className="h-8 border border-border/40 bg-background/35 text-foreground shadow-sm backdrop-blur-md hover:bg-background/50"
-                        onPatch={(patch) => {
-                          setLikeActionError(null);
-                          setPosts((prev) =>
-                            prev.map((p) =>
-                              p.id === post.id ? { ...p, ...patch } : p,
-                            ),
-                          );
-                        }}
-                        onApplied={(state) => {
-                          setPosts((prev) =>
-                            prev.map((p) =>
-                              p.id === post.id
-                                ? {
-                                  ...p,
-                                  likeCount: state.likeCount,
-                                  likedByMe: state.likedByMe,
-                                }
-                                : p,
-                            ),
-                          );
-                        }}
-                        onSyncError={setLikeActionError}
-                      />
-                    </div>
+                    ) : null}
                   </div>
+                  {post.imageUrl ? (
+                    <div className="relative isolate h-28 min-h-28 w-full overflow-hidden border-border border-t sm:h-full sm:min-h-0 sm:w-full sm:border-t-0 sm:border-s max-sm:rounded-b-xl sm:rounded-e-xl sm:rounded-b-none">
+                      <Link
+                        to={`/posts/${post.id}`}
+                        className="absolute inset-0 z-0 block overflow-hidden outline-none ring-inset ring-transparent transition-[box-shadow] focus-visible:ring-2 focus-visible:ring-ring"
+                        aria-label={`${post.title} 상세 보기`}
+                      >
+                        <img
+                          src={post.imageUrl}
+                          alt=""
+                          className="absolute inset-0 size-full object-cover"
+                          loading="lazy"
+                        />
+                      </Link>
+                      <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-end p-2">
+                        <div className="pointer-events-auto">{likeButton}</div>
+                      </div>
+                    </div>
+                  ) : null}
                 </div>
-              </div>
-            </Card>
-          </li>
-        ))}
+              </Card>
+            </li>
+          );
+        })}
       </ul>
 
       {hasMore ? (

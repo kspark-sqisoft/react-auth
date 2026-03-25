@@ -156,11 +156,11 @@ export function PostDetailPage() {
       </div>
 
       {post.imageUrl ? (
-        <div className="relative aspect-video w-full max-h-[min(70vh,560px)] overflow-hidden rounded-xl border border-border bg-muted/20">
+        <div className="flex w-full justify-center rounded-xl border border-border bg-muted/20 px-2 py-3 sm:px-3 sm:py-4">
           <img
             src={post.imageUrl}
             alt=""
-            className="absolute inset-0 size-full object-cover"
+            className="max-h-[min(70vh,560px)] w-auto max-w-full object-contain object-center"
             loading="lazy"
           />
         </div>
