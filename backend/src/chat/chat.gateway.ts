@@ -1,4 +1,3 @@
-import { randomUUID } from 'crypto';
 import {
   ConnectedSocket,
   MessageBody,
@@ -8,14 +7,17 @@ import {
   WebSocketGateway,
   WebSocketServer,
 } from '@nestjs/websockets';
-import { Logger } from '@nestjs/common';
+import { Logger, OnModuleInit } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { JWT_ACCESS_SECRET, corsOrigin } from '../env.constants';
+import { ChatMessage } from './chat-message.entity';
+import { ChatService } from './chat.service';
 
 const MAX_MESSAGE_LEN = 2000;
 const MAX_ROOM_ID_LEN = 64;
+const HISTORY_LIMIT = 50;
 
 type ClientData = {
   userId: number;
@@ -25,11 +27,31 @@ type ClientData = {
 
 export type RoomListEntry = { id: string; members: number };
 
+export type ChatMessageWire = {
+  id: string;
+  roomId: string;
+  userId: number;
+  userName: string;
+  text: string;
+  createdAt: string;
+};
+
 function sanitizeRoomId(raw: unknown): string {
   if (typeof raw !== 'string') return 'lobby';
   const t = raw.trim().toLowerCase().replace(/\s+/g, '-');
   const safe = t.replace(/[^a-z0-9가-힣._-]/g, '').slice(0, MAX_ROOM_ID_LEN);
   return safe || 'lobby';
+}
+
+function toWireMessages(rows: ChatMessage[]): ChatMessageWire[] {
+  return rows.map((m) => ({
+    id: String(m.id),
+    roomId: m.roomId,
+    userId: m.authorId,
+    userName: m.authorName,
+    text: m.body,
+    createdAt: m.createdAt.toISOString(),
+  }));
 }
 
 @WebSocketGateway({
@@ -39,18 +61,31 @@ function sanitizeRoomId(raw: unknown): string {
     credentials: true,
   },
 })
-export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
+export class ChatGateway
+  implements OnGatewayConnection, OnGatewayDisconnect, OnModuleInit
+{
   @WebSocketServer()
   server!: Server;
 
   private readonly logger = new Logger(ChatGateway.name);
 
-  /** 소켓이 방에 들어간 횟수(한 소켓당 방당 1) */
   private readonly roomMembers = new Map<string, number>();
-  /** 한 번이라도 생성·사용된 방(빈 방도 목록에 남김) */
   private readonly knownRooms = new Set<string>(['lobby']);
 
-  constructor(private readonly jwt: JwtService) {}
+  constructor(
+    private readonly jwt: JwtService,
+    private readonly chatService: ChatService,
+  ) {}
+
+  async onModuleInit(): Promise<void> {
+    try {
+      const ids = await this.chatService.distinctRoomIds();
+      for (const id of ids) this.knownRooms.add(id);
+      this.knownRooms.add('lobby');
+    } catch (e) {
+      this.logger.warn(`[채팅] DB 방 목록 로드 실패: ${String(e)}`);
+    }
+  }
 
   private incRoom(room: string): void {
     this.knownRooms.add(room);
@@ -79,6 +114,17 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private emitRoomList(): void {
     this.server.emit('roomList', { rooms: this.buildRoomList() });
+  }
+
+  private async emitMessageHistory(
+    client: Socket,
+    room: string,
+  ): Promise<void> {
+    const rows = await this.chatService.findRecent(room, HISTORY_LIMIT);
+    client.emit('messageHistory', {
+      roomId: room,
+      messages: toWireMessages(rows),
+    });
   }
 
   async handleConnection(client: Socket) {
@@ -132,7 +178,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage('joinRoom')
-  handleJoinRoom(
+  async handleJoinRoom(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { roomId?: string },
   ) {
@@ -142,6 +188,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const room = sanitizeRoomId(body?.roomId);
     if (me.currentRoom === room) {
       client.emit('joinedRoom', { roomId: room });
+      await this.emitMessageHistory(client, room);
       return { ok: true, roomId: room };
     }
 
@@ -156,6 +203,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     me.currentRoom = room;
 
     client.emit('joinedRoom', { roomId: room });
+    await this.emitMessageHistory(client, room);
+
     client.to(room).emit('systemNotice', {
       type: 'join',
       roomId: room,
@@ -180,8 +229,46 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     return { ok: true };
   }
 
+  @SubscribeMessage('deleteRoom')
+  async handleDeleteRoom(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() body: { roomId?: string },
+  ) {
+    const me = client.data as ClientData;
+    if (me?.userId == null) return { ok: false };
+
+    const room = sanitizeRoomId(body?.roomId);
+    if (room === 'lobby') {
+      client.emit('chatError', { message: '로비는 삭제할 수 없습니다.' });
+      return { ok: false };
+    }
+
+    try {
+      await this.chatService.deleteAllMessagesInRoom(room);
+    } catch (e) {
+      this.logger.error(`[채팅] 방 메시지 삭제 실패: ${String(e)}`);
+      client.emit('chatError', { message: '방 삭제에 실패했습니다.' });
+      return { ok: false };
+    }
+
+    const sockets = await this.server.in(room).fetchSockets();
+    for (const s of sockets) {
+      const d = s.data as ClientData;
+      void s.leave(room);
+      if (d.currentRoom === room) {
+        d.currentRoom = undefined;
+      }
+      s.emit('roomDeleted', { roomId: room });
+    }
+
+    this.knownRooms.delete(room);
+    this.roomMembers.delete(room);
+    this.emitRoomList();
+    return { ok: true, roomId: room };
+  }
+
   @SubscribeMessage('sendMessage')
-  handleSend(
+  async handleSend(
     @ConnectedSocket() client: Socket,
     @MessageBody() body: { roomId?: string; text?: string },
   ) {
@@ -203,14 +290,18 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       return { ok: false };
     }
 
-    const msg = {
-      id: randomUUID(),
-      roomId: room,
-      userId: me.userId,
-      userName: me.name,
-      text,
-      createdAt: new Date().toISOString(),
-    };
+    let saved: ChatMessage;
+    try {
+      saved = await this.chatService.append(room, me.userId, me.name, text);
+    } catch (e) {
+      this.logger.error(`[채팅] 저장 실패: ${String(e)}`);
+      client.emit('chatError', { message: '메시지 저장에 실패했습니다.' });
+      return { ok: false };
+    }
+
+    this.knownRooms.add(room);
+    const [msg] = toWireMessages([saved]);
+    if (!msg) return { ok: false };
     this.server.to(room).emit('chatMessage', msg);
     return { ok: true, id: msg.id };
   }

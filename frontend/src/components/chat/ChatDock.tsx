@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
-import { MessageCircle, Send, X } from "lucide-react";
+import { LogOut, MessageCircle, Send, Trash2, X } from "lucide-react";
 import { useAuth } from "@/stores/auth-store";
 import { getAccessToken } from "@/lib/api";
 import { appLog } from "@/lib/app-log";
@@ -128,10 +128,6 @@ export function ChatDock() {
   }, []);
 
   useEffect(() => {
-    if (open) setUnread(0);
-  }, [open]);
-
-  useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [feed, open]);
 
@@ -142,18 +138,24 @@ export function ChatDock() {
         socketRef.current.disconnect();
         socketRef.current = null;
       }
-      setConnected(false);
-      setUnread(0);
-      setRooms([{ id: "lobby", members: 0 }]);
+      queueMicrotask(() => {
+        setConnected(false);
+        setUnread(0);
+        setRooms([{ id: "lobby", members: 0 }]);
+      });
       return;
     }
 
     const token = getAccessToken();
     if (!token) {
-      setBanner("액세스 토큰이 없습니다. 다시 로그인해 주세요.");
+      queueMicrotask(() => {
+        setBanner("액세스 토큰이 없습니다. 다시 로그인해 주세요.");
+      });
       return;
     }
-    setBanner(null);
+    queueMicrotask(() => {
+      setBanner(null);
+    });
 
     const socket = io(`${window.location.origin}/chat`, {
       path: "/socket.io",
@@ -192,10 +194,38 @@ export function ChatDock() {
     });
 
     socket.on("joinedRoom", ({ roomId }: { roomId: string }) => {
+      activeRoomRef.current = roomId;
       setActiveRoom(roomId);
       setFeed([]);
       appLog("chat", "방 입장", { roomId });
     });
+
+    socket.on("leftRoom", ({ roomId }: { roomId: string }) => {
+      appLog("chat", "방 나감", { roomId });
+      socket.emit("joinRoom", { roomId: "lobby" });
+    });
+
+    socket.on("roomDeleted", ({ roomId }: { roomId: string }) => {
+      appLog("chat", "방 삭제됨", { roomId });
+      if (roomId === activeRoomRef.current) {
+        socket.emit("joinRoom", { roomId: "lobby" });
+      }
+    });
+
+    socket.on(
+      "messageHistory",
+      (p: { roomId?: string; messages?: ChatMessageEvt[] }) => {
+        if (p?.roomId !== activeRoomRef.current) return;
+        const list = Array.isArray(p.messages) ? p.messages : [];
+        setFeed(
+          list.map((msg) => ({
+            kind: "msg" as const,
+            key: msg.id,
+            data: msg,
+          })),
+        );
+      },
+    );
 
     socket.on("chatMessage", (msg: ChatMessageEvt) => {
       if (msg.roomId !== activeRoomRef.current) return;
@@ -227,7 +257,9 @@ export function ChatDock() {
       socket.removeAllListeners();
       socket.disconnect();
       if (socketRef.current === socket) socketRef.current = null;
-      setConnected(false);
+      queueMicrotask(() => {
+        setConnected(false);
+      });
     };
   }, [user, appendFeed]);
 
@@ -250,6 +282,18 @@ export function ChatDock() {
 
   function joinListedRoom(roomId: string) {
     socketRef.current?.emit("joinRoom", { roomId });
+  }
+
+  function leaveCurrentRoom() {
+    if (!socketRef.current?.connected || activeRoom === "lobby") return;
+    socketRef.current.emit("leaveRoom");
+  }
+
+  function deleteListedRoom(roomId: string) {
+    if (roomId === "lobby" || !socketRef.current?.connected) return;
+    const label = roomLabel(roomId);
+    if (!window.confirm(`「${label}」방과 저장된 대화를 삭제할까요?`)) return;
+    socketRef.current.emit("deleteRoom", { roomId });
   }
 
   if (!user) return null;
@@ -280,6 +324,20 @@ export function ChatDock() {
                 >
                   {connected ? "●" : "○"}
                 </span>
+                {activeRoom !== "lobby" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    className="size-8"
+                    title="방 나가기 · 로비로 이동"
+                    aria-label="방 나가기, 로비로 이동"
+                    disabled={!connected}
+                    onClick={leaveCurrentRoom}
+                  >
+                    <LogOut className="size-4" />
+                  </Button>
+                ) : null}
                 <Button
                   type="button"
                   variant="ghost"
@@ -306,12 +364,12 @@ export function ChatDock() {
               <ScrollArea className="max-h-28">
                 <ul className="space-y-1 pr-2 pb-1">
                   {rooms.map((r) => (
-                    <li key={r.id}>
+                    <li key={r.id} className="flex items-center gap-0.5">
                       <button
                         type="button"
                         onClick={() => joinListedRoom(r.id)}
                         className={cn(
-                          "flex w-full items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                          "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
                           r.id === activeRoom
                             ? "bg-primary/15 font-medium text-foreground"
                             : "hover:bg-muted/80 text-muted-foreground hover:text-foreground",
@@ -322,6 +380,23 @@ export function ChatDock() {
                           {r.members}명
                         </span>
                       </button>
+                      {r.id !== "lobby" ? (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
+                          aria-label={`${roomLabel(r.id)} 방 삭제`}
+                          title="방·대화 기록 삭제"
+                          disabled={!connected}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deleteListedRoom(r.id);
+                          }}
+                        >
+                          <Trash2 className="size-3.5" />
+                        </Button>
+                      ) : null}
                     </li>
                   ))}
                 </ul>
@@ -421,7 +496,10 @@ export function ChatDock() {
               )}
               aria-label={unread > 0 ? `채팅 열기 (읽지 않음 ${unread})` : "채팅 열기"}
               aria-expanded={false}
-              onClick={() => setOpen(true)}
+              onClick={() => {
+                setUnread(0);
+                setOpen(true);
+              }}
             >
               <MessageCircle className="size-7" strokeWidth={1.75} />
             </Button>
