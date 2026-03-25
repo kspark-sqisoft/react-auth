@@ -170,8 +170,20 @@ export function PostDetailPage() {
         {post.content}
       </div>
 
-      <Button asChild variant="ghost" size="sm" className="px-0">
-        <Link to="/posts">← 목록</Link>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        className="px-0"
+        onClick={() => {
+          if (typeof window !== "undefined" && window.history.length > 1) {
+            navigate(-1);
+          } else {
+            navigate("/posts");
+          }
+        }}
+      >
+        ← 목록
       </Button>
 
       <AlertDialog open={deleteOpen} onOpenChange={setDeleteOpen}>

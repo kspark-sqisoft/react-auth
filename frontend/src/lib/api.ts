@@ -14,6 +14,8 @@ export type AuthUser = { sub: number; email: string; name: string };
 
 export type PostAuthor = { id: number; name: string };
 
+const POST_PAGE_DEFAULT = 4;
+
 export type Post = {
   id: number;
   title: string;
@@ -152,8 +154,6 @@ export type PostsPageResponse = {
   items: Post[];
   total: number;
 };
-
-const POST_PAGE_DEFAULT = 5;
 
 /** 공개 글 목록 페이지네이션 (무한 스크롤·더 보기) */
 export async function fetchPostsPage(params?: {

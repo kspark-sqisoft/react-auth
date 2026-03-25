@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
-import { Link } from "react-router-dom";
+import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { fetchPostsPage, POST_PAGE_DEFAULT, type Post } from "@/lib/api";
 import { appLog } from "@/lib/app-log";
@@ -40,6 +40,9 @@ function formatDate(iso: string): string {
  */
 export function PostListPage() {
   const { user } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const urlSearchRaw = searchParams.get("search") ?? "";
+
   const [posts, setPosts] = useState<Post[]>([]);
   const [total, setTotal] = useState<number | null>(null);
   const [initialLoading, setInitialLoading] = useState(true);
@@ -48,8 +51,11 @@ export function PostListPage() {
   const [loadMoreScheduled, setLoadMoreScheduled] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [likeActionError, setLikeActionError] = useState<string | null>(null);
-  const [searchInput, setSearchInput] = useState("");
-  const [searchQuery, setSearchQuery] = useState("");
+  const [searchInput, setSearchInput] = useState(urlSearchRaw);
+  const [searchQuery, setSearchQuery] = useState(urlSearchRaw.trim());
+
+  /** 직전에 디바운스로 URL을 바꾼 경우, URL→입력 동기화 effect를 한 번 건너뜀 */
+  const skipUrlToStateSyncRef = useRef(false);
 
   const postsRef = useRef(posts);
   postsRef.current = posts;
@@ -80,10 +86,31 @@ export function PostListPage() {
 
   useEffect(() => {
     const id = window.setTimeout(() => {
-      setSearchQuery(searchInput.trim());
+      const trimmed = searchInput.trim();
+      setSearchQuery(trimmed);
+      skipUrlToStateSyncRef.current = true;
+      setSearchParams(
+        (prev) => {
+          const p = new URLSearchParams(prev);
+          if (trimmed) p.set("search", trimmed);
+          else p.delete("search");
+          return p;
+        },
+        { replace: true },
+      );
     }, SEARCH_DEBOUNCE_MS);
     return () => window.clearTimeout(id);
-  }, [searchInput]);
+  }, [searchInput, setSearchParams]);
+
+  /** 브라우저 뒤로가기 등으로 URL만 바뀐 때 입력·쿼리 복원 */
+  useEffect(() => {
+    if (skipUrlToStateSyncRef.current) {
+      skipUrlToStateSyncRef.current = false;
+      return;
+    }
+    setSearchQuery(urlSearchRaw.trim());
+    setSearchInput(urlSearchRaw);
+  }, [urlSearchRaw]);
 
   useEffect(() => {
     clearLoadMoreDebounce();
@@ -245,7 +272,9 @@ export function PostListPage() {
               aria-hidden
             />
             <Input
-              type="search"
+              type="text"
+              inputMode="search"
+              enterKeyHint="search"
               value={searchInput}
               onChange={(e) => setSearchInput(e.target.value)}
               placeholder="제목 또는 본문 검색…"
@@ -258,7 +287,19 @@ export function PostListPage() {
                 type="button"
                 className="absolute top-1/2 right-2 -translate-y-1/2 rounded-md p-1 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
                 aria-label="검색어 지우기"
-                onClick={() => setSearchInput("")}
+                onClick={() => {
+                  setSearchInput("");
+                  setSearchQuery("");
+                  skipUrlToStateSyncRef.current = true;
+                  setSearchParams(
+                    (prev) => {
+                      const p = new URLSearchParams(prev);
+                      p.delete("search");
+                      return p;
+                    },
+                    { replace: true },
+                  );
+                }}
               >
                 <X className="size-4" />
               </button>
