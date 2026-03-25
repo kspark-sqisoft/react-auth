@@ -1,0 +1,54 @@
+import 'dotenv/config';
+import { Logger } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { NestExpressApplication } from '@nestjs/platform-express';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import cookieParser from 'cookie-parser';
+import { AppModule } from './app.module';
+import {
+  PORT,
+  REFRESH_TOKEN_COOKIE,
+  UPLOAD_ROOT,
+  corsOrigin,
+} from './env.constants';
+
+async function bootstrap() {
+  const logger = new Logger('Bootstrap');
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
+  app.useStaticAssets(UPLOAD_ROOT, { prefix: '/uploads/' });
+
+  app.use(cookieParser());
+
+  const origin = corsOrigin();
+  app.enableCors({
+    origin,
+    credentials: true,
+  });
+
+  const swaggerConfig = new DocumentBuilder()
+    .setTitle('react-auth API')
+    .setDescription(
+      '회원가입·로그인(액세스 JWT + httpOnly 리프레시 쿠키)·게시글 CRUD·이미지 업로드',
+    )
+    .setVersion('1.0')
+    .addBearerAuth(
+      { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', in: 'header' },
+      'JWT-auth',
+    )
+    .addCookieAuth('refresh', {
+      type: 'apiKey',
+      in: 'cookie',
+      name: REFRESH_TOKEN_COOKIE,
+    })
+    .build();
+  const document = SwaggerModule.createDocument(app, swaggerConfig);
+  SwaggerModule.setup('api-docs', app, document, {
+    swaggerOptions: { persistAuthorization: true },
+  });
+  logger.log(`Swagger UI http://localhost:${PORT}/api-docs`);
+
+  await app.listen(PORT);
+  logger.log(`HTTP 서버 시작 port=${PORT} cors=${JSON.stringify(origin)}`);
+}
+void bootstrap();
