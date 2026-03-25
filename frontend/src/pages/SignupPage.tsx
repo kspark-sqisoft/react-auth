@@ -1,12 +1,14 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useActionState, useEffect, useOptimistic } from "react";
 import { Link, Navigate, useNavigate } from "react-router-dom";
 import { appLog } from "@/lib/app-log";
+import { formDataGetString } from "@/lib/form-data-utils";
+import { fieldErrorsFromZodIssues } from "@/lib/zod-form";
 import { signupSchema, type SignupFormValues } from "@/lib/schemas/forms";
 import { useAuth } from "@/stores/auth-store";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
+import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
+import { FormFieldError } from "@/components/forms/FormFieldError";
+import { FormStatusSubmitButton } from "@/components/forms/FormStatusSubmitButton";
+import { CenteredSpinner } from "@/components/layout/CenteredSpinner";
 import {
   Card,
   CardContent,
@@ -17,57 +19,75 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+
+type SignupActionState = {
+  serverError: string | null;
+  fieldErrors: Partial<Record<keyof SignupFormValues, string>>;
+  redirectToLogin: boolean;
+};
 
 /** 가입 API만 호출 후 로그인 화면으로 보내고, `registered` 플래그로 안내 문구 표시 */
 export function SignupPage() {
   const { user, isReady, signUp } = useAuth();
   const navigate = useNavigate();
 
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const initialState: SignupActionState = {
+    serverError: null,
+    fieldErrors: {},
+    redirectToLogin: false,
+  };
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<SignupFormValues>({
-    resolver: zodResolver(signupSchema),
-    defaultValues: { name: "", email: "", password: "" },
-  });
+  async function signupAction(
+    _prevState: SignupActionState,
+    formData: FormData,
+  ): Promise<SignupActionState> {
+    const parsed = signupSchema.safeParse({
+      name: formDataGetString(formData, "name"),
+      email: formDataGetString(formData, "email"),
+      password: formDataGetString(formData, "password"),
+    });
+    if (!parsed.success) {
+      return {
+        serverError: null,
+        fieldErrors: fieldErrorsFromZodIssues<keyof SignupFormValues>(parsed.error.issues),
+        redirectToLogin: false,
+      };
+    }
+
+    try {
+      await signUp({
+        email: parsed.data.email.trim(),
+        password: parsed.data.password,
+        name: parsed.data.name.trim(),
+      });
+      appLog("signup", "가입 완료 → 로그인 화면 이동");
+      return { serverError: null, fieldErrors: {}, redirectToLogin: true };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "회원가입에 실패했습니다.";
+      appLog("signup", "가입 실패", msg);
+      return { serverError: msg, fieldErrors: {}, redirectToLogin: false };
+    }
+  }
+
+  const [formState, formAction] = useActionState(signupAction, initialState);
+  const [optimisticState, addOptimistic] = useOptimistic(
+    formState,
+    (current, next: Partial<SignupActionState>) => ({ ...current, ...next }),
+  );
+
+  useEffect(() => {
+    if (!optimisticState.redirectToLogin) return;
+    navigate("/login", { replace: true, state: { registered: true } });
+  }, [optimisticState.redirectToLogin, navigate]);
 
   if (!isReady) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
-    );
+    return <CenteredSpinner />;
   }
 
   if (user) {
     appLog("signup", "이미 로그인됨 → /me");
     return <Navigate to="/me" replace />;
-  }
-
-  async function onValid(values: SignupFormValues) {
-    setServerError(null);
-    setPending(true);
-    try {
-      await signUp({
-        email: values.email.trim(),
-        password: values.password,
-        name: values.name.trim(),
-      });
-      appLog("signup", "가입 완료 → 로그인 화면 이동");
-      navigate("/login", { replace: true, state: { registered: true } });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "회원가입에 실패했습니다.";
-      appLog("signup", "가입 실패", msg);
-      setServerError(msg);
-    } finally {
-      setPending(false);
-    }
   }
 
   return (
@@ -77,66 +97,50 @@ export function SignupPage() {
           <CardTitle>회원가입</CardTitle>
           <CardDescription>새 계정을 만듭니다.</CardDescription>
         </CardHeader>
-        <form onSubmit={(e) => void handleSubmit(onValid)(e)} noValidate>
+        <form
+          action={formAction}
+          onSubmit={() => addOptimistic({ serverError: null, fieldErrors: {} })}
+          noValidate
+        >
           <CardContent className="space-y-4">
-            {serverError ? (
-              <Alert variant="destructive">
-                <AlertTitle>오류</AlertTitle>
-                <AlertDescription>{serverError}</AlertDescription>
-              </Alert>
-            ) : null}
+            <FormErrorAlert message={optimisticState.serverError} />
             <div className="space-y-2">
               <Label htmlFor="signup-name">이름</Label>
               <Input
                 id="signup-name"
+                name="name"
                 autoComplete="name"
-                aria-invalid={Boolean(errors.name)}
-                className={cn(errors.name && "border-destructive")}
-                {...register("name")}
+                aria-invalid={Boolean(optimisticState.fieldErrors.name)}
+                className={cn(optimisticState.fieldErrors.name && "border-destructive")}
               />
-              {errors.name ? (
-                <p className="text-sm text-destructive">{errors.name.message}</p>
-              ) : null}
+              <FormFieldError message={optimisticState.fieldErrors.name} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="signup-email">이메일</Label>
               <Input
                 id="signup-email"
+                name="email"
                 autoComplete="email"
-                aria-invalid={Boolean(errors.email)}
-                className={cn(errors.email && "border-destructive")}
-                {...register("email")}
+                aria-invalid={Boolean(optimisticState.fieldErrors.email)}
+                className={cn(optimisticState.fieldErrors.email && "border-destructive")}
               />
-              {errors.email ? (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
-              ) : null}
+              <FormFieldError message={optimisticState.fieldErrors.email} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="signup-password">비밀번호</Label>
               <Input
                 id="signup-password"
+                name="password"
                 type="password"
                 autoComplete="new-password"
-                aria-invalid={Boolean(errors.password)}
-                className={cn(errors.password && "border-destructive")}
-                {...register("password")}
+                aria-invalid={Boolean(optimisticState.fieldErrors.password)}
+                className={cn(optimisticState.fieldErrors.password && "border-destructive")}
               />
-              {errors.password ? (
-                <p className="text-sm text-destructive">{errors.password.message}</p>
-              ) : null}
+              <FormFieldError message={optimisticState.fieldErrors.password} />
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-3 sm:flex-row sm:justify-between">
-            <Button type="submit" disabled={pending} className="w-full sm:w-auto">
-              {pending ? (
-                <>
-                  <Spinner className="size-4" />
-                  진행 중…
-                </>
-              ) : (
-                "가입하기"
-              )}
-            </Button>
+            <FormStatusSubmitButton className="w-full sm:w-auto">가입하기</FormStatusSubmitButton>
             <p className="text-center text-xs text-muted-foreground sm:text-right">
               이미 계정이 있나요?{" "}
               <Link to="/login" className="text-primary underline-offset-4 hover:underline">

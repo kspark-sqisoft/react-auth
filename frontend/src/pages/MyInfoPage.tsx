@@ -1,7 +1,16 @@
-import { useEffect, useId, useState } from "react";
+import {
+  useActionState,
+  useEffect,
+  useId,
+  useOptimistic,
+  useRef,
+  useState,
+} from "react";
 import { useAuth } from "@/stores/auth-store";
 import { appLog } from "@/lib/app-log";
 import { updateMyProfile } from "@/lib/api";
+import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
+import { FormStatusSubmitButton } from "@/components/forms/FormStatusSubmitButton";
 import {
   Card,
   CardContent,
@@ -9,69 +18,88 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Spinner } from "@/components/ui/spinner";
+import { SafeImage } from "@/components/ui/safe-image";
+
+type ProfileActionState = {
+  error: string | null;
+  /** 성공 시 증가 — 파일 입력·로컬 미리보기 초기화용 */
+  tick: number;
+};
 
 /** 로그인 사용자 프로필; 프로필 이미지 업로드·제거 */
 export function MyInfoPage() {
   const { user, refreshUser } = useAuth();
   const fileInputId = useId();
-  const [file, setFile] = useState<File | null>(null);
+  const [pickedFile, setPickedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const blobUrlRef = useRef<string | null>(null);
+
+  function releaseLocalPreview() {
+    if (blobUrlRef.current) {
+      URL.revokeObjectURL(blobUrlRef.current);
+      blobUrlRef.current = null;
+    }
+    setPreviewUrl(null);
+    setPickedFile(null);
+  }
+
+  const initialState: ProfileActionState = { error: null, tick: 0 };
+
+  async function profileAction(
+    prev: ProfileActionState,
+    formData: FormData,
+  ): Promise<ProfileActionState> {
+    const intent = formData.get("intent");
+    if (intent === "remove") {
+      if (!user?.imageUrl) return { error: null, tick: prev.tick };
+      try {
+        await updateMyProfile({ removeImage: true });
+        await refreshUser();
+        appLog("me", "프로필 이미지 제거 완료");
+        releaseLocalPreview();
+        return { error: null, tick: prev.tick + 1 };
+      } catch (e) {
+        return {
+          error: e instanceof Error ? e.message : "제거에 실패했습니다.",
+          tick: prev.tick,
+        };
+      }
+    }
+
+    if (intent === "upload") {
+      const file = formData.get("image");
+      if (!(file instanceof File) || file.size === 0) {
+        return { error: "이미지 파일을 선택해 주세요.", tick: prev.tick };
+      }
+      try {
+        await updateMyProfile({ image: file });
+        await refreshUser();
+        appLog("me", "프로필 이미지 업로드 완료");
+        releaseLocalPreview();
+        return { error: null, tick: prev.tick + 1 };
+      } catch (e) {
+        return {
+          error: e instanceof Error ? e.message : "저장에 실패했습니다.",
+          tick: prev.tick,
+        };
+      }
+    }
+
+    return prev;
+  }
+
+  const [formState, formAction] = useActionState(profileAction, initialState);
+  const [optimisticState, addOptimistic] = useOptimistic(
+    formState,
+    (current, next: Partial<ProfileActionState>) => ({ ...current, ...next }),
+  );
 
   useEffect(() => {
     appLog("me", "내 정보 화면", user ? { sub: user.sub } : {});
   }, [user]);
 
-  useEffect(() => {
-    if (!file) {
-      setPreviewUrl(null);
-      return;
-    }
-    const url = URL.createObjectURL(file);
-    setPreviewUrl(url);
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [file]);
-
   const displayUrl = previewUrl ?? user?.imageUrl ?? null;
-
-  async function onUpload() {
-    if (!file) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await updateMyProfile({ image: file });
-      setFile(null);
-      await refreshUser();
-      appLog("me", "프로필 이미지 업로드 완료");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "저장에 실패했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onRemove() {
-    if (!user?.imageUrl) return;
-    setBusy(true);
-    setError(null);
-    try {
-      await updateMyProfile({ removeImage: true });
-      setFile(null);
-      await refreshUser();
-      appLog("me", "프로필 이미지 제거 완료");
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "제거에 실패했습니다.");
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <div className="space-y-6">
@@ -82,12 +110,7 @@ export function MyInfoPage() {
         </p>
       </div>
 
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>오류</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
+      <FormErrorAlert message={optimisticState.error} />
 
       <Card>
         <CardHeader>
@@ -117,10 +140,19 @@ export function MyInfoPage() {
         <CardContent className="space-y-4">
           <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
             {displayUrl ? (
-              <img
+              <SafeImage
                 src={displayUrl}
                 alt=""
                 className="size-24 shrink-0 rounded-full object-cover ring-2 ring-border"
+                placeholderLabel="프로필 이미지"
+                fallback={
+                  <div
+                    className="flex size-24 shrink-0 items-center justify-center rounded-full bg-muted text-xs text-muted-foreground ring-2 ring-border"
+                    aria-hidden
+                  >
+                    없음
+                  </div>
+                }
               />
             ) : (
               <div
@@ -131,50 +163,60 @@ export function MyInfoPage() {
               </div>
             )}
             <div className="flex min-w-0 flex-1 flex-col gap-3">
-              <div className="space-y-2">
-                <Label htmlFor={fileInputId}>이미지 파일</Label>
-                <input
-                  id={fileInputId}
-                  type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
-                  className="block w-full max-w-xs text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-card file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-foreground"
-                  disabled={busy}
-                  onChange={(e) => {
-                    const f = e.target.files?.[0] ?? null;
-                    setFile(f);
-                    setError(null);
-                    e.target.value = "";
-                  }}
-                />
-              </div>
-              <div className="flex flex-wrap gap-2">
-                <Button
-                  type="button"
+              <form
+                action={formAction}
+                onSubmit={() => addOptimistic({ error: null })}
+                className="space-y-3"
+              >
+                <input type="hidden" name="intent" value="upload" />
+                <div className="space-y-2">
+                  <Label htmlFor={fileInputId}>이미지 파일</Label>
+                  <input
+                    key={formState.tick}
+                    id={fileInputId}
+                    name="image"
+                    type="file"
+                    accept="image/jpeg,image/png,image/gif,image/webp"
+                    className="block w-full max-w-xs text-sm text-muted-foreground file:mr-3 file:rounded-md file:border file:border-border file:bg-card file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-foreground"
+                    onChange={(e) => {
+                      releaseLocalPreview();
+                      const f = e.target.files?.[0] ?? null;
+                      if (f) {
+                        const u = URL.createObjectURL(f);
+                        blobUrlRef.current = u;
+                        setPreviewUrl(u);
+                        setPickedFile(f);
+                      }
+                    }}
+                  />
+                </div>
+                <FormStatusSubmitButton
                   size="sm"
-                  disabled={busy || !file}
-                  onClick={() => void onUpload()}
+                  disabled={!pickedFile}
+                  pendingLabel="처리 중…"
+                  spinnerClassName="mr-2"
                 >
-                  {busy ? (
-                    <>
-                      <Spinner className="mr-2 size-4" />
-                      저장 중…
-                    </>
-                  ) : (
-                    "이미지 저장"
-                  )}
-                </Button>
-                {user?.imageUrl ? (
-                  <Button
-                    type="button"
+                  이미지 저장
+                </FormStatusSubmitButton>
+              </form>
+
+              {user?.imageUrl ? (
+                <form
+                  action={formAction}
+                  onSubmit={() => addOptimistic({ error: null })}
+                  className="flex flex-wrap gap-2"
+                >
+                  <input type="hidden" name="intent" value="remove" />
+                  <FormStatusSubmitButton
                     size="sm"
                     variant="outline"
-                    disabled={busy}
-                    onClick={() => void onRemove()}
+                    pendingLabel="처리 중…"
+                    spinnerClassName="mr-2"
                   >
                     이미지 제거
-                  </Button>
-                ) : null}
-              </div>
+                  </FormStatusSubmitButton>
+                </form>
+              ) : null}
             </div>
           </div>
         </CardContent>

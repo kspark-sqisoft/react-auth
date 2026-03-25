@@ -1,12 +1,15 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
+import { useActionState, useEffect, useOptimistic, useState } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { createPost, fetchPost, updatePost } from "@/lib/api";
 import { appLog } from "@/lib/app-log";
+import { formDataGetString } from "@/lib/form-data-utils";
+import { fieldErrorsFromZodIssues } from "@/lib/zod-form";
 import { postEditorSchema, type PostEditorFormValues } from "@/lib/schemas/forms";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
+import { FormFieldError } from "@/components/forms/FormFieldError";
+import { FormStatusSubmitButton } from "@/components/forms/FormStatusSubmitButton";
+import { CenteredSpinner } from "@/components/layout/CenteredSpinner";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -18,9 +21,15 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
+import { SafeImage } from "@/components/ui/safe-image";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+
+type PostEditorActionState = {
+  serverError: string | null;
+  fieldErrors: Partial<Record<keyof PostEditorFormValues, string>>;
+  redirectTo: string | null;
+};
 
 /** `/posts/new` 또는 `/posts/:id/edit`; 로그인·작성자 검증 후 multipart 저장 */
 export function PostEditorPage() {
@@ -38,20 +47,73 @@ export function PostEditorPage() {
   const [removeExistingImage, setRemoveExistingImage] = useState(false);
 
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [submitError, setSubmitError] = useState<string | null>(null);
   const [loading, setLoading] = useState(isEdit);
-  const [pending, setPending] = useState(false);
   const [forbidden, setForbidden] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors },
-  } = useForm<PostEditorFormValues>({
-    resolver: zodResolver(postEditorSchema),
-    defaultValues: { title: "", content: "" },
-  });
+  const [title, setTitle] = useState("");
+  const [content, setContent] = useState("");
+
+  const initialState: PostEditorActionState = {
+    serverError: null,
+    fieldErrors: {},
+    redirectTo: null,
+  };
+
+  async function postEditorAction(
+    _prevState: PostEditorActionState,
+    formData: FormData,
+  ): Promise<PostEditorActionState> {
+    const parsed = postEditorSchema.safeParse({
+      title: formDataGetString(formData, "title"),
+      content: formDataGetString(formData, "content"),
+    });
+    if (!parsed.success) {
+      return {
+        serverError: null,
+        fieldErrors: fieldErrorsFromZodIssues<keyof PostEditorFormValues>(parsed.error.issues),
+        redirectTo: null,
+      };
+    }
+
+    try {
+      if (isEdit) {
+        const updated = await updatePost(postId, {
+          title: parsed.data.title.trim(),
+          content: parsed.data.content,
+          image: imageFile ?? undefined,
+          removeImage: removeExistingImage && !imageFile,
+        });
+        appLog("posts", "글 수정 저장", { id: updated.id });
+        return { serverError: null, fieldErrors: {}, redirectTo: `/posts/${updated.id}` };
+      }
+
+      const created = await createPost({
+        title: parsed.data.title.trim(),
+        content: parsed.data.content,
+        image: imageFile ?? undefined,
+      });
+      appLog("posts", "글 작성 저장", { id: created.id });
+      return { serverError: null, fieldErrors: {}, redirectTo: `/posts/${created.id}` };
+    } catch (err) {
+      appLog("posts", "저장 실패", err instanceof Error ? err.message : err);
+      return {
+        serverError: err instanceof Error ? err.message : "저장에 실패했습니다.",
+        fieldErrors: {},
+        redirectTo: null,
+      };
+    }
+  }
+
+  const [formState, formAction] = useActionState(postEditorAction, initialState);
+  const [optimisticState, addOptimistic] = useOptimistic(
+    formState,
+    (current, next: Partial<PostEditorActionState>) => ({ ...current, ...next }),
+  );
+
+  useEffect(() => {
+    if (!optimisticState.redirectTo) return;
+    navigate(optimisticState.redirectTo, { replace: true });
+  }, [optimisticState.redirectTo, navigate]);
 
   useEffect(() => {
     return () => {
@@ -62,7 +124,8 @@ export function PostEditorPage() {
   useEffect(() => {
     if (!isEdit || !Number.isFinite(postId)) {
       setLoading(false);
-      reset({ title: "", content: "" });
+      setTitle("");
+      setContent("");
       setExistingImageUrl(null);
       return;
     }
@@ -76,7 +139,8 @@ export function PostEditorPage() {
           setForbidden(true);
           return;
         }
-        reset({ title: post.title, content: post.content });
+        setTitle(post.title);
+        setContent(post.content);
         setExistingImageUrl(post.imageUrl);
         appLog("posts", "에디터 기존 글 로드", { postId });
       } catch (e) {
@@ -92,7 +156,7 @@ export function PostEditorPage() {
     return () => {
       cancelled = true;
     };
-  }, [isEdit, postId, user, reset]);
+  }, [isEdit, postId, user]);
 
   function onPickImage(file: File | null) {
     setPreviewUrl((prev) => {
@@ -109,11 +173,7 @@ export function PostEditorPage() {
   }
 
   if (!isReady) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
-    );
+    return <CenteredSpinner />;
   }
 
   if (!user) {
@@ -128,51 +188,14 @@ export function PostEditorPage() {
     return <Navigate to="/posts" replace />;
   }
 
-  async function onValid(values: PostEditorFormValues) {
-    setSubmitError(null);
-    setPending(true);
-    try {
-      if (isEdit) {
-        const updated = await updatePost(postId, {
-          title: values.title.trim(),
-          content: values.content,
-          image: imageFile ?? undefined,
-          removeImage: removeExistingImage && !imageFile,
-        });
-        appLog("posts", "글 수정 저장", { id: updated.id });
-        navigate(`/posts/${updated.id}`, { replace: true });
-      } else {
-        const created = await createPost({
-          title: values.title.trim(),
-          content: values.content,
-          image: imageFile ?? undefined,
-        });
-        appLog("posts", "글 작성 저장", { id: created.id });
-        navigate(`/posts/${created.id}`, { replace: true });
-      }
-    } catch (err) {
-      appLog("posts", "저장 실패", err instanceof Error ? err.message : err);
-      setSubmitError(err instanceof Error ? err.message : "저장에 실패했습니다.");
-    } finally {
-      setPending(false);
-    }
-  }
-
   if (loading) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
-    );
+    return <CenteredSpinner className="min-h-0 py-16" />;
   }
 
   if (loadError) {
     return (
       <div className="space-y-4">
-        <Alert variant="destructive">
-          <AlertTitle>오류</AlertTitle>
-          <AlertDescription>{loadError}</AlertDescription>
-        </Alert>
+        <FormErrorAlert message={loadError} />
         <Button asChild variant="outline" size="sm">
           <Link to="/posts">목록으로</Link>
         </Button>
@@ -194,48 +217,48 @@ export function PostEditorPage() {
       </div>
 
       <Card>
-        <form onSubmit={(e) => void handleSubmit(onValid)(e)} noValidate>
+        <form
+          action={formAction}
+          onSubmit={() => addOptimistic({ serverError: null, fieldErrors: {} })}
+          noValidate
+        >
           <CardHeader>
             <CardTitle>내용</CardTitle>
             <CardDescription>저장 시 즉시 반영됩니다.</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            {submitError ? (
-              <Alert variant="destructive">
-                <AlertTitle>오류</AlertTitle>
-                <AlertDescription>{submitError}</AlertDescription>
-              </Alert>
-            ) : null}
+            <FormErrorAlert message={optimisticState.serverError} />
             <div className="space-y-2">
               <Label htmlFor="post-title">제목</Label>
               <Input
                 id="post-title"
+                name="title"
                 maxLength={200}
-                aria-invalid={Boolean(errors.title)}
-                className={cn(errors.title && "border-destructive")}
-                {...register("title")}
+                aria-invalid={Boolean(optimisticState.fieldErrors.title)}
+                className={cn(optimisticState.fieldErrors.title && "border-destructive")}
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
               />
-              {errors.title ? (
-                <p className="text-sm text-destructive">{errors.title.message}</p>
-              ) : null}
+              <FormFieldError message={optimisticState.fieldErrors.title} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="post-content">본문</Label>
               <Textarea
                 id="post-content"
+                name="content"
                 rows={12}
-                className={cn("min-h-48", errors.content && "border-destructive")}
-                aria-invalid={Boolean(errors.content)}
-                {...register("content")}
+                className={cn("min-h-48", optimisticState.fieldErrors.content && "border-destructive")}
+                aria-invalid={Boolean(optimisticState.fieldErrors.content)}
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
               />
-              {errors.content ? (
-                <p className="text-sm text-destructive">{errors.content.message}</p>
-              ) : null}
+              <FormFieldError message={optimisticState.fieldErrors.content} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="post-image">이미지 (선택)</Label>
               <Input
                 id="post-image"
+                name="image"
                 type="file"
                 accept="image/jpeg,image/png,image/gif,image/webp"
                 className="cursor-pointer text-sm"
@@ -246,10 +269,11 @@ export function PostEditorPage() {
               />
               {displayImageSrc ? (
                 <div className="relative mt-2 overflow-hidden rounded-lg border border-border bg-muted/30">
-                  <img
+                  <SafeImage
                     src={displayImageSrc}
                     alt=""
                     className="max-h-64 w-full object-contain"
+                    placeholderLabel="첨부 이미지 미리보기"
                   />
                   <Button
                     type="button"
@@ -269,16 +293,7 @@ export function PostEditorPage() {
             </div>
           </CardContent>
           <CardFooter className="flex flex-wrap gap-2 border-t bg-muted/30">
-            <Button type="submit" disabled={pending}>
-              {pending ? (
-                <>
-                  <Spinner className="size-4" />
-                  저장 중…
-                </>
-              ) : (
-                "저장"
-              )}
-            </Button>
+            <FormStatusSubmitButton pendingLabel="저장 중…">저장</FormStatusSubmitButton>
             <Button type="button" variant="outline" asChild>
               <Link to={isEdit ? `/posts/${postId}` : "/posts"}>취소</Link>
             </Button>

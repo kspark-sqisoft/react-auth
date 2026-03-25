@@ -1,12 +1,15 @@
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { useForm } from "react-hook-form";
+import { useActionState, useOptimistic } from "react";
 import { Link, Navigate, useLocation } from "react-router-dom";
 import { appLog } from "@/lib/app-log";
+import { formDataGetString } from "@/lib/form-data-utils";
+import { fieldErrorsFromZodIssues } from "@/lib/zod-form";
 import { loginSchema, type LoginFormValues } from "@/lib/schemas/forms";
 import { useAuth } from "@/stores/auth-store";
+import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
+import { FormFieldError } from "@/components/forms/FormFieldError";
+import { FormStatusSubmitButton } from "@/components/forms/FormStatusSubmitButton";
+import { CenteredSpinner } from "@/components/layout/CenteredSpinner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
@@ -17,8 +20,12 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
+
+type LoginActionState = {
+  serverError: string | null;
+  fieldErrors: Partial<Record<keyof LoginFormValues, string>>;
+};
 
 /** 로그인 성공 시 `location.state.from` 또는 기본 `/me`로 이동 */
 export function LoginPage() {
@@ -29,44 +36,47 @@ export function LoginPage() {
     (location.state as { registered?: boolean } | null)?.registered,
   );
 
-  const [serverError, setServerError] = useState<string | null>(null);
-  const [pending, setPending] = useState(false);
+  const initialState: LoginActionState = { serverError: null, fieldErrors: {} };
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<LoginFormValues>({
-    resolver: zodResolver(loginSchema),
-    defaultValues: { email: "", password: "" },
-  });
+  async function loginAction(
+    _prevState: LoginActionState,
+    formData: FormData,
+  ): Promise<LoginActionState> {
+    const parsed = loginSchema.safeParse({
+      email: formDataGetString(formData, "email"),
+      password: formDataGetString(formData, "password"),
+    });
+    if (!parsed.success) {
+      return {
+        serverError: null,
+        fieldErrors: fieldErrorsFromZodIssues<keyof LoginFormValues>(parsed.error.issues),
+      };
+    }
+
+    try {
+      await signIn(parsed.data.email.trim(), parsed.data.password);
+      appLog("login", "폼 제출 후 signIn 성공", { redirectTo: from });
+      return { serverError: null, fieldErrors: {} };
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "로그인에 실패했습니다.";
+      appLog("login", "폼 제출 실패", msg);
+      return { serverError: msg, fieldErrors: {} };
+    }
+  }
+
+  const [formState, formAction] = useActionState(loginAction, initialState);
+  const [optimisticState, addOptimistic] = useOptimistic(
+    formState,
+    (current, next: Partial<LoginActionState>) => ({ ...current, ...next }),
+  );
 
   if (!isReady) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
-    );
+    return <CenteredSpinner />;
   }
 
   if (user) {
     appLog("login", "이미 로그인됨 → 이전 목적지로 이동", { to: from });
     return <Navigate to={from} replace />;
-  }
-
-  async function onValid(values: LoginFormValues) {
-    setServerError(null);
-    setPending(true);
-    try {
-      await signIn(values.email.trim(), values.password);
-      appLog("login", "폼 제출 후 signIn 성공", { redirectTo: from });
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : "로그인에 실패했습니다.";
-      appLog("login", "폼 제출 실패", msg);
-      setServerError(msg);
-    } finally {
-      setPending(false);
-    }
   }
 
   return (
@@ -76,7 +86,11 @@ export function LoginPage() {
           <CardTitle>로그인</CardTitle>
           <CardDescription>이메일과 비밀번호를 입력하세요.</CardDescription>
         </CardHeader>
-        <form onSubmit={(e) => void handleSubmit(onValid)(e)} noValidate>
+        <form
+          action={formAction}
+          onSubmit={() => addOptimistic({ serverError: null, fieldErrors: {} })}
+          noValidate
+        >
           <CardContent className="space-y-4">
             {justRegistered ? (
               <Alert>
@@ -84,51 +98,33 @@ export function LoginPage() {
                 <AlertDescription>로그인해 주세요.</AlertDescription>
               </Alert>
             ) : null}
-            {serverError ? (
-              <Alert variant="destructive">
-                <AlertTitle>오류</AlertTitle>
-                <AlertDescription>{serverError}</AlertDescription>
-              </Alert>
-            ) : null}
+            <FormErrorAlert message={optimisticState.serverError} />
             <div className="space-y-2">
               <Label htmlFor="login-email">이메일</Label>
               <Input
                 id="login-email"
+                name="email"
                 autoComplete="email"
-                aria-invalid={Boolean(errors.email)}
-                className={cn(errors.email && "border-destructive")}
-                {...register("email")}
+                aria-invalid={Boolean(optimisticState.fieldErrors.email)}
+                className={cn(optimisticState.fieldErrors.email && "border-destructive")}
               />
-              {errors.email ? (
-                <p className="text-sm text-destructive">{errors.email.message}</p>
-              ) : null}
+              <FormFieldError message={optimisticState.fieldErrors.email} />
             </div>
             <div className="space-y-2">
               <Label htmlFor="login-password">비밀번호</Label>
               <Input
                 id="login-password"
+                name="password"
                 type="password"
                 autoComplete="current-password"
-                aria-invalid={Boolean(errors.password)}
-                className={cn(errors.password && "border-destructive")}
-                {...register("password")}
+                aria-invalid={Boolean(optimisticState.fieldErrors.password)}
+                className={cn(optimisticState.fieldErrors.password && "border-destructive")}
               />
-              {errors.password ? (
-                <p className="text-sm text-destructive">{errors.password.message}</p>
-              ) : null}
+              <FormFieldError message={optimisticState.fieldErrors.password} />
             </div>
           </CardContent>
           <CardFooter className="flex flex-col gap-3 sm:flex-row sm:justify-between">
-            <Button type="submit" disabled={pending} className="w-full sm:w-auto">
-              {pending ? (
-                <>
-                  <Spinner className="size-4" />
-                  진행 중…
-                </>
-              ) : (
-                "로그인"
-              )}
-            </Button>
+            <FormStatusSubmitButton className="w-full sm:w-auto">로그인</FormStatusSubmitButton>
             <p className="text-center text-xs text-muted-foreground sm:text-right">
               계정이 없으신가요?{" "}
               <Link to="/signup" className="text-primary underline-offset-4 hover:underline">

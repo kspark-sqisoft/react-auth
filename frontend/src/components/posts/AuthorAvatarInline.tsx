@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import type { PostAuthor } from "@/lib/api";
+import { SafeImage } from "@/components/ui/safe-image";
 import { cn } from "@/lib/utils";
 
 type Size = "xs" | "sm" | "md";
@@ -30,9 +31,11 @@ export function AuthorAvatarInline({
       className={cn("inline-flex min-w-0 max-w-full items-center gap-2", className)}
     >
       {author.imageUrl ? (
-        <img
+        <SafeImage
           src={author.imageUrl}
           alt=""
+          hideOnError
+          placeholderLabel={`${author.name} 프로필 이미지`}
           className={cn(
             sizeClass[size],
             "shrink-0 rounded-full object-cover ring-1 ring-border",

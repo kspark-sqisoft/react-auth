@@ -2,6 +2,7 @@ import { Link, NavLink, Outlet } from "react-router-dom";
 import { ChatDock } from "@/components/chat/ChatDock";
 import { useAuth } from "@/stores/auth-store";
 import { Button } from "@/components/ui/button";
+import { SafeImage } from "@/components/ui/safe-image";
 import { cn } from "@/lib/utils";
 
 function headerNavClass({ isActive }: { isActive: boolean }) {
@@ -46,20 +47,20 @@ export function AppLayout() {
                   aria-label="내 정보"
                   className="flex min-w-0 max-w-[min(12rem,calc(100vw-7rem))] items-center gap-2 rounded-md py-1 pl-0.5 pr-1 text-left outline-none transition-colors hover:bg-muted/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
                 >
-                  {user.imageUrl ? (
-                    <img
-                      src={user.imageUrl}
-                      alt=""
-                      className="size-7 shrink-0 rounded-full object-cover ring-1 ring-border"
-                    />
-                  ) : (
-                    <span
-                      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold uppercase text-muted-foreground ring-1 ring-border"
-                      aria-hidden
-                    >
-                      {(user.name || user.email).charAt(0)}
-                    </span>
-                  )}
+                  <SafeImage
+                    src={user.imageUrl}
+                    alt=""
+                    className="size-7 shrink-0 rounded-full object-cover ring-1 ring-border"
+                    placeholderLabel="프로필 이미지"
+                    fallback={
+                      <span
+                        className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold uppercase text-muted-foreground ring-1 ring-border"
+                        aria-hidden
+                      >
+                        {(user.name || user.email).charAt(0)}
+                      </span>
+                    }
+                  />
                   <span className="min-w-0 truncate text-xs text-muted-foreground">
                     {user.name || user.email}
                   </span>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { deletePost, fetchPost, type Post } from "@/lib/api";
@@ -16,20 +16,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
+import { CenteredSpinner } from "@/components/layout/CenteredSpinner";
 import { Button } from "@/components/ui/button";
-import { Spinner } from "@/components/ui/spinner";
-
-function formatDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("ko-KR", {
-      dateStyle: "full",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
+import { SafeImage } from "@/components/ui/safe-image";
+import { formatDateFullShort } from "@/lib/format-date";
 
 /** 공개 상세; 작성자에게만 수정·삭제 버튼 */
 export function PostDetailPage() {
@@ -41,19 +32,17 @@ export function PostDetailPage() {
   const [post, setPost] = useState<Post | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [isDeletePending, startDeleteTransition] = useTransition();
 
   useEffect(() => {
-    if (!Number.isFinite(id)) {
-      setError("잘못된 글 번호입니다.");
-      return;
-    }
+    if (!Number.isFinite(id)) return;
     let cancelled = false;
     void (async () => {
       try {
         const p = await fetchPost(id);
         if (!cancelled) {
           setPost(p);
+          setError(null);
           appLog("posts", "상세 로드 완료", { id: p.id });
         }
       } catch (e) {
@@ -69,30 +58,37 @@ export function PostDetailPage() {
     };
   }, [id, user?.sub]);
 
+  if (!Number.isFinite(id)) {
+    return (
+      <div className="space-y-4">
+        <FormErrorAlert message="잘못된 글 번호입니다." />
+        <Button asChild variant="outline" size="sm">
+          <Link to="/posts">목록으로</Link>
+        </Button>
+      </div>
+    );
+  }
+
   const isOwner = user && post && user.sub === post.author.id;
 
-  async function onDelete() {
+  function onDelete() {
     if (!Number.isFinite(id)) return;
-    setDeleting(true);
-    try {
-      await deletePost(id);
-      appLog("posts", "글 삭제 완료", { id });
-      setDeleteOpen(false);
-      navigate("/posts", { replace: true });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
-    } finally {
-      setDeleting(false);
-    }
+    startDeleteTransition(async () => {
+      try {
+        await deletePost(id);
+        appLog("posts", "글 삭제 완료", { id });
+        setDeleteOpen(false);
+        navigate("/posts", { replace: true });
+      } catch (e) {
+        setError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+      }
+    });
   }
 
   if (error && !post) {
     return (
       <div className="space-y-4">
-        <Alert variant="destructive">
-          <AlertTitle>오류</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <FormErrorAlert message={error} />
         <Button asChild variant="outline" size="sm">
           <Link to="/posts">목록으로</Link>
         </Button>
@@ -101,21 +97,12 @@ export function PostDetailPage() {
   }
 
   if (!post) {
-    return (
-      <div className="flex justify-center py-16">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
-    );
+    return <CenteredSpinner className="min-h-0 py-16" />;
   }
 
   return (
     <article className="space-y-6">
-      {error ? (
-        <Alert variant="destructive">
-          <AlertTitle>오류</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
+      <FormErrorAlert message={error} />
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
@@ -123,7 +110,7 @@ export function PostDetailPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             <AuthorAvatarInline author={post.author} size="md">
               {" "}
-              · {formatDate(post.createdAt)}
+              · {formatDateFullShort(post.createdAt)}
             </AuthorAvatarInline>
           </p>
           <div className="mt-3">
@@ -131,9 +118,6 @@ export function PostDetailPage() {
               postId={post.id}
               likeCount={post.likeCount}
               likedByMe={post.likedByMe}
-              onPatch={(patch) =>
-                setPost((p) => (p ? { ...p, ...patch } : p))
-              }
               onApplied={(state) =>
                 setPost((p) =>
                   p ? { ...p, likeCount: state.likeCount, likedByMe: state.likedByMe } : p,
@@ -162,11 +146,12 @@ export function PostDetailPage() {
 
       {post.imageUrl ? (
         <div className="flex w-full justify-center rounded-xl border border-border bg-muted/20 px-2 py-3 sm:px-3 sm:py-4">
-          <img
+          <SafeImage
             src={post.imageUrl}
             alt=""
-            className="max-h-[min(70vh,560px)] w-auto max-w-full object-contain object-center"
+            className="max-h-[min(70vh,560px)] min-h-36 w-auto max-w-full object-contain object-center sm:min-h-48"
             loading="lazy"
+            placeholderLabel="글 본문 이미지"
           />
         </div>
       ) : null}
@@ -200,16 +185,16 @@ export function PostDetailPage() {
             <AlertDialogDescription>이 작업은 되돌릴 수 없습니다.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>취소</AlertDialogCancel>
+            <AlertDialogCancel disabled={isDeletePending}>취소</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={(e) => {
                 e.preventDefault();
-                void onDelete();
+                onDelete();
               }}
-              disabled={deleting}
+              disabled={isDeletePending}
             >
-              {deleting ? "삭제 중…" : "삭제"}
+              {isDeletePending ? "삭제 중…" : "삭제"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  useActionState,
+  useCallback,
+  useEffect,
+  useOptimistic,
+  useState,
+  useTransition,
+} from "react";
 import {
   createPostComment,
   deletePostComment,
@@ -6,23 +13,21 @@ import {
   type AuthUser,
   type PostComment,
 } from "@/lib/api";
+import { formatDateMediumShort } from "@/lib/format-date";
+import { formDataGetString } from "@/lib/form-data-utils";
 import { AuthorAvatarInline } from "@/components/posts/AuthorAvatarInline";
 import { appLog } from "@/lib/app-log";
+import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
+import { FormFieldError } from "@/components/forms/FormFieldError";
+import { FormStatusSubmitButton } from "@/components/forms/FormStatusSubmitButton";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 
-function formatCommentDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("ko-KR", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    });
-  } catch {
-    return iso;
-  }
-}
+type CommentFormState = {
+  error: string | null;
+  tick: number;
+};
 
 type CommentItemProps = {
   postId: number;
@@ -42,43 +47,56 @@ function CommentItem({
   onError,
 }: CommentItemProps) {
   const [replyOpen, setReplyOpen] = useState(false);
-  const [replyBody, setReplyBody] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [isDeletePending, startDeleteTransition] = useTransition();
 
   const isOwner = user?.sub === comment.author.id;
   const maxVisualDepth = 14;
   const indent = Math.min(depth, maxVisualDepth);
 
-  async function submitReply() {
-    const text = replyBody.trim();
-    if (!text || !user) return;
-    setBusy(true);
+  const initialReply: CommentFormState = { error: null, tick: 0 };
+
+  async function replyAction(
+    prev: CommentFormState,
+    formData: FormData,
+  ): Promise<CommentFormState> {
+    if (!user) {
+      return { error: "로그인이 필요합니다.", tick: prev.tick };
+    }
+    const text = formDataGetString(formData, "content").trim();
+    if (!text) {
+      return { error: "답글 내용을 입력해 주세요.", tick: prev.tick };
+    }
     try {
       await createPostComment(postId, { content: text, parentId: comment.id });
-      setReplyBody("");
-      setReplyOpen(false);
       onTreeChange();
       appLog("posts", "대댓글 작성", { postId, parentId: comment.id });
+      setReplyOpen(false);
+      return { error: null, tick: prev.tick + 1 };
     } catch (e) {
-      onError(e instanceof Error ? e.message : "댓글을 저장하지 못했습니다.");
-    } finally {
-      setBusy(false);
+      return {
+        error: e instanceof Error ? e.message : "댓글을 저장하지 못했습니다.",
+        tick: prev.tick,
+      };
     }
   }
 
-  async function onDelete() {
+  const [replyState, replyFormAction] = useActionState(replyAction, initialReply);
+  const [optimisticReply, addOptimisticReply] = useOptimistic(
+    replyState,
+    (current, next: Partial<CommentFormState>) => ({ ...current, ...next }),
+  );
+
+  function onDelete() {
     if (!user) return;
-    setDeleting(true);
-    try {
-      await deletePostComment(postId, comment.id);
-      onTreeChange();
-      appLog("posts", "댓글 삭제", { postId, commentId: comment.id });
-    } catch (e) {
-      onError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
-    } finally {
-      setDeleting(false);
-    }
+    startDeleteTransition(async () => {
+      try {
+        await deletePostComment(postId, comment.id);
+        onTreeChange();
+        appLog("posts", "댓글 삭제", { postId, commentId: comment.id });
+      } catch (e) {
+        onError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+      }
+    });
   }
 
   return (
@@ -97,7 +115,7 @@ function CommentItem({
             className="text-xs text-muted-foreground"
             dateTime={comment.createdAt}
           >
-            {formatCommentDate(comment.createdAt)}
+            {formatDateMediumShort(comment.createdAt)}
           </time>
         </div>
         <p className="mt-1.5 whitespace-pre-wrap text-sm leading-relaxed text-foreground">
@@ -112,7 +130,6 @@ function CommentItem({
               className="h-8 px-2 text-xs"
               onClick={() => {
                 setReplyOpen((o) => !o);
-                setReplyBody("");
               }}
             >
               답글
@@ -124,46 +141,44 @@ function CommentItem({
               variant="ghost"
               size="sm"
               className="h-8 px-2 text-xs text-destructive hover:text-destructive"
-              disabled={deleting}
-              onClick={() => void onDelete()}
+              disabled={isDeletePending}
+              onClick={() => onDelete()}
             >
-              {deleting ? "삭제 중…" : "삭제"}
+              {isDeletePending ? "삭제 중…" : "삭제"}
             </Button>
           ) : null}
         </div>
         {replyOpen && user ? (
-          <div className="mt-3 space-y-2 border-t border-border/60 pt-3">
+          <form
+            action={replyFormAction}
+            onSubmit={() => addOptimisticReply({ error: null })}
+            className="mt-3 space-y-2 border-t border-border/60 pt-3"
+          >
+            <FormFieldError message={optimisticReply.error} />
             <Textarea
-              value={replyBody}
-              onChange={(e) => setReplyBody(e.target.value)}
+              key={`${comment.id}-reply-${replyState.tick}`}
+              name="content"
               placeholder={`${comment.author.name}님에게 답글…`}
               rows={3}
               className="min-h-18 resize-y text-sm"
-              disabled={busy}
+              required
             />
             <div className="flex gap-2">
-              <Button
-                type="button"
-                size="sm"
-                disabled={busy || !replyBody.trim()}
-                onClick={() => void submitReply()}
-              >
-                {busy ? "등록 중…" : "답글 등록"}
-              </Button>
+              <FormStatusSubmitButton size="sm" pendingLabel="등록 중…">
+                답글 등록
+              </FormStatusSubmitButton>
               <Button
                 type="button"
                 size="sm"
                 variant="outline"
-                disabled={busy}
                 onClick={() => {
                   setReplyOpen(false);
-                  setReplyBody("");
                 }}
               >
                 취소
               </Button>
             </div>
-          </div>
+          </form>
         ) : null}
       </div>
       {comment.replies.length > 0 ? (
@@ -194,8 +209,6 @@ type PostCommentsSectionProps = {
 export function PostCommentsSection({ postId, user }: PostCommentsSectionProps) {
   const [tree, setTree] = useState<PostComment[]>([]);
   const [loading, setLoading] = useState(true);
-  const [rootBody, setRootBody] = useState("");
-  const [rootBusy, setRootBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const reload = useCallback(() => {
@@ -210,6 +223,38 @@ export function PostCommentsSection({ postId, user }: PostCommentsSectionProps) 
       }
     })();
   }, [postId]);
+
+  const initialRoot: CommentFormState = { error: null, tick: 0 };
+
+  async function rootCommentAction(
+    prev: CommentFormState,
+    formData: FormData,
+  ): Promise<CommentFormState> {
+    if (!user) {
+      return { error: "로그인이 필요합니다.", tick: prev.tick };
+    }
+    const text = formDataGetString(formData, "content").trim();
+    if (!text) {
+      return { error: "댓글 내용을 입력해 주세요.", tick: prev.tick };
+    }
+    try {
+      await createPostComment(postId, { content: text });
+      reload();
+      appLog("posts", "댓글 작성", { postId });
+      return { error: null, tick: prev.tick + 1 };
+    } catch (e) {
+      return {
+        error: e instanceof Error ? e.message : "댓글을 저장하지 못했습니다.",
+        tick: prev.tick,
+      };
+    }
+  }
+
+  const [rootState, rootFormAction] = useActionState(rootCommentAction, initialRoot);
+  const [optimisticRoot, addOptimisticRoot] = useOptimistic(
+    rootState,
+    (current, next: Partial<CommentFormState>) => ({ ...current, ...next }),
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -235,52 +280,34 @@ export function PostCommentsSection({ postId, user }: PostCommentsSectionProps) 
     };
   }, [postId]);
 
-  async function submitRoot() {
-    const text = rootBody.trim();
-    if (!text || !user) return;
-    setRootBusy(true);
-    try {
-      await createPostComment(postId, { content: text });
-      setRootBody("");
-      reload();
-      appLog("posts", "댓글 작성", { postId });
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "댓글을 저장하지 못했습니다.");
-    } finally {
-      setRootBusy(false);
-    }
-  }
-
   return (
     <section className="border-t border-border pt-8" aria-label="댓글">
       <h2 className="font-heading text-lg font-semibold tracking-tight">댓글</h2>
 
-      {error ? (
-        <Alert variant="destructive" className="mt-4">
-          <AlertTitle>오류</AlertTitle>
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      ) : null}
+      <FormErrorAlert message={error} className="mt-4" />
 
       {user ? (
-        <div className="mt-4 space-y-2">
+        <form
+          action={rootFormAction}
+          onSubmit={() => {
+            addOptimisticRoot({ error: null });
+            setError(null);
+          }}
+          className="mt-4 space-y-2"
+        >
+          <FormFieldError message={optimisticRoot.error} />
           <Textarea
-            value={rootBody}
-            onChange={(e) => setRootBody(e.target.value)}
+            key={`root-${rootState.tick}`}
+            name="content"
             placeholder="댓글을 입력하세요…"
             rows={4}
             className="min-h-24 resize-y text-sm"
-            disabled={rootBusy}
+            required
           />
-          <Button
-            type="button"
-            size="sm"
-            disabled={rootBusy || !rootBody.trim()}
-            onClick={() => void submitRoot()}
-          >
-            {rootBusy ? "등록 중…" : "댓글 등록"}
-          </Button>
-        </div>
+          <FormStatusSubmitButton size="sm" pendingLabel="등록 중…">
+            댓글 등록
+          </FormStatusSubmitButton>
+        </form>
       ) : (
         <p className="mt-4 text-sm text-muted-foreground">
           댓글을 남기려면 로그인하세요.

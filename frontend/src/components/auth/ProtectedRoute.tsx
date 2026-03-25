@@ -2,7 +2,7 @@ import { useEffect } from "react";
 import { Navigate, Outlet, useLocation } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { appLog } from "@/lib/app-log";
-import { Spinner } from "@/components/ui/spinner";
+import { CenteredSpinner } from "@/components/layout/CenteredSpinner";
 
 /**
  * `hydrate` 완료 후에만 판단합니다.
@@ -19,11 +19,7 @@ export function ProtectedRoute() {
   }, [isReady, user, location.pathname]);
 
   if (!isReady) {
-    return (
-      <div className="flex min-h-[40vh] items-center justify-center">
-        <Spinner className="size-8 text-muted-foreground" />
-      </div>
-    );
+    return <CenteredSpinner />;
   }
 
   if (!user) {
