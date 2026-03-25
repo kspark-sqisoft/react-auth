@@ -10,11 +10,19 @@ import {
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { QueryFailedError, Repository } from 'typeorm';
-import { POST_IMAGES_SUBDIR, UPLOAD_ROOT } from '../env.constants';
+import {
+  AVATARS_SUBDIR,
+  POST_IMAGES_SUBDIR,
+  UPLOAD_ROOT,
+} from '../env.constants';
 import { Post } from './post.entity';
 import { PostLike } from './post-like.entity';
 
-export type PostAuthorPublic = { id: number; name: string };
+export type PostAuthorPublic = {
+  id: number;
+  name: string;
+  imageUrl: string | null;
+};
 
 export type PostPublic = {
   id: number;
@@ -46,6 +54,11 @@ export class PostsService {
     return `/uploads/${POST_IMAGES_SUBDIR}/${filename}`;
   }
 
+  private authorAvatarUrl(profileImageFilename: string | null): string | null {
+    if (!profileImageFilename) return null;
+    return `/uploads/${AVATARS_SUBDIR}/${profileImageFilename}`;
+  }
+
   private async unlinkPostImage(filename: string | null): Promise<void> {
     if (!filename) return;
     const full = join(UPLOAD_ROOT, POST_IMAGES_SUBDIR, filename);
@@ -72,7 +85,11 @@ export class PostsService {
       imageUrl: this.imagePublicUrl(post.imageFilename),
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
-      author: { id: post.author.id, name: post.author.name },
+      author: {
+        id: post.author.id,
+        name: post.author.name,
+        imageUrl: this.authorAvatarUrl(post.author.profileImageFilename),
+      },
       likeCount: extras?.likeCount ?? 0,
       likedByMe: extras?.likedByMe ?? false,
     };

@@ -42,4 +42,16 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  /**
+   * Nest `UsersService` 주입이 typescript-eslint projectService에서 간헐적으로 unresolved로 잡혀
+   * no-unsafe-* 오탐이 날 수 있음(tsc·`npx eslint`는 정상).
+   */
+  {
+    files: ['src/users/users.controller.ts'],
+    rules: {
+      '@typescript-eslint/no-unsafe-assignment': 'off',
+      '@typescript-eslint/no-unsafe-call': 'off',
+      '@typescript-eslint/no-unsafe-member-access': 'off',
+    },
+  },
 );

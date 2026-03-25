@@ -33,6 +33,8 @@ type AuthState = {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (input: SignUpInput) => Promise<void>;
   signOut: () => Promise<void>;
+  /** GET /users/me 로 `user` 갱신(프로필 이미지 변경 후 등) */
+  refreshUser: () => Promise<void>;
 };
 
 /** 스토어 본체. 컴포넌트에서 직접 쓰면 구독 범위가 넓어져 불필요한 리렌더가 잘 납니다. 가능하면 `useAuth()` 사용. */
@@ -160,6 +162,28 @@ export const useAuthStore = create<AuthState>()(
           "auth/signOut",
         );
       },
+
+      refreshUser: async () => {
+        const me = await fetchMe();
+        if (!me) {
+          setAccessToken(null);
+          set(
+            (state) => {
+              state.user = null;
+            },
+            false,
+            "auth/refreshUser",
+          );
+          return;
+        }
+        set(
+          (state) => {
+            state.user = me;
+          },
+          false,
+          "auth/refreshUser",
+        );
+      },
     })),
     {
       name: "auth-store",
@@ -172,7 +196,7 @@ export const useAuthStore = create<AuthState>()(
  * 인증 상태를 쓰기 위한 React 훅입니다. (내부적으로 Zustand `useAuthStore`를 구독합니다.)
  *
  * 반환값
- * - `user` — 로그인 중이면 `{ sub, email, name }`, 아니면 `null`
+ * - `user` — 로그인 중이면 `{ sub, email, name, imageUrl }`, 아니면 `null`
  * - `isReady` — `hydrate` 완료 여부. false면 세션 판별 전이라 로그인/보호 화면에서 대기 UI 권장
  * - `signIn` / `signUp` / `signOut` — API와 연동되는 액션(비동기). 실패 시 throw → 폼에서 catch
  *
@@ -192,6 +216,7 @@ export function useAuth() {
       signIn: s.signIn,
       signUp: s.signUp,
       signOut: s.signOut,
+      refreshUser: s.refreshUser,
     })),
   );
 }

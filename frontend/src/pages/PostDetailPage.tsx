@@ -3,7 +3,9 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { deletePost, fetchPost, type Post } from "@/lib/api";
 import { appLog } from "@/lib/app-log";
+import { AuthorAvatarInline } from "@/components/posts/AuthorAvatarInline";
 import { PostLikeButton } from "@/components/posts/PostLikeButton";
+import { PostCommentsSection } from "@/components/posts/PostCommentsSection";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -119,7 +121,10 @@ export function PostDetailPage() {
         <div className="min-w-0 flex-1">
           <h1 className="font-heading text-2xl font-semibold tracking-tight">{post.title}</h1>
           <p className="mt-2 text-sm text-muted-foreground">
-            {post.author.name} · {formatDate(post.createdAt)}
+            <AuthorAvatarInline author={post.author} size="md">
+              {" "}
+              · {formatDate(post.createdAt)}
+            </AuthorAvatarInline>
           </p>
           <div className="mt-3">
             <PostLikeButton
@@ -169,6 +174,8 @@ export function PostDetailPage() {
       <div className="whitespace-pre-wrap border-t border-border pt-6 text-sm leading-relaxed">
         {post.content}
       </div>
+
+      <PostCommentsSection postId={post.id} user={user} />
 
       <Button
         type="button"

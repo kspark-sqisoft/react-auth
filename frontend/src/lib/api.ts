@@ -10,9 +10,20 @@ type RetryableRequest = InternalAxiosRequestConfig & { _retry?: boolean };
 
 export const ACCESS_TOKEN_KEY = "access_token";
 
-export type AuthUser = { sub: number; email: string; name: string };
+export type AuthUser = {
+  sub: number;
+  email: string;
+  name: string;
+  /** `/uploads/avatars/...` 또는 null */
+  imageUrl: string | null;
+};
 
-export type PostAuthor = { id: number; name: string };
+export type PostAuthor = {
+  id: number;
+  name: string;
+  /** `/uploads/avatars/...` 또는 null */
+  imageUrl: string | null;
+};
 
 const POST_PAGE_DEFAULT = 4;
 
@@ -29,6 +40,16 @@ export type Post = {
 };
 
 export type PostLikeState = { likeCount: number; likedByMe: boolean };
+
+/** 계층 댓글(무한 depth; replies가 비어 있을 수 있음) */
+export type PostComment = {
+  id: number;
+  content: string;
+  createdAt: string;
+  updatedAt: string;
+  author: PostAuthor;
+  replies: PostComment[];
+};
 
 export function getAccessToken(): string | null {
   return sessionStorage.getItem(ACCESS_TOKEN_KEY);
@@ -150,6 +171,22 @@ export async function fetchMe(): Promise<AuthUser | null> {
   }
 }
 
+/** JWT 필요; 프로필 이미지 교체 또는 `removeImage`로 제거 */
+export async function updateMyProfile(input: {
+  image?: File | null;
+  removeImage?: boolean;
+}): Promise<AuthUser> {
+  try {
+    const fd = new FormData();
+    if (input.image) fd.append("image", input.image);
+    if (input.removeImage) fd.append("removeImage", "1");
+    const { data } = await api.patch<AuthUser>("/users/me", fd);
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
 export type PostsPageResponse = {
   items: Post[];
   total: number;
@@ -184,6 +221,44 @@ export async function fetchPost(id: number): Promise<Post> {
   try {
     const { data } = await api.get<Post>(`/posts/${id}`);
     return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+/** 글 댓글 트리(공개) */
+export async function fetchPostComments(postId: number): Promise<PostComment[]> {
+  try {
+    const { data } = await api.get<PostComment[]>(`/posts/${postId}/comments`);
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+/** JWT 필요; 새 댓글·대댓글(parentId) */
+export async function createPostComment(
+  postId: number,
+  input: { content: string; parentId?: number },
+): Promise<PostComment> {
+  try {
+    const { data } = await api.post<PostComment>(`/posts/${postId}/comments`, {
+      content: input.content,
+      ...(input.parentId != null ? { parentId: input.parentId } : {}),
+    });
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+/** JWT·작성자만 */
+export async function deletePostComment(
+  postId: number,
+  commentId: number,
+): Promise<void> {
+  try {
+    await api.delete(`/posts/${postId}/comments/${commentId}`);
   } catch (e) {
     rethrowAsApiError(e);
   }

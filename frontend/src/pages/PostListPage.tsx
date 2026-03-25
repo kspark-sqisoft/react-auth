@@ -4,6 +4,7 @@ import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { fetchPostsPage, POST_PAGE_DEFAULT, type Post } from "@/lib/api";
 import { appLog } from "@/lib/app-log";
+import { AuthorAvatarInline } from "@/components/posts/AuthorAvatarInline";
 import { PostLikeButton } from "@/components/posts/PostLikeButton";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
@@ -411,8 +412,11 @@ export function PostListPage() {
                       <h3 className="font-heading line-clamp-1 h-6 shrink-0 text-base font-semibold leading-6 text-foreground transition-colors group-hover/card:text-primary">
                         {post.title}
                       </h3>
-                      <p className="line-clamp-1 h-4 shrink-0 truncate text-xs leading-4 text-muted-foreground">
-                        {post.author.name} · {formatDate(post.createdAt)}
+                      <p className="flex h-8 min-h-8 shrink-0 items-center text-xs text-muted-foreground">
+                        <AuthorAvatarInline author={post.author} size="xs">
+                          {" "}
+                          · {formatDate(post.createdAt)}
+                        </AuthorAvatarInline>
                       </p>
                       <p className="line-clamp-2 h-10 max-h-10 shrink-0 overflow-hidden text-sm leading-5 break-words text-muted-foreground">
                         {post.content}

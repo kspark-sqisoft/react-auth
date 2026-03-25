@@ -36,18 +36,33 @@ export function AppLayout() {
             <NavLink to="/posts" className={headerNavClass}>
               글
             </NavLink>
-            {user ? (
-              <NavLink to="/me" className={headerNavClass}>
-                내 정보
-              </NavLink>
-            ) : null}
           </nav>
-          <div className="flex items-center gap-2">
+          <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
             {user ? (
               <>
-                <span className="hidden max-w-48 truncate text-xs text-muted-foreground sm:inline">
-                  {user.name || user.email}
-                </span>
+                <Link
+                  to="/me"
+                  aria-label="내 정보"
+                  className="flex min-w-0 max-w-[min(12rem,calc(100vw-7rem))] items-center gap-2 rounded-md py-1 pl-0.5 pr-1 text-left outline-none transition-colors hover:bg-muted/80 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+                >
+                  {user.imageUrl ? (
+                    <img
+                      src={user.imageUrl}
+                      alt=""
+                      className="size-7 shrink-0 rounded-full object-cover ring-1 ring-border"
+                    />
+                  ) : (
+                    <span
+                      className="flex size-7 shrink-0 items-center justify-center rounded-full bg-muted text-[11px] font-semibold uppercase text-muted-foreground ring-1 ring-border"
+                      aria-hidden
+                    >
+                      {(user.name || user.email).charAt(0)}
+                    </span>
+                  )}
+                  <span className="min-w-0 truncate text-xs text-muted-foreground">
+                    {user.name || user.email}
+                  </span>
+                </Link>
                 <Button type="button" variant="outline" size="sm" onClick={() => void signOut()}>
                   로그아웃
                 </Button>

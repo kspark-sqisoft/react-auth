@@ -18,6 +18,9 @@ export const UPLOAD_ROOT =
 /** 글 이미지 하위 폴더명 (UPLOAD_ROOT 아래) */
 export const POST_IMAGES_SUBDIR = 'posts';
 
+/** 프로필 이미지 하위 폴더명 (UPLOAD_ROOT 아래) */
+export const AVATARS_SUBDIR = 'avatars';
+
 export const JWT_ACCESS_SECRET =
   process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret-change-me';
 

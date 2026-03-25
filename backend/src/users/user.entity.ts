@@ -12,6 +12,10 @@ export class User {
   @Column({ default: '' })
   name: string;
 
+  /** uploads/avatars/ 아래 저장 파일명 (확장자 포함) */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  profileImageFilename: string | null;
+
   @Column()
   password: string;
 

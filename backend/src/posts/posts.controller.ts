@@ -28,6 +28,7 @@ import { JwtAuthGuard } from '../auth/jwt.guard';
 import { OptionalJwtAuthGuard } from '../auth/jwt-optional.guard';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { postImageMulterOptions } from './post-image-upload.options';
+import { CommentsService } from './comments.service';
 import { PostsService } from './posts.service';
 
 const multipartPostBody = {
@@ -65,7 +66,10 @@ const multipartPatchBody = {
 @ApiTags('posts')
 @Controller('posts')
 export class PostsController {
-  constructor(private postsService: PostsService) {}
+  constructor(
+    private postsService: PostsService,
+    private commentsService: CommentsService,
+  ) {}
 
   @UseGuards(OptionalJwtAuthGuard)
   @Get()
@@ -86,6 +90,12 @@ export class PostsController {
     const skip = Math.max(0, skipRaw);
     const take = Math.min(50, Math.max(1, takeRaw));
     return this.postsService.findPage(skip, take, req.user?.sub, search);
+  }
+
+  @Get(':id/comments')
+  @ApiOperation({ summary: '글 댓글(계층 트리)' })
+  findComments(@Param('id', ParseIntPipe) id: number) {
+    return this.commentsService.findTreeByPostId(id);
   }
 
   @UseGuards(OptionalJwtAuthGuard)
@@ -118,6 +128,48 @@ export class PostsController {
     @Param('id', ParseIntPipe) id: number,
   ) {
     return this.postsService.removeLike(req.user.sub, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @PostMethod(':id/comments')
+  @ApiOperation({ summary: '댓글 작성(대댓글은 body.parentId)' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['content'],
+      properties: {
+        content: { type: 'string', example: '댓글 내용' },
+        parentId: {
+          type: 'number',
+          nullable: true,
+          description: '대댓글일 때 부모 댓글 id',
+        },
+      },
+    },
+  })
+  createComment(
+    @Req() req: Request & { user: JwtPayload },
+    @Param('id', ParseIntPipe) id: number,
+    @Body() body: { content?: string; parentId?: number },
+  ) {
+    return this.commentsService.create(id, req.user.sub, {
+      content: body.content ?? '',
+      parentId: body.parentId,
+    });
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @Delete(':id/comments/:commentId')
+  @ApiOperation({ summary: '댓글 삭제(작성자만, 하위 대댓글도 함께 삭제)' })
+  async removeComment(
+    @Req() req: Request & { user: JwtPayload },
+    @Param('id', ParseIntPipe) id: number,
+    @Param('commentId', ParseIntPipe) commentId: number,
+  ) {
+    await this.commentsService.remove(id, commentId, req.user.sub);
+    return { ok: true };
   }
 
   @UseGuards(JwtAuthGuard)
