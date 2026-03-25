@@ -1,4 +1,5 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
+import { ChatDock } from "@/components/chat/ChatDock";
 import { useAuth } from "@/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -118,6 +119,7 @@ export function AppLayout() {
           </nav>
         </div>
       </footer>
+      {user ? <ChatDock /> : null}
     </div>
   );
 }

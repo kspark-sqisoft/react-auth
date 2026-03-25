@@ -5,6 +5,7 @@ import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { DATABASE_PATH } from './env.constants';
+import { ChatModule } from './chat/chat.module';
 import { PostsModule } from './posts/posts.module';
 import { UsersModule } from './users/users.module';
 
@@ -20,6 +21,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     AuthModule,
     PostsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],
