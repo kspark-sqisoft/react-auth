@@ -9,9 +9,10 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { QueryFailedError, Repository } from 'typeorm';
 import { POST_IMAGES_SUBDIR, UPLOAD_ROOT } from '../env.constants';
 import { Post } from './post.entity';
+import { PostLike } from './post-like.entity';
 
 export type PostAuthorPublic = { id: number; name: string };
 
@@ -23,7 +24,11 @@ export type PostPublic = {
   createdAt: Date;
   updatedAt: Date;
   author: PostAuthorPublic;
+  likeCount: number;
+  likedByMe: boolean;
 };
+
+export type PostLikeState = { likeCount: number; likedByMe: boolean };
 
 @Injectable()
 export class PostsService {
@@ -32,6 +37,8 @@ export class PostsService {
   constructor(
     @InjectRepository(Post)
     private repo: Repository<Post>,
+    @InjectRepository(PostLike)
+    private likeRepo: Repository<PostLike>,
   ) {}
 
   private imagePublicUrl(filename: string | null): string | null {
@@ -47,7 +54,17 @@ export class PostsService {
     }
   }
 
-  private toPublic(post: Post): PostPublic {
+  private static readonly SEARCH_MAX_LEN = 120;
+
+  /**
+   * SQLite LIKE + ESCAPE는 이스케이프 문자가 정확히 1글자여야 함.
+   * 백슬래시 리터럴은 `ESCAPE '\\'`가 드라이버마다 깨지므로 `!`를 사용.
+   */
+  private escapeLikePattern(raw: string): string {
+    return raw.replace(/!/g, '!!').replace(/%/g, '!%').replace(/_/g, '!_');
+  }
+
+  private toPublic(post: Post, extras?: PostLikeState): PostPublic {
     return {
       id: post.id,
       title: post.title,
@@ -56,30 +73,106 @@ export class PostsService {
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
       author: { id: post.author.id, name: post.author.name },
+      likeCount: extras?.likeCount ?? 0,
+      likedByMe: extras?.likedByMe ?? false,
     };
+  }
+
+  private async getLikeAggregates(
+    postIds: number[],
+    viewerId?: number,
+  ): Promise<Map<number, PostLikeState>> {
+    const map = new Map<number, PostLikeState>();
+    for (const id of postIds) {
+      map.set(id, { likeCount: 0, likedByMe: false });
+    }
+    if (postIds.length === 0) return map;
+
+    const countRows = await this.likeRepo
+      .createQueryBuilder('l')
+      .select('l.postId', 'postId')
+      .addSelect('COUNT(*)', 'cnt')
+      .where('l.postId IN (:...ids)', { ids: postIds })
+      .groupBy('l.postId')
+      .getRawMany<{ postId: number; cnt: string }>();
+
+    for (const row of countRows) {
+      const pid = Number(row.postId);
+      const cur = map.get(pid);
+      if (cur) cur.likeCount = Number(row.cnt);
+    }
+
+    if (viewerId != null) {
+      const likedRows = await this.likeRepo
+        .createQueryBuilder('l')
+        .select('l.postId', 'postId')
+        .where('l.userId = :uid', { uid: viewerId })
+        .andWhere('l.postId IN (:...ids)', { ids: postIds })
+        .getRawMany<{ postId: number }>();
+      for (const row of likedRows) {
+        const pid = Number(row.postId);
+        const cur = map.get(pid);
+        if (cur) cur.likedByMe = true;
+      }
+    }
+
+    return map;
+  }
+
+  async getLikeState(postId: number, userId: number): Promise<PostLikeState> {
+    const likeCount = await this.likeRepo.count({
+      where: { post: { id: postId } },
+    });
+    const likedByMe =
+      (await this.likeRepo.count({
+        where: { user: { id: userId }, post: { id: postId } },
+      })) > 0;
+    return { likeCount, likedByMe };
   }
 
   async findPage(
     skip: number,
     take: number,
+    viewerId?: number,
+    search?: string,
   ): Promise<{ items: PostPublic[]; total: number }> {
-    this.logger.log(`[글] 목록 페이지 조회 skip=${skip} take=${take}`);
-    const [posts, total] = await this.repo.findAndCount({
-      relations: ['author'],
-      order: { createdAt: 'DESC' },
-      skip,
-      take,
-    });
+    const raw = search?.trim() ?? '';
+    const term =
+      raw.length > PostsService.SEARCH_MAX_LEN
+        ? raw.slice(0, PostsService.SEARCH_MAX_LEN)
+        : raw;
+
+    this.logger.log(
+      `[글] 목록 페이지 조회 skip=${skip} take=${take} search=${term ? `"${term.slice(0, 40)}${term.length > 40 ? '…' : ''}"` : '(없음)'}`,
+    );
+
+    const qb = this.repo
+      .createQueryBuilder('post')
+      .leftJoinAndSelect('post.author', 'author');
+
+    if (term.length > 0) {
+      const pattern = `%${this.escapeLikePattern(term)}%`;
+      qb.andWhere(
+        "(post.title LIKE :pattern ESCAPE '!' OR post.content LIKE :pattern ESCAPE '!')",
+        { pattern },
+      );
+    }
+
+    qb.orderBy('post.createdAt', 'DESC').skip(skip).take(take);
+
+    const [posts, total] = await qb.getManyAndCount();
+    const ids = posts.map((p) => p.id);
+    const agg = await this.getLikeAggregates(ids, viewerId);
     this.logger.log(
       `[글] 목록 페이지 응답 반환=${posts.length} total=${total}`,
     );
     return {
-      items: posts.map((p) => this.toPublic(p)),
+      items: posts.map((p) => this.toPublic(p, agg.get(p.id))),
       total,
     };
   }
 
-  async findOne(id: number): Promise<PostPublic> {
+  async findOne(id: number, viewerId?: number): Promise<PostPublic> {
     this.logger.log(`[글] 단건 조회 postId=${id}`);
     const post = await this.repo.findOne({
       where: { id },
@@ -89,8 +182,10 @@ export class PostsService {
       this.logger.warn(`[글] 단건 없음 postId=${id}`);
       throw new NotFoundException();
     }
+    const agg = await this.getLikeAggregates([id], viewerId);
+    const meta = agg.get(id)!;
     this.logger.log(`[글] 단건 응답 postId=${id} authorId=${post.author.id}`);
-    return this.toPublic(post);
+    return this.toPublic(post, meta);
   }
 
   async create(
@@ -112,10 +207,11 @@ export class PostsService {
       where: { id: saved.id },
       relations: ['author'],
     });
+    const likeState = await this.getLikeState(saved.id, authorId);
     this.logger.log(
       `[글] 작성 완료 postId=${saved.id} authorId=${authorId} title=${saved.title.slice(0, 40)}${saved.title.length > 40 ? '…' : ''}`,
     );
-    return this.toPublic(withAuthor);
+    return this.toPublic(withAuthor, likeState);
   }
 
   async update(
@@ -165,8 +261,9 @@ export class PostsService {
       where: { id },
       relations: ['author'],
     });
+    const likeState = await this.getLikeState(id, authorId);
     this.logger.log(`[글] 수정 완료 postId=${id}`);
-    return this.toPublic(refreshed);
+    return this.toPublic(refreshed, likeState);
   }
 
   async remove(authorId: number, id: number): Promise<void> {
@@ -187,5 +284,51 @@ export class PostsService {
     this.logger.log(`[글] 삭제 완료 postId=${id} authorId=${authorId}`);
     await this.unlinkPostImage(post.imageFilename);
     await this.repo.remove(post);
+  }
+
+  /** 이미 좋아요한 경우에도 현재 상태를 반환(멱등). */
+  async addLike(userId: number, postId: number): Promise<PostLikeState> {
+    const exists = await this.repo.findOne({ where: { id: postId } });
+    if (!exists) {
+      throw new NotFoundException();
+    }
+    const already = await this.likeRepo.findOne({
+      where: { user: { id: userId }, post: { id: postId } },
+    });
+    if (!already) {
+      try {
+        await this.likeRepo.save(
+          this.likeRepo.create({
+            user: { id: userId },
+            post: { id: postId },
+          }),
+        );
+      } catch (e) {
+        if (
+          e instanceof QueryFailedError &&
+          /UNIQUE|unique/i.test(String(e.message))
+        ) {
+          this.logger.debug(
+            `[글] 좋아요 유니크 경합 무시 postId=${postId} userId=${userId}`,
+          );
+        } else {
+          throw e;
+        }
+      }
+    }
+    return this.getLikeState(postId, userId);
+  }
+
+  /** 좋아요 없어도 현재 상태 반환(멱등). */
+  async removeLike(userId: number, postId: number): Promise<PostLikeState> {
+    const exists = await this.repo.findOne({ where: { id: postId } });
+    if (!exists) {
+      throw new NotFoundException();
+    }
+    await this.likeRepo.delete({
+      user: { id: userId },
+      post: { id: postId },
+    });
+    return this.getLikeState(postId, userId);
   }
 }

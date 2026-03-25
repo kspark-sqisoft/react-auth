@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { deletePost, fetchPost, type Post } from "@/lib/api";
 import { appLog } from "@/lib/app-log";
+import { PostLikeButton } from "@/components/posts/PostLikeButton";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -64,7 +65,7 @@ export function PostDetailPage() {
     return () => {
       cancelled = true;
     };
-  }, [id]);
+  }, [id, user?.sub]);
 
   const isOwner = user && post && user.sub === post.author.id;
 
@@ -120,6 +121,22 @@ export function PostDetailPage() {
           <p className="mt-2 text-sm text-muted-foreground">
             {post.author.name} · {formatDate(post.createdAt)}
           </p>
+          <div className="mt-3">
+            <PostLikeButton
+              postId={post.id}
+              likeCount={post.likeCount}
+              likedByMe={post.likedByMe}
+              onPatch={(patch) =>
+                setPost((p) => (p ? { ...p, ...patch } : p))
+              }
+              onApplied={(state) =>
+                setPost((p) =>
+                  p ? { ...p, likeCount: state.likeCount, likedByMe: state.likedByMe } : p,
+                )
+              }
+              onSyncError={(msg) => setError(msg)}
+            />
+          </div>
         </div>
         {isOwner ? (
           <div className="flex flex-wrap gap-2">

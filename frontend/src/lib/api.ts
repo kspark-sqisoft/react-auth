@@ -1,5 +1,7 @@
-import axios, { isAxiosError } from "axios";
+import axios, { isAxiosError, type InternalAxiosRequestConfig } from "axios";
 import { appLog } from "@/lib/app-log";
+
+type RetryableRequest = InternalAxiosRequestConfig & { _retry?: boolean };
 
 /**
  * HTTP 클라이언트 및 게시글·인증 관련 API 래퍼.
@@ -20,7 +22,11 @@ export type Post = {
   createdAt: string;
   updatedAt: string;
   author: PostAuthor;
+  likeCount: number;
+  likedByMe: boolean;
 };
+
+export type PostLikeState = { likeCount: number; likedByMe: boolean };
 
 export function getAccessToken(): string | null {
   return sessionStorage.getItem(ACCESS_TOKEN_KEY);
@@ -90,6 +96,48 @@ export async function refreshAccessToken(): Promise<boolean> {
   }
 }
 
+/** 동시에 여러 요청이 401이어도 POST /auth/refresh는 한 번만 나감 */
+let refreshInFlight: Promise<boolean> | null = null;
+
+function refreshSessionDeduped(): Promise<boolean> {
+  if (!refreshInFlight) {
+    refreshInFlight = refreshAccessToken().finally(() => {
+      refreshInFlight = null;
+    });
+  }
+  return refreshInFlight;
+}
+
+/**
+ * 액세스 JWT 만료 시(401) 리프레시 쿠키로 새 토큰을 받은 뒤 원래 요청을 한 번 재시도합니다.
+ * (로그인 직후에는 user가 있는데 sessionStorage 토큰만 만료된 경우에도 글 저장 등이 동작합니다.)
+ */
+api.interceptors.response.use(
+  (res) => res,
+  async (error: unknown) => {
+    if (!isAxiosError(error) || !error.config) return Promise.reject(error);
+    const status = error.response?.status;
+    const original = error.config as RetryableRequest;
+    if (status !== 401) return Promise.reject(error);
+
+    const url = String(original.url ?? "");
+    if (url.includes("/auth/refresh") || url.includes("/auth/signin")) {
+      return Promise.reject(error);
+    }
+    if (original._retry) return Promise.reject(error);
+    original._retry = true;
+
+    const ok = await refreshSessionDeduped();
+    if (!ok) return Promise.reject(error);
+
+    const token = getAccessToken();
+    if (token) {
+      original.headers.Authorization = `Bearer ${token}`;
+    }
+    return api.request(original);
+  },
+);
+
 /** 현재 Bearer로 로그인 사용자 조회; 401 등이면 null */
 export async function fetchMe(): Promise<AuthUser | null> {
   try {
@@ -111,12 +159,16 @@ const POST_PAGE_DEFAULT = 5;
 export async function fetchPostsPage(params?: {
   skip?: number;
   take?: number;
+  /** 제목·본문 부분 일치 */
+  search?: string;
 }): Promise<PostsPageResponse> {
   try {
+    const search = params?.search?.trim();
     const { data } = await api.get<PostsPageResponse>("/posts", {
       params: {
         skip: params?.skip ?? 0,
         take: params?.take ?? POST_PAGE_DEFAULT,
+        ...(search ? { search } : {}),
       },
     });
     return data;
@@ -131,6 +183,26 @@ export { POST_PAGE_DEFAULT };
 export async function fetchPost(id: number): Promise<Post> {
   try {
     const { data } = await api.get<Post>(`/posts/${id}`);
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+/** JWT 필요; 응답으로 최종 좋아요 수·내 좋아요 여부 */
+export async function likePost(id: number): Promise<PostLikeState> {
+  try {
+    const { data } = await api.post<PostLikeState>(`/posts/${id}/like`);
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+/** JWT 필요 */
+export async function unlikePost(id: number): Promise<PostLikeState> {
+  try {
+    const { data } = await api.delete<PostLikeState>(`/posts/${id}/like`);
     return data;
   } catch (e) {
     rethrowAsApiError(e);

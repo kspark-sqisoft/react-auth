@@ -25,6 +25,7 @@ import {
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
+import { OptionalJwtAuthGuard } from '../auth/jwt-optional.guard';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { postImageMulterOptions } from './post-image-upload.options';
 import { PostsService } from './posts.service';
@@ -66,23 +67,57 @@ const multipartPatchBody = {
 export class PostsController {
   constructor(private postsService: PostsService) {}
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get()
-  @ApiOperation({ summary: '글 목록(페이지)' })
+  @ApiOperation({ summary: '글 목록(페이지); Bearer 있으면 likedByMe 반영' })
   @ApiQuery({ name: 'skip', required: false, example: 0 })
   @ApiQuery({ name: 'take', required: false, example: 4 })
+  @ApiQuery({
+    name: 'search',
+    required: false,
+    description: '제목·본문 부분 일치(공백 제거, 최대 120자)',
+  })
   findPage(
+    @Req() req: Request & { user?: JwtPayload },
     @Query('skip', new DefaultValuePipe(0), ParseIntPipe) skipRaw: number,
     @Query('take', new DefaultValuePipe(4), ParseIntPipe) takeRaw: number,
+    @Query('search') search?: string,
   ) {
     const skip = Math.max(0, skipRaw);
     const take = Math.min(50, Math.max(1, takeRaw));
-    return this.postsService.findPage(skip, take);
+    return this.postsService.findPage(skip, take, req.user?.sub, search);
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get(':id')
-  @ApiOperation({ summary: '글 상세' })
-  findOne(@Param('id', ParseIntPipe) id: number) {
-    return this.postsService.findOne(id);
+  @ApiOperation({ summary: '글 상세; Bearer 있으면 likedByMe 반영' })
+  findOne(
+    @Req() req: Request & { user?: JwtPayload },
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.postsService.findOne(id, req.user?.sub);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @PostMethod(':id/like')
+  @ApiOperation({ summary: '글 좋아요(로그인, 사용자당 글당 1회)' })
+  addLike(
+    @Req() req: Request & { user: JwtPayload },
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.postsService.addLike(req.user.sub, id);
+  }
+
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth('JWT-auth')
+  @Delete(':id/like')
+  @ApiOperation({ summary: '글 좋아요 취소' })
+  removeLike(
+    @Req() req: Request & { user: JwtPayload },
+    @Param('id', ParseIntPipe) id: number,
+  ) {
+    return this.postsService.removeLike(req.user.sub, id);
   }
 
   @UseGuards(JwtAuthGuard)

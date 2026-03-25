@@ -3,10 +3,12 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   CreateDateColumn,
   UpdateDateColumn,
 } from 'typeorm';
 import { User } from '../users/user.entity';
+import type { PostLike } from './post-like.entity';
 
 @Entity()
 export class Post {
@@ -25,6 +27,9 @@ export class Post {
 
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   author: User;
+
+  @OneToMany('PostLike', 'post')
+  likes: PostLike[];
 
   @CreateDateColumn()
   createdAt: Date;
