@@ -26,7 +26,12 @@ type SystemNoticeEvt = {
   at: string;
 };
 
-type RoomListEntry = { id: string; members: number };
+type RoomListEntry = {
+  id: string;
+  members: number;
+  ownerId?: number;
+  ownerName?: string;
+};
 
 type FeedItem =
   | { kind: "msg"; key: string; data: ChatMessageEvt }
@@ -298,6 +303,7 @@ export function ChatDock() {
 
   if (!user) return null;
 
+  const activeRoomMeta = rooms.find((r) => r.id === activeRoom);
   const badgeText = unread > 9 ? "9+" : String(unread);
 
   return (
@@ -313,6 +319,11 @@ export function ChatDock() {
               <div className="min-w-0">
                 <p className="text-xs font-medium text-muted-foreground">채팅</p>
                 <p className="truncate text-sm font-semibold">{roomLabel(activeRoom)}</p>
+                {activeRoom !== "lobby" && activeRoomMeta?.ownerName ? (
+                  <p className="truncate text-[11px] text-muted-foreground">
+                    방장 {activeRoomMeta.ownerName}
+                  </p>
+                ) : null}
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <span
@@ -369,30 +380,34 @@ export function ChatDock() {
                         type="button"
                         onClick={() => joinListedRoom(r.id)}
                         className={cn(
-                          "flex min-w-0 flex-1 items-center justify-between gap-2 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
+                          "flex min-w-0 flex-1 flex-col items-stretch gap-0.5 rounded-md px-2 py-1.5 text-left text-xs transition-colors",
                           r.id === activeRoom
                             ? "bg-primary/15 font-medium text-foreground"
                             : "hover:bg-muted/80 text-muted-foreground hover:text-foreground",
                         )}
                       >
-                        <span className="min-w-0 truncate">{roomLabel(r.id)}</span>
-                        <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">
-                          {r.members}명
+                        <span className="flex items-center justify-between gap-2">
+                          <span className="min-w-0 truncate">{roomLabel(r.id)}</span>
+                          <span className="shrink-0 tabular-nums text-[10px] text-muted-foreground">
+                            {r.members}명
+                          </span>
                         </span>
+                        {r.id !== "lobby" && r.ownerName ? (
+                          <span className="truncate text-[10px] text-muted-foreground">
+                            방장 {r.ownerName}
+                          </span>
+                        ) : null}
                       </button>
-                      {r.id !== "lobby" ? (
+                      {r.id !== "lobby" && r.ownerId === user.sub ? (
                         <Button
                           type="button"
                           variant="ghost"
                           size="icon"
                           className="size-7 shrink-0 text-muted-foreground hover:text-destructive"
                           aria-label={`${roomLabel(r.id)} 방 삭제`}
-                          title="방·대화 기록 삭제"
+                          title="방장만 삭제 가능"
                           disabled={!connected}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            deleteListedRoom(r.id);
-                          }}
+                          onClick={() => deleteListedRoom(r.id)}
                         >
                           <Trash2 className="size-3.5" />
                         </Button>

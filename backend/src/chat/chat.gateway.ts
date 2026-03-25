@@ -25,7 +25,12 @@ type ClientData = {
   currentRoom?: string;
 };
 
-export type RoomListEntry = { id: string; members: number };
+export type RoomListEntry = {
+  id: string;
+  members: number;
+  ownerId?: number;
+  ownerName?: string;
+};
 
 export type ChatMessageWire = {
   id: string;
@@ -80,7 +85,12 @@ export class ChatGateway
   async onModuleInit(): Promise<void> {
     try {
       const ids = await this.chatService.distinctRoomIds();
-      for (const id of ids) this.knownRooms.add(id);
+      for (const id of ids) {
+        this.knownRooms.add(id);
+        if (id !== 'lobby') {
+          await this.chatService.backfillRoomMetaIfMissing(id);
+        }
+      }
       this.knownRooms.add('lobby');
     } catch (e) {
       this.logger.warn(`[채팅] DB 방 목록 로드 실패: ${String(e)}`);
@@ -101,9 +111,22 @@ export class ChatGateway
     }
   }
 
-  private buildRoomList(): RoomListEntry[] {
+  private buildRoomList(
+    owners: Map<string, { ownerId: number; ownerName: string }>,
+  ): RoomListEntry[] {
     return Array.from(this.knownRooms)
-      .map((id) => ({ id, members: this.roomMembers.get(id) ?? 0 }))
+      .map((id) => {
+        const o = owners.get(id);
+        const base: RoomListEntry = {
+          id,
+          members: this.roomMembers.get(id) ?? 0,
+        };
+        if (id !== 'lobby' && o) {
+          base.ownerId = o.ownerId;
+          base.ownerName = o.ownerName;
+        }
+        return base;
+      })
       .sort((a, b) => {
         if (a.id === 'lobby') return -1;
         if (b.id === 'lobby') return 1;
@@ -112,8 +135,24 @@ export class ChatGateway
       });
   }
 
+  private async getRoomListPayload(): Promise<RoomListEntry[]> {
+    const owners = await this.chatService.getOwnerSummaries(
+      Array.from(this.knownRooms),
+    );
+    return this.buildRoomList(owners);
+  }
+
   private emitRoomList(): void {
-    this.server.emit('roomList', { rooms: this.buildRoomList() });
+    void this.emitRoomListAsync();
+  }
+
+  private async emitRoomListAsync(): Promise<void> {
+    try {
+      const rooms = await this.getRoomListPayload();
+      this.server.emit('roomList', { rooms });
+    } catch (e) {
+      this.logger.warn(`[채팅] roomList 전송 실패: ${String(e)}`);
+    }
   }
 
   private async emitMessageHistory(
@@ -147,7 +186,8 @@ export class ChatGateway
       };
       (client.data as ClientData) = data;
       this.logger.log(`[채팅] 연결 socket=${client.id} userId=${data.userId}`);
-      client.emit('roomList', { rooms: this.buildRoomList() });
+      const rooms = await this.getRoomListPayload();
+      client.emit('roomList', { rooms });
     } catch {
       client.emit('chatError', {
         message: '토큰이 만료되었거나 유효하지 않습니다.',
@@ -173,8 +213,9 @@ export class ChatGateway
   }
 
   @SubscribeMessage('getRoomList')
-  handleGetRoomList() {
-    return { rooms: this.buildRoomList() };
+  async handleGetRoomList() {
+    const rooms = await this.getRoomListPayload();
+    return { rooms };
   }
 
   @SubscribeMessage('joinRoom')
@@ -186,6 +227,10 @@ export class ChatGateway
     if (me?.userId == null) return { ok: false };
 
     const room = sanitizeRoomId(body?.roomId);
+    if (room !== 'lobby') {
+      await this.chatService.ensureRoomRecord(room, me.userId, me.name);
+    }
+
     if (me.currentRoom === room) {
       client.emit('joinedRoom', { roomId: room });
       await this.emitMessageHistory(client, room);
@@ -243,8 +288,18 @@ export class ChatGateway
       return { ok: false };
     }
 
+    let meta = await this.chatService.findRoomByRoomId(room);
+    if (!meta) {
+      await this.chatService.backfillRoomMetaIfMissing(room);
+      meta = await this.chatService.findRoomByRoomId(room);
+    }
+    if (!meta || meta.ownerId !== me.userId) {
+      client.emit('chatError', { message: '방장만 방을 삭제할 수 있습니다.' });
+      return { ok: false };
+    }
+
     try {
-      await this.chatService.deleteAllMessagesInRoom(room);
+      await this.chatService.deleteRoomFully(room);
     } catch (e) {
       this.logger.error(`[채팅] 방 메시지 삭제 실패: ${String(e)}`);
       client.emit('chatError', { message: '방 삭제에 실패했습니다.' });
