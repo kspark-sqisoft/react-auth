@@ -21,7 +21,7 @@ import {
 import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
 import { CenteredSpinner } from "@/components/layout/CenteredSpinner";
 import { Button } from "@/components/ui/button";
-import { SafeImage } from "@/components/ui/safe-image";
+import { PostMediaCarousel } from "@/components/posts/PostMediaCarousel";
 import { formatDateFullShort } from "@/lib/format-date";
 import { postBodyHtmlForRender } from "@/lib/post-html";
 import { toast } from "sonner";
@@ -171,32 +171,7 @@ export function PostDetailPage() {
         ) : null}
       </div>
 
-      {post.imageUrl ? (
-        <div className="flex w-full justify-center rounded-xl border border-border bg-muted/20 px-2 py-3 sm:px-3 sm:py-4">
-          <SafeImage
-            src={post.imageUrl}
-            alt=""
-            className="max-h-[min(70vh,560px)] min-h-36 w-auto max-w-full object-contain object-center sm:min-h-48"
-            loading="lazy"
-            placeholderLabel="글 본문 이미지"
-          />
-        </div>
-      ) : null}
-
-      {post.videoUrl ? (
-        <div className="overflow-hidden rounded-xl border border-border bg-black/90 px-2 py-3 sm:px-3 sm:py-4">
-          <video
-            src={post.videoUrl}
-            controls
-            playsInline
-            preload="metadata"
-            poster={post.videoPosterUrl ?? undefined}
-            className="mx-auto max-h-[min(70vh,560px)] w-full max-w-full object-contain"
-          >
-            브라우저가 이 동영상 형식을 재생하지 못합니다.
-          </video>
-        </div>
-      ) : null}
+      {post.media?.length ? <PostMediaCarousel items={post.media} /> : null}
 
       <div
         className="post-body border-t border-border pt-6 text-sm leading-relaxed"

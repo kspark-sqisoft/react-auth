@@ -30,10 +30,9 @@ import { JwtAuthGuard } from '../auth/jwt.guard';
 import { OptionalJwtAuthGuard } from '../auth/jwt-optional.guard';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import {
-  POST_MEDIA_IMAGE_MAX_BYTES,
-  POST_MEDIA_POSTER_MAX_BYTES,
-  postMediaMulterOptions,
-} from './post-media-upload.options';
+  POST_ATTACHMENTS_MAX_COUNT,
+  postAttachmentsMulterOptions,
+} from './post-attachments-multer.options';
 import { CommentsService } from './comments.service';
 import { PostsService } from './posts.service';
 
@@ -44,22 +43,16 @@ const multipartPostBody = {
     properties: {
       title: { type: 'string', example: '제목' },
       content: { type: 'string', example: '본문' },
-      image: {
-        type: 'string',
-        format: 'binary',
-        description:
-          '선택(JPEG/PNG/GIF/WebP, 최대 5MB). 동영상과 동시에 보낼 수 없습니다.',
+      attachments: {
+        type: 'array',
+        items: { type: 'string', format: 'binary' },
+        description: `순서대로 이미지·동영상 혼합(최대 ${POST_ATTACHMENTS_MAX_COUNT}개)`,
       },
-      video: {
-        type: 'string',
-        format: 'binary',
+      posters: {
+        type: 'array',
+        items: { type: 'string', format: 'binary' },
         description:
-          '선택(MP4/WebM/MOV, 최대 80MB). 이미지와 동시에 보낼 수 없습니다.',
-      },
-      videoPoster: {
-        type: 'string',
-        format: 'binary',
-        description: '선택(동영상과 함께; JPEG/PNG/WebP 썸네일, 최대 2MB)',
+          '동영상 순서대로 썸네일(있는 동영상만; JPEG/PNG/WebP, 동영상마다 0~1개)',
       },
     },
   },
@@ -71,37 +64,46 @@ const multipartPatchBody = {
     properties: {
       title: { type: 'string' },
       content: { type: 'string' },
+      mediaPlan: {
+        type: 'string',
+        description:
+          'JSON: {"items":[{"t":"e","id":1},{"t":"n","i":0}]} — 기존(e)·새(n) 순서',
+      },
       removeMedia: {
         type: 'string',
         enum: ['1', 'true', 'on'],
-        description: '기존 첨부 전부 제거(이미지·동영상·썸네일; 새 파일 없을 때)',
+        description: '첨부 전부 제거(mediaPlan 없을 때)',
       },
       removeImage: {
         type: 'string',
         enum: ['1', 'true', 'on'],
-        description: '호환용: removeMedia와 동일하게 전체 첨부 제거',
+        description: '호환: removeMedia와 동일',
       },
       removeVideo: {
         type: 'string',
         enum: ['1', 'true', 'on'],
-        description: '호환용: removeMedia와 동일하게 전체 첨부 제거',
+        description: '호환: removeMedia와 동일',
       },
-      image: { type: 'string', format: 'binary' },
-      video: { type: 'string', format: 'binary' },
-      videoPoster: { type: 'string', format: 'binary' },
+      newFiles: {
+        type: 'array',
+        items: { type: 'string', format: 'binary' },
+      },
+      newPosters: {
+        type: 'array',
+        items: { type: 'string', format: 'binary' },
+      },
     },
   },
 };
 
-async function cleanupPostUploads(
-  files: (Express.Multer.File | undefined)[],
+async function cleanupUploadedFiles(
+  files?: Record<string, Express.Multer.File[]>,
 ): Promise<void> {
-  await Promise.all(
-    files.filter(Boolean).map((f) => {
-      const p = f!.path;
-      return p ? unlink(p).catch(() => undefined) : Promise.resolve();
-    }),
-  );
+  const list = files ? Object.values(files).flat() : [];
+  const tasks = list
+    .filter((f): f is Express.Multer.File & { path: string } => Boolean(f.path))
+    .map((f) => unlink(f.path).catch(() => undefined));
+  await Promise.all(tasks);
 }
 
 @ApiTags('posts')
@@ -116,7 +118,7 @@ export class PostsController {
   @Get()
   @ApiOperation({ summary: '글 목록(페이지); Bearer 있으면 likedByMe 반영' })
   @ApiQuery({ name: 'skip', required: false, example: 0 })
-  @ApiQuery({ name: 'take', required: false, example: 4 })
+  @ApiQuery({ name: 'take', required: false, example: 12 })
   @ApiQuery({
     name: 'search',
     required: false,
@@ -125,7 +127,7 @@ export class PostsController {
   findPage(
     @Req() req: Request & { user?: JwtPayload },
     @Query('skip', new DefaultValuePipe(0), ParseIntPipe) skipRaw: number,
-    @Query('take', new DefaultValuePipe(4), ParseIntPipe) takeRaw: number,
+    @Query('take', new DefaultValuePipe(12), ParseIntPipe) takeRaw: number,
     @Query('search') search?: string,
   ) {
     const skip = Math.max(0, skipRaw);
@@ -220,11 +222,10 @@ export class PostsController {
   @UseInterceptors(
     FileFieldsInterceptor(
       [
-        { name: 'image', maxCount: 1 },
-        { name: 'video', maxCount: 1 },
-        { name: 'videoPoster', maxCount: 1 },
+        { name: 'attachments', maxCount: POST_ATTACHMENTS_MAX_COUNT },
+        { name: 'posters', maxCount: POST_ATTACHMENTS_MAX_COUNT },
       ],
-      postMediaMulterOptions(),
+      postAttachmentsMulterOptions(),
     ),
   )
   @PostMethod()
@@ -235,43 +236,25 @@ export class PostsController {
     @Body('content') content: string,
     @UploadedFiles()
     files?: {
-      image?: Express.Multer.File[];
-      video?: Express.Multer.File[];
-      videoPoster?: Express.Multer.File[];
+      attachments?: Express.Multer.File[];
+      posters?: Express.Multer.File[];
     },
   ) {
-    const imageFile = files?.image?.[0];
-    const videoFile = files?.video?.[0];
-    const posterFile = files?.videoPoster?.[0];
+    const attachmentFiles = files?.attachments ?? [];
+    const posterFiles = files?.posters ?? [];
 
-    if (posterFile && !videoFile) {
-      await cleanupPostUploads([imageFile, posterFile]);
-      throw new BadRequestException(
-        '동영상이 없으면 썸네일만 보낼 수 없습니다.',
+    try {
+      return await this.postsService.createWithAttachments(
+        req.user.sub,
+        title,
+        content,
+        attachmentFiles,
+        posterFiles,
       );
+    } catch (e) {
+      await cleanupUploadedFiles(files);
+      throw e;
     }
-    if (imageFile && imageFile.size > POST_MEDIA_IMAGE_MAX_BYTES) {
-      await cleanupPostUploads([imageFile, videoFile, posterFile]);
-      throw new BadRequestException('이미지는 5MB 이하여야 합니다.');
-    }
-    if (posterFile && posterFile.size > POST_MEDIA_POSTER_MAX_BYTES) {
-      await cleanupPostUploads([imageFile, videoFile, posterFile]);
-      throw new BadRequestException('동영상 썸네일은 2MB 이하여야 합니다.');
-    }
-    if (imageFile && videoFile) {
-      await cleanupPostUploads([imageFile, videoFile, posterFile]);
-      throw new BadRequestException(
-        '이미지와 동영상을 동시에 올릴 수 없습니다. 하나만 선택하세요.',
-      );
-    }
-
-    return this.postsService.create(req.user.sub, {
-      title,
-      content,
-      imageFilename: imageFile?.filename ?? null,
-      videoFilename: videoFile?.filename ?? null,
-      videoPosterFilename: posterFile?.filename ?? null,
-    });
   }
 
   @UseGuards(JwtAuthGuard)
@@ -281,11 +264,10 @@ export class PostsController {
   @UseInterceptors(
     FileFieldsInterceptor(
       [
-        { name: 'image', maxCount: 1 },
-        { name: 'video', maxCount: 1 },
-        { name: 'videoPoster', maxCount: 1 },
+        { name: 'newFiles', maxCount: POST_ATTACHMENTS_MAX_COUNT },
+        { name: 'newPosters', maxCount: POST_ATTACHMENTS_MAX_COUNT },
       ],
-      postMediaMulterOptions(),
+      postAttachmentsMulterOptions(),
     ),
   )
   @Patch(':id')
@@ -295,56 +277,65 @@ export class PostsController {
     @Param('id', ParseIntPipe) id: number,
     @Body('title') title?: string,
     @Body('content') content?: string,
+    @Body('mediaPlan') mediaPlanRaw?: string,
     @Body('removeMedia') removeMedia?: string,
     @Body('removeImage') removeImage?: string,
     @Body('removeVideo') removeVideo?: string,
     @UploadedFiles()
     files?: {
-      image?: Express.Multer.File[];
-      video?: Express.Multer.File[];
-      videoPoster?: Express.Multer.File[];
+      newFiles?: Express.Multer.File[];
+      newPosters?: Express.Multer.File[];
     },
   ) {
-    const imageFile = files?.image?.[0];
-    const videoFile = files?.video?.[0];
-    const posterFile = files?.videoPoster?.[0];
-
-    if (posterFile && !videoFile) {
-      await cleanupPostUploads([imageFile, posterFile]);
-      throw new BadRequestException(
-        '새 동영상 파일과 함께 썸네일을 보내 주세요.',
-      );
-    }
-    if (imageFile && imageFile.size > POST_MEDIA_IMAGE_MAX_BYTES) {
-      await cleanupPostUploads([imageFile, videoFile, posterFile]);
-      throw new BadRequestException('이미지는 5MB 이하여야 합니다.');
-    }
-    if (posterFile && posterFile.size > POST_MEDIA_POSTER_MAX_BYTES) {
-      await cleanupPostUploads([imageFile, videoFile, posterFile]);
-      throw new BadRequestException('동영상 썸네일은 2MB 이하여야 합니다.');
-    }
-    if (imageFile && videoFile) {
-      await cleanupPostUploads([imageFile, videoFile, posterFile]);
-      throw new BadRequestException(
-        '이미지와 동영상을 동시에 올릴 수 없습니다. 하나만 선택하세요.',
-      );
-    }
+    const newFiles = files?.newFiles ?? [];
+    const newPosters = files?.newPosters ?? [];
 
     const truthy = (v: string | undefined) =>
       v === '1' || v === 'true' || v === 'on';
     const clearAllMedia =
-      !imageFile &&
-      !videoFile &&
+      newFiles.length === 0 &&
+      !mediaPlanRaw?.trim() &&
       (truthy(removeMedia) || truthy(removeImage) || truthy(removeVideo));
 
-    return this.postsService.update(req.user.sub, id, {
-      title,
-      content,
-      newImageFilename: imageFile?.filename,
-      newVideoFilename: videoFile?.filename,
-      newVideoPosterFilename: posterFile?.filename,
-      clearAllMedia,
-    });
+    let mediaPlan:
+      | Array<{ t: 'e'; id: number } | { t: 'n'; i: number }>
+      | undefined;
+
+    if (mediaPlanRaw?.trim()) {
+      try {
+        const parsed = JSON.parse(mediaPlanRaw) as { items?: unknown };
+        if (!parsed.items || !Array.isArray(parsed.items)) {
+          throw new BadRequestException('mediaPlan.items 가 필요합니다.');
+        }
+        mediaPlan = parsed.items.map((x: unknown) => {
+          if (!x || typeof x !== 'object') throw new Error();
+          const o = x as { t?: string; id?: number; i?: number };
+          if (o.t === 'e' && typeof o.id === 'number')
+            return { t: 'e', id: o.id };
+          if (o.t === 'n' && typeof o.i === 'number') return { t: 'n', i: o.i };
+          throw new Error();
+        });
+      } catch {
+        await cleanupUploadedFiles(files);
+        throw new BadRequestException(
+          'mediaPlan 형식이 올바르지 않습니다. 예: {"items":[{"t":"e","id":1},{"t":"n","i":0}]}',
+        );
+      }
+    }
+
+    try {
+      return await this.postsService.updatePost(req.user.sub, id, {
+        title,
+        content,
+        clearAllMedia: clearAllMedia || undefined,
+        mediaPlan,
+        newFiles,
+        newPosters,
+      });
+    } catch (e) {
+      await cleanupUploadedFiles(files);
+      throw e;
+    }
   }
 
   @UseGuards(JwtAuthGuard)

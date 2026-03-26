@@ -58,12 +58,26 @@ export type PostAuthor = {
   imageUrl: string | null;
 };
 
-const POST_PAGE_DEFAULT = 4;
+/** 목록 한 번에 가져오는 글 수(무한 스크롤 페이지 크기) */
+const POST_PAGE_DEFAULT = 12;
+
+export type PostMediaItem = {
+  id: number;
+  kind: "image" | "video";
+  url: string;
+  posterUrl: string | null;
+};
 
 export type Post = {
   id: number;
   title: string;
   content: string;
+  /** 순서대로 첨부 */
+  media: PostMediaItem[];
+  /** 목록 썸네일(첫 첨부) */
+  coverThumbUrl: string | null;
+  coverKind: "image" | "video" | null;
+  /** 첫 첨부가 이미지일 때 (호환) */
   imageUrl: string | null;
   videoUrl: string | null;
   videoPosterUrl: string | null;
@@ -363,67 +377,57 @@ export async function unlikePost(id: number): Promise<PostLikeState> {
   }
 }
 
-/** Nest multipart: title, content, image 또는 video(+videoPoster), removeMedia */
-function buildPostFormData(input: {
-  title: string;
-  content: string;
-  image?: File | null;
-  video?: File | null;
-  videoPoster?: File | null;
-  removeMedia?: boolean;
-}): FormData {
-  const fd = new FormData();
-  fd.append("title", input.title);
-  fd.append("content", input.content);
-  if (input.image) fd.append("image", input.image);
-  if (input.video) fd.append("video", input.video);
-  if (input.videoPoster) fd.append("videoPoster", input.videoPoster);
-  if (input.removeMedia) fd.append("removeMedia", "1");
-  return fd;
-}
-
-/** JWT 필요; 새 글 생성 후 생성된 Post 반환 */
+/** JWT 필요; 첨부 순서 = attachmentFiles 순서, posterFiles = 동영상 개수와 동일 */
 export async function createPost(input: {
   title: string;
   content: string;
-  image?: File | null;
-  video?: File | null;
-  videoPoster?: File | null;
+  attachmentFiles: File[];
+  posterFiles: File[];
 }): Promise<Post> {
+  const fd = new FormData();
+  fd.append("title", input.title);
+  fd.append("content", input.content);
+  for (const f of input.attachmentFiles) {
+    fd.append("attachments", f);
+  }
+  for (const f of input.posterFiles) {
+    fd.append("posters", f);
+  }
   try {
-    const { data } = await api.post<Post>(
-      "/posts",
-      buildPostFormData({
-        title: input.title,
-        content: input.content,
-        image: input.image,
-        video: input.video,
-        videoPoster: input.videoPoster,
-      }),
-    );
+    const { data } = await api.post<Post>("/posts", fd);
     return data;
   } catch (e) {
     rethrowAsApiError(e);
   }
 }
 
-/** JWT·작성자만; PATCH multipart */
+/** JWT·작성자만; mediaPlan 없으면 첨부 유지 */
 export async function updatePost(
   id: number,
   input: {
     title: string;
     content: string;
-    image?: File | null;
-    video?: File | null;
-    videoPoster?: File | null;
-    removeMedia?: boolean;
+    clearAllMedia?: boolean;
+    mediaPlan?: Array<{ t: "e"; id: number } | { t: "n"; i: number }>;
+    newFiles?: File[];
+    newPosters?: File[];
   },
 ): Promise<Post> {
+  const fd = new FormData();
+  fd.append("title", input.title);
+  fd.append("content", input.content);
+  if (input.clearAllMedia) fd.append("removeMedia", "1");
+  if (input.mediaPlan != null) {
+    fd.append("mediaPlan", JSON.stringify({ items: input.mediaPlan }));
+  }
+  for (const f of input.newFiles ?? []) {
+    fd.append("newFiles", f);
+  }
+  for (const f of input.newPosters ?? []) {
+    fd.append("newPosters", f);
+  }
   try {
-    const { data } = await api.patch<Post>(
-      `/posts/${id}`,
-      buildPostFormData(input),
-    );
+    const { data } = await api.patch<Post>(`/posts/${id}`, fd);
     return data;
   } catch (e) {
     rethrowAsApiError(e);

@@ -21,7 +21,7 @@ export function PostListItem({
   onLikeApplied,
   onLikeSyncError,
 }: Props) {
-  const sideMedia = Boolean(post.imageUrl || post.videoUrl);
+  const sideMedia = (post.media?.length ?? 0) > 0;
 
   const likeButton = (
     <PostLikeButton
@@ -80,18 +80,18 @@ export function PostListItem({
                 className="absolute inset-0 z-0 block overflow-hidden outline-none ring-inset ring-transparent transition-[box-shadow] focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`${post.title} 상세 보기`}
               >
-                {post.imageUrl ? (
+                {post.coverKind === "image" && post.coverThumbUrl ? (
                   <SafeImage
-                    src={post.imageUrl}
+                    src={post.coverThumbUrl}
                     alt=""
                     className="absolute inset-0 size-full object-cover"
                     loading="lazy"
                     placeholderLabel={`「${post.title}」 대표 이미지`}
                   />
-                ) : post.videoPosterUrl ? (
+                ) : post.coverKind === "video" && post.coverThumbUrl ? (
                   <>
                     <SafeImage
-                      src={post.videoPosterUrl}
+                      src={post.coverThumbUrl}
                       alt=""
                       className="absolute inset-0 size-full object-cover"
                       loading="lazy"
@@ -109,7 +109,7 @@ export function PostListItem({
                 ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
                     <Video className="size-10 opacity-80" strokeWidth={1.25} aria-hidden />
-                    <span className="sr-only">동영상 첨부</span>
+                    <span className="sr-only">미디어 첨부</span>
                   </div>
                 )}
               </Link>

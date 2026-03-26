@@ -326,6 +326,7 @@ export function PostRichEditor({ initialHtml, invalid, onHtmlChange }: Props) {
                   className="sr-only"
                   aria-hidden
                   tabIndex={-1}
+                  defaultValue="#000000"
                   onChange={(e) => editor.chain().focus().setColor(e.target.value).run()}
                 />
                 <TipToolbarBtn

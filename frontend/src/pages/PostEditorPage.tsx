@@ -3,10 +3,12 @@ import {
   useActionState,
   useEffect,
   useOptimistic,
+  useRef,
   useState,
   startTransition,
 } from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
+import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { useAuth } from "@/stores/auth-store";
 import { createPost, fetchPost, updatePost } from "@/lib/api";
 import { postKeys } from "@/lib/query-keys";
@@ -32,8 +34,11 @@ import { Label } from "@/components/ui/label";
 import { SafeImage } from "@/components/ui/safe-image";
 import { PostRichEditor } from "@/components/posts/PostRichEditor";
 import { captureVideoPosterJpeg } from "@/lib/video-poster";
+import { placeholderPosterFile } from "@/lib/placeholder-poster";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+const MAX_ATTACHMENTS = 20;
 
 function fileAttachmentKind(f: File): "image" | "video" | null {
   if (f.type.startsWith("image/")) return "image";
@@ -43,6 +48,27 @@ function fileAttachmentKind(f: File): "image" | "video" | null {
   if (/\.(mp4|webm|mov)$/i.test(n)) return "video";
   return null;
 }
+
+type EditorSlot =
+  | {
+      key: string;
+      type: "existing";
+      id: number;
+      kind: "image" | "video";
+      url: string;
+      posterUrl: string | null;
+    }
+  | {
+      key: string;
+      type: "new";
+      kind: "image" | "video";
+      file: File;
+      /** 동영상만 업로드 시 사용; 이미지는 자리 맞춤용(미사용) */
+      posterFile: File;
+      previewUrl: string;
+      /** 동영상 썸네일 미리보기( revoke 용 ) */
+      posterObjectUrl?: string;
+    };
 
 type PostEditorActionState = {
   serverError: string | null;
@@ -62,21 +88,13 @@ export function PostEditorPage() {
   const queryClient = useQueryClient();
   const viewerKey = user?.sub ?? "anon";
 
-  const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
-  const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null);
-  const [existingVideoPosterUrl, setExistingVideoPosterUrl] = useState<string | null>(null);
+  const [slots, setSlots] = useState<EditorSlot[]>([]);
+  const slotsRef = useRef<EditorSlot[]>([]);
+  slotsRef.current = slots;
 
-  const [imageFile, setImageFile] = useState<File | null>(null);
-  const [videoFile, setVideoFile] = useState<File | null>(null);
-  const [videoPosterFile, setVideoPosterFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
-  const [posterObjectUrl, setPosterObjectUrl] = useState<string | null>(null);
-  const [removeExistingMedia, setRemoveExistingMedia] = useState(false);
-  const [posterBusy, setPosterBusy] = useState(false);
-
+  const hydratedPostId = useRef<number | null>(null);
+  const [addBusy, setAddBusy] = useState(false);
   const [forbidden, setForbidden] = useState(false);
-
   const [title, setTitle] = useState("");
 
   const initialState: PostEditorActionState = {
@@ -101,15 +119,42 @@ export function PostEditorPage() {
       };
     }
 
+    const currentSlots = slotsRef.current;
+
     try {
       if (isEdit) {
+        if (currentSlots.length === 0) {
+          const updated = await updatePost(postId, {
+            title: parsed.data.title.trim(),
+            content: parsed.data.content,
+            mediaPlan: [],
+          });
+          queryClient.setQueryData(postKeys.detail(updated.id, viewerKey), updated);
+          void queryClient.invalidateQueries({ queryKey: postKeys.lists() });
+          appLog("posts", "글 수정 저장", { id: updated.id });
+          toast.success("글이 수정되었습니다.");
+          return { serverError: null, fieldErrors: {}, redirectTo: `/posts/${updated.id}` };
+        }
+
+        const mediaPlan: Array<{ t: "e"; id: number } | { t: "n"; i: number }> = [];
+        const newFiles: File[] = [];
+        const newPosters: File[] = [];
+        for (const s of currentSlots) {
+          if (s.type === "existing") {
+            mediaPlan.push({ t: "e", id: s.id });
+          } else {
+            mediaPlan.push({ t: "n", i: newFiles.length });
+            newFiles.push(s.file);
+            if (s.kind === "video") newPosters.push(s.posterFile);
+          }
+        }
+
         const updated = await updatePost(postId, {
           title: parsed.data.title.trim(),
           content: parsed.data.content,
-          image: imageFile ?? undefined,
-          video: videoFile ?? undefined,
-          videoPoster: videoPosterFile ?? undefined,
-          removeMedia: isEdit && removeExistingMedia && !imageFile && !videoFile,
+          mediaPlan,
+          newFiles,
+          newPosters,
         });
         queryClient.setQueryData(postKeys.detail(updated.id, viewerKey), updated);
         void queryClient.invalidateQueries({ queryKey: postKeys.lists() });
@@ -118,12 +163,23 @@ export function PostEditorPage() {
         return { serverError: null, fieldErrors: {}, redirectTo: `/posts/${updated.id}` };
       }
 
+      const attachmentFiles: File[] = [];
+      const posterFiles: File[] = [];
+      for (const s of currentSlots) {
+        if (s.type !== "new") continue;
+        attachmentFiles.push(s.file);
+      }
+      for (const s of currentSlots) {
+        if (s.type === "new" && s.kind === "video") {
+          posterFiles.push(s.posterFile);
+        }
+      }
+
       const created = await createPost({
         title: parsed.data.title.trim(),
         content: parsed.data.content,
-        image: imageFile ?? undefined,
-        video: videoFile ?? undefined,
-        videoPoster: videoPosterFile ?? undefined,
+        attachmentFiles,
+        posterFiles,
       });
       void queryClient.invalidateQueries({ queryKey: postKeys.all });
       appLog("posts", "글 작성 저장", { id: created.id });
@@ -153,22 +209,8 @@ export function PostEditorPage() {
   }, [optimisticState.redirectTo, navigate]);
 
   useEffect(() => {
-    return () => {
-      if (previewUrl) URL.revokeObjectURL(previewUrl);
-    };
-  }, [previewUrl]);
-
-  useEffect(() => {
-    return () => {
-      if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
-    };
-  }, [videoPreviewUrl]);
-
-  useEffect(() => {
-    return () => {
-      if (posterObjectUrl) URL.revokeObjectURL(posterObjectUrl);
-    };
-  }, [posterObjectUrl]);
+    hydratedPostId.current = null;
+  }, [postId]);
 
   const {
     data: loadedPost,
@@ -205,9 +247,7 @@ export function PostEditorPage() {
     startTransition(() => {
       if (!isEdit || !Number.isFinite(postId)) {
         setTitle("");
-        setExistingImageUrl(null);
-        setExistingVideoUrl(null);
-        setExistingVideoPosterUrl(null);
+        setSlots([]);
         setForbidden(false);
         return;
       }
@@ -219,88 +259,94 @@ export function PostEditorPage() {
       }
       setForbidden(false);
       setTitle(loadedPost.title);
-      setExistingImageUrl(loadedPost.imageUrl);
-      setExistingVideoUrl(loadedPost.videoUrl);
-      setExistingVideoPosterUrl(loadedPost.videoPosterUrl);
-      setRemoveExistingMedia(false);
     });
   }, [isEdit, postId, loadedPost, postLoading, user]);
 
-  function clearAttachment() {
-    setPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-    setVideoPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-    setPosterObjectUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-    setImageFile(null);
-    setVideoFile(null);
-    setVideoPosterFile(null);
-    if (isEdit) setRemoveExistingMedia(true);
+  useEffect(() => {
+    if (!isEdit || postLoading || !loadedPost) return;
+    if (hydratedPostId.current === loadedPost.id) return;
+    hydratedPostId.current = loadedPost.id;
+    setSlots(
+      (loadedPost.media ?? []).map((m) => ({
+        key: `e-${m.id}`,
+        type: "existing" as const,
+        id: m.id,
+        kind: m.kind,
+        url: m.url,
+        posterUrl: m.posterUrl,
+      })),
+    );
+  }, [isEdit, postLoading, loadedPost]);
+
+  async function onPickFiles(list: FileList | null) {
+    if (!list?.length) return;
+    setAddBusy(true);
+    try {
+      const additions: EditorSlot[] = [];
+      for (let i = 0; i < list.length; i++) {
+        if (slotsRef.current.length + additions.length >= MAX_ATTACHMENTS) {
+          toast.error(`첨부는 최대 ${MAX_ATTACHMENTS}개까지입니다.`);
+          break;
+        }
+        const f = list[i];
+        const kind = fileAttachmentKind(f);
+        if (!kind) {
+          toast.error(
+            "JPEG, PNG, GIF, WebP 또는 MP4, WebM, MOV만 추가할 수 있습니다.",
+          );
+          continue;
+        }
+        if (kind === "image") {
+          additions.push({
+            key: `n-${crypto.randomUUID()}`,
+            type: "new",
+            kind: "image",
+            file: f,
+            posterFile: placeholderPosterFile(),
+            previewUrl: URL.createObjectURL(f),
+          });
+        } else {
+          const poster = (await captureVideoPosterJpeg(f)) ?? placeholderPosterFile();
+          additions.push({
+            key: `n-${crypto.randomUUID()}`,
+            type: "new",
+            kind: "video",
+            file: f,
+            posterFile: poster,
+            previewUrl: URL.createObjectURL(f),
+            posterObjectUrl: URL.createObjectURL(poster),
+          });
+        }
+      }
+      if (additions.length) {
+        setSlots((prev) => [...prev, ...additions].slice(0, MAX_ATTACHMENTS));
+      }
+    } finally {
+      setAddBusy(false);
+      const input = document.getElementById("post-attachments") as HTMLInputElement | null;
+      if (input) input.value = "";
+    }
   }
 
-  async function onPickAttachment(file: File | null) {
-    if (!file) {
-      clearAttachment();
-      return;
-    }
-    const kind = fileAttachmentKind(file);
-    if (!kind) {
-      toast.error(
-        "JPEG, PNG, GIF, WebP 이미지 또는 MP4, WebM, MOV 동영상만 선택할 수 있습니다.",
-      );
-      return;
-    }
-    setRemoveExistingMedia(false);
+  function removeSlot(index: number) {
+    setSlots((prev) => {
+      const s = prev[index];
+      if (s?.type === "new") {
+        URL.revokeObjectURL(s.previewUrl);
+        if (s.posterObjectUrl) URL.revokeObjectURL(s.posterObjectUrl);
+      }
+      return prev.filter((_, i) => i !== index);
+    });
+  }
 
-    if (kind === "image") {
-      setVideoPreviewUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-      setPosterObjectUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return null;
-      });
-      setVideoFile(null);
-      setVideoPosterFile(null);
-      setPreviewUrl((prev) => {
-        if (prev) URL.revokeObjectURL(prev);
-        return URL.createObjectURL(file);
-      });
-      setImageFile(file);
-      return;
-    }
-
-    setPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
+  function moveSlot(index: number, dir: -1 | 1) {
+    setSlots((prev) => {
+      const j = index + dir;
+      if (j < 0 || j >= prev.length) return prev;
+      const cp = [...prev];
+      [cp[index], cp[j]] = [cp[j], cp[index]];
+      return cp;
     });
-    setImageFile(null);
-    setVideoPreviewUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return URL.createObjectURL(file);
-    });
-    setPosterObjectUrl((prev) => {
-      if (prev) URL.revokeObjectURL(prev);
-      return null;
-    });
-    setVideoFile(file);
-    setVideoPosterFile(null);
-    setPosterBusy(true);
-    try {
-      const poster = await captureVideoPosterJpeg(file);
-      setVideoPosterFile(poster);
-      if (poster) setPosterObjectUrl(URL.createObjectURL(poster));
-    } finally {
-      setPosterBusy(false);
-    }
   }
 
   if (!isReady) {
@@ -334,22 +380,6 @@ export function PostEditorPage() {
     );
   }
 
-  const displayImageSrc = previewUrl
-    ? previewUrl
-    : !removeExistingMedia && !imageFile && !videoFile
-      ? existingImageUrl
-      : null;
-
-  const displayVideoSrc = videoPreviewUrl
-    ? videoPreviewUrl
-    : !removeExistingMedia && !imageFile && !videoFile
-      ? existingVideoUrl
-      : null;
-
-  const displayVideoPoster =
-    posterObjectUrl ??
-    (!removeExistingMedia && !imageFile && !videoFile ? existingVideoPosterUrl : null);
-
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
@@ -357,15 +387,19 @@ export function PostEditorPage() {
           {isEdit ? "글 수정" : "글 작성"}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          제목·리치 텍스트 본문·선택 첨부 1개(이미지 최대 5MB 또는 동영상 MP4/WebM/MOV 최대 80MB)만 등록할 수 있습니다. 동영상은
-          가능하면 자동으로 목록용 썸네일을 만듭니다.
+          제목·본문·첨부 미디어를 최대 {MAX_ATTACHMENTS}개까지 넣을 수 있습니다. 순서는 위아래 버튼으로 바꿀 수 있고, 글
+          보기에서는 스와이프로 넘깁니다. 목록에는 첫 첨부가 썸네일로 쓰입니다.
         </p>
       </div>
 
       <Card>
         <form
           action={formAction}
-          onSubmit={() => addOptimistic({ serverError: null, fieldErrors: {} })}
+          onSubmit={() => {
+            startTransition(() => {
+              addOptimistic({ serverError: null, fieldErrors: {} });
+            });
+          }}
           noValidate
         >
           <CardHeader>
@@ -397,67 +431,105 @@ export function PostEditorPage() {
               <FormFieldError message={optimisticState.fieldErrors.content} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="post-attachment">첨부 파일 (선택, 이미지 또는 동영상 1개)</Label>
+              <Label htmlFor="post-attachments">첨부 미디어 (선택, 여러 개)</Label>
               <Input
-                id="post-attachment"
+                id="post-attachments"
                 type="file"
+                multiple
                 accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
                 className="cursor-pointer text-sm"
-                disabled={posterBusy}
-                onChange={(e) => {
-                  const f = e.target.files?.[0] ?? null;
-                  void onPickAttachment(f);
-                }}
+                disabled={addBusy}
+                onChange={(e) => void onPickFiles(e.target.files)}
               />
-              {posterBusy ? (
-                <p className="text-xs text-muted-foreground">동영상에서 썸네일을 만드는 중…</p>
+              {addBusy ? (
+                <p className="text-xs text-muted-foreground">파일을 처리하는 중…</p>
               ) : null}
-              {displayImageSrc ? (
-                <div className="relative mt-2 overflow-hidden rounded-lg border border-border bg-muted/30">
-                  <SafeImage
-                    src={displayImageSrc}
-                    alt=""
-                    className="max-h-64 w-full object-contain"
-                    placeholderLabel="첨부 이미지 미리보기"
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="absolute end-2 top-2"
-                    onClick={() => {
-                      clearAttachment();
-                      const input = document.getElementById("post-attachment") as HTMLInputElement | null;
-                      if (input) input.value = "";
-                    }}
-                  >
-                    첨부 제거
-                  </Button>
-                </div>
-              ) : displayVideoSrc ? (
-                <div className="relative mt-2 overflow-hidden rounded-lg border border-border bg-muted/30">
-                  <video
-                    src={displayVideoSrc}
-                    controls
-                    playsInline
-                    className="max-h-64 w-full object-contain"
-                    poster={displayVideoPoster ?? undefined}
-                  />
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    className="absolute end-2 top-2"
-                    onClick={() => {
-                      clearAttachment();
-                      const input = document.getElementById("post-attachment") as HTMLInputElement | null;
-                      if (input) input.value = "";
-                    }}
-                  >
-                    첨부 제거
-                  </Button>
-                </div>
-              ) : null}
+              {slots.length > 0 ? (
+                <ul className="mt-2 space-y-2">
+                  {slots.map((s, index) => (
+                    <li
+                      key={s.key}
+                      className="flex gap-2 rounded-lg border border-border bg-muted/20 p-2"
+                    >
+                      <div className="min-w-0 flex-1">
+                        {s.type === "existing" ? (
+                          s.kind === "image" ? (
+                            <SafeImage
+                              src={s.url}
+                              alt=""
+                              className="max-h-36 w-full object-contain"
+                              placeholderLabel={`첨부 ${index + 1}`}
+                            />
+                          ) : (
+                            <video
+                              src={s.url}
+                              controls
+                              playsInline
+                              className="max-h-36 w-full object-contain"
+                              poster={s.posterUrl ?? undefined}
+                            />
+                          )
+                        ) : s.kind === "image" ? (
+                          <SafeImage
+                            src={s.previewUrl}
+                            alt=""
+                            className="max-h-36 w-full object-contain"
+                            placeholderLabel={`새 이미지 ${index + 1}`}
+                          />
+                        ) : (
+                          <video
+                            src={s.previewUrl}
+                            controls
+                            playsInline
+                            className="max-h-36 w-full object-contain"
+                            poster={s.posterObjectUrl}
+                          />
+                        )}
+                        <p className="mt-1 text-xs text-muted-foreground">
+                          {index + 1}번 · {s.kind === "image" ? "이미지" : "동영상"}
+                          {s.type === "new" ? " (새 파일)" : ""}
+                        </p>
+                      </div>
+                      <div className="flex shrink-0 flex-col gap-1">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="size-8"
+                          aria-label="위로"
+                          disabled={index === 0}
+                          onClick={() => moveSlot(index, -1)}
+                        >
+                          <ChevronUp className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="size-8"
+                          aria-label="아래로"
+                          disabled={index === slots.length - 1}
+                          onClick={() => moveSlot(index, 1)}
+                        >
+                          <ChevronDown className="size-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="icon"
+                          className="size-8 text-destructive"
+                          aria-label="이 첨부 제거"
+                          onClick={() => removeSlot(index)}
+                        >
+                          <Trash2 className="size-4" />
+                        </Button>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-xs text-muted-foreground">첨부가 없습니다.</p>
+              )}
             </div>
           </CardContent>
           <CardFooter className="flex flex-wrap gap-2 border-t bg-muted/30">
