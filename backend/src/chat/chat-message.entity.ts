@@ -21,6 +21,10 @@ export class ChatMessage {
   @Column({ length: 80 })
   authorName: string;
 
+  /** 발신 시점의 `/uploads/avatars/...` (없으면 null) */
+  @Column({ type: 'varchar', length: 512, nullable: true })
+  authorImageUrl: string | null;
+
   @Column('text')
   body: string;
 

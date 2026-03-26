@@ -8,6 +8,7 @@ import { appLog } from "@/lib/app-log";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { SafeImage } from "@/components/ui/safe-image";
 import { cn } from "@/lib/utils";
 
 type ChatMessageEvt = {
@@ -15,6 +16,7 @@ type ChatMessageEvt = {
   roomId: string;
   userId: number;
   userName: string;
+  userImageUrl?: string | null;
   text: string;
   createdAt: string;
 };
@@ -24,6 +26,7 @@ type SystemNoticeEvt = {
   roomId: string;
   userId: number;
   userName: string;
+  userImageUrl?: string | null;
   at: string;
 };
 
@@ -36,7 +39,14 @@ type RoomListEntry = {
 
 type FeedItem =
   | { kind: "msg"; key: string; data: ChatMessageEvt }
-  | { kind: "sys"; key: string; text: string; at: string };
+  | {
+    kind: "sys";
+    key: string;
+    text: string;
+    at: string;
+    userName: string;
+    userImageUrl?: string | null;
+  };
 
 function roomLabel(roomId: string): string {
   return roomId === "lobby" ? "로비 (전체)" : roomId;
@@ -53,7 +63,49 @@ function formatTime(iso: string): string {
   }
 }
 
-/** 카카오톡 스타일: 내 말풍선(노란색)·상대(흰색)·시간은 말풍선 옆 하단 */
+function chatInitial(name: string): string {
+  const c = name.trim().charAt(0);
+  return c ? c.toUpperCase() : "?";
+}
+
+/** 채팅 말풍선 옆 원형 프로필 */
+function ChatAvatar({
+  name,
+  imageUrl,
+  size = "md",
+  className,
+}: {
+  name: string;
+  imageUrl: string | null | undefined;
+  size?: "sm" | "md";
+  className?: string;
+}) {
+  const box = size === "sm" ? "size-5" : "size-8";
+  const initialsCls = size === "sm" ? "text-[9px]" : "text-[11px]";
+  return (
+    <SafeImage
+      src={imageUrl}
+      alt=""
+      className={cn(box, "shrink-0 rounded-full object-cover ring-1 ring-border", className)}
+      placeholderLabel={`${name} 프로필`}
+      fallback={
+        <span
+          className={cn(
+            "flex shrink-0 items-center justify-center rounded-full bg-muted font-semibold text-muted-foreground ring-1 ring-border",
+            box,
+            initialsCls,
+            className,
+          )}
+          aria-hidden
+        >
+          {chatInitial(name)}
+        </span>
+      }
+    />
+  );
+}
+
+/** 카카오톡 스타일: 내 말풍선(노란색)·상대(흰색)·프로필·시간 */
 function ChatMessageBubble({
   msg,
   isMine,
@@ -61,41 +113,52 @@ function ChatMessageBubble({
   msg: ChatMessageEvt;
   isMine: boolean;
 }) {
+  const avatarUrl = msg.userImageUrl ?? null;
   return (
     <div
       className={cn(
-        "flex w-full flex-col gap-0.5",
-        isMine ? "items-end" : "items-start",
+        "flex w-full items-end gap-2",
+        isMine ? "flex-row-reverse" : "flex-row",
       )}
     >
-      {!isMine ? (
-        <span className="max-w-[min(17.5rem,90%)] pl-1 text-[11px] font-medium text-foreground/80">
-          {msg.userName}
-        </span>
-      ) : null}
+      <ChatAvatar name={msg.userName} imageUrl={avatarUrl} />
       <div
         className={cn(
-          "flex max-w-[min(17.5rem,90%)] items-end gap-1.5",
-          isMine ? "flex-row-reverse" : "flex-row",
+          "flex min-w-0 max-w-[min(17.5rem,calc(100%-2.5rem))] flex-col gap-0.5",
+          isMine ? "items-end" : "items-start",
         )}
       >
+        {!isMine ? (
+          <span className="max-w-full pl-0.5 text-[11px] font-medium text-foreground/80">
+            {msg.userName}
+          </span>
+        ) : (
+          <span className="sr-only">내 메시지</span>
+        )}
         <div
           className={cn(
-            "max-w-full px-3 py-2 text-[15px] leading-snug wrap-break-word shadow-[0_1px_2px_rgba(0,0,0,0.06)]",
-            "rounded-[18px]",
-            isMine
-              ? "rounded-br-[4px] bg-[#FEE500] text-[#191919] dark:bg-[#ECD93B] dark:text-[#191919]"
-              : "rounded-bl-[4px] border border-black/[0.07] bg-white text-foreground dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-100",
+            "flex max-w-full items-end gap-1.5",
+            isMine ? "flex-row-reverse" : "flex-row",
           )}
         >
-          {msg.text}
+          <div
+            className={cn(
+              "max-w-full px-3 py-2 text-[15px] leading-snug wrap-break-word shadow-[0_1px_2px_rgba(0,0,0,0.06)]",
+              "rounded-[18px]",
+              isMine
+                ? "rounded-br-[4px] bg-[#FEE500] text-[#191919] dark:bg-[#ECD93B] dark:text-[#191919]"
+                : "rounded-bl-[4px] border border-black/[0.07] bg-white text-foreground dark:border-white/10 dark:bg-zinc-800 dark:text-zinc-100",
+            )}
+          >
+            {msg.text}
+          </div>
+          <time
+            className="mb-0.5 shrink-0 text-[10px] tabular-nums leading-none text-muted-foreground"
+            dateTime={msg.createdAt}
+          >
+            {formatTime(msg.createdAt)}
+          </time>
         </div>
-        <time
-          className="mb-0.5 shrink-0 text-[10px] tabular-nums leading-none text-muted-foreground"
-          dateTime={msg.createdAt}
-        >
-          {formatTime(msg.createdAt)}
-        </time>
       </div>
     </div>
   );
@@ -252,6 +315,8 @@ export function ChatDock() {
         key: `join-${n.userId}-${n.at}`,
         text: `${n.userName}님이 들어왔습니다.`,
         at: n.at,
+        userName: n.userName,
+        userImageUrl: n.userImageUrl ?? null,
       });
       bumpUnreadIfBackground(n.roomId, n.userId);
     });
@@ -309,15 +374,15 @@ export function ChatDock() {
   const badgeText = unread > 9 ? "9+" : String(unread);
 
   return (
-    <div className="pointer-events-none fixed bottom-0 right-0 z-50 p-4 sm:p-6">
-      <div className="pointer-events-auto flex flex-col items-end gap-3">
+    <div className="pointer-events-none fixed end-3 top-[max(0.75rem,env(safe-area-inset-top,0px))] bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] z-50 flex min-h-0 flex-col sm:end-6 sm:top-[max(1.5rem,env(safe-area-inset-top,0px))] sm:bottom-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
+      <div className="pointer-events-auto flex min-h-0 flex-1 flex-col items-end justify-end gap-3">
         {open ? (
           <div
-            className="flex h-[min(72vh,32rem)] max-h-[calc(100vh-5rem)] w-[min(100vw-2rem,22rem)] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl sm:w-[24rem]"
+            className="flex h-full max-h-[min(90dvh,48rem)] min-h-0 w-[min(100vw-2rem,22rem)] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl sm:w-[24rem]"
             role="dialog"
             aria-label="채팅"
           >
-            <header className="flex items-center justify-between gap-2 border-b border-border bg-muted/30 px-3 py-2">
+            <header className="flex shrink-0 items-center justify-between gap-2 border-b border-border bg-muted/30 px-3 py-2">
               <div className="min-w-0">
                 <p className="text-xs font-medium text-muted-foreground">채팅</p>
                 <p className="truncate text-sm font-semibold">{roomLabel(activeRoom)}</p>
@@ -326,6 +391,19 @@ export function ChatDock() {
                     방장 {activeRoomMeta.ownerName}
                   </p>
                 ) : null}
+                <div className="mt-1.5 flex items-center gap-2">
+                  <ChatAvatar
+                    name={user.name || user.email}
+                    imageUrl={user.imageUrl}
+                    size="sm"
+                  />
+                  <p className="min-w-0 truncate text-[11px] leading-tight text-muted-foreground">
+                    <span className="font-medium text-foreground">
+                      {user.name?.trim() || user.email}
+                    </span>
+                    <span className="block text-[10px]">로그인 중</span>
+                  </p>
+                </div>
               </div>
               <div className="flex shrink-0 items-center gap-1">
                 <span
@@ -365,12 +443,12 @@ export function ChatDock() {
             </header>
 
             {banner ? (
-              <p className="border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive">
+              <p className="shrink-0 border-b border-border bg-destructive/10 px-3 py-2 text-xs text-destructive">
                 {banner}
               </p>
             ) : null}
 
-            <div className="border-b border-border bg-muted/15 px-3 py-2">
+            <div className="shrink-0 border-b border-border bg-muted/15 px-3 py-2">
               <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 열린 방
               </p>
@@ -420,7 +498,7 @@ export function ChatDock() {
               </ScrollArea>
             </div>
 
-            <div className="border-b border-border bg-muted/10 px-3 py-2">
+            <div className="shrink-0 border-b border-border bg-muted/10 px-3 py-2">
               <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
                 새 방
               </p>
@@ -443,7 +521,10 @@ export function ChatDock() {
               </div>
             </div>
 
-            <ScrollArea className="min-h-0 min-w-0 flex-1 bg-[#B2C7D9]/25 dark:bg-background">
+            <div
+              className="min-h-0 min-w-0 flex-1 flex-basis-0 overflow-y-auto overflow-x-hidden overscroll-y-contain bg-[#B2C7D9]/25 dark:bg-background"
+              style={{ WebkitOverflowScrolling: "touch" }}
+            >
               <div className="space-y-3 px-3 py-3">
                 {feed.length === 0 ? (
                   <p className="py-6 text-center text-xs text-muted-foreground">
@@ -453,12 +534,19 @@ export function ChatDock() {
                 {feed.map((item) =>
                   item.kind === "sys" ? (
                     <div key={item.key} className="flex justify-center py-0.5">
-                      <p className="rounded-full bg-black/6 px-2.5 py-1 text-center text-[11px] text-muted-foreground dark:bg-white/10">
-                        {item.text}
-                        <span className="ml-1 tabular-nums opacity-70">
-                          {formatTime(item.at)}
-                        </span>
-                      </p>
+                      <div className="flex max-w-[min(100%,18rem)] items-center gap-1.5 rounded-full bg-black/6 px-2 py-1 pe-2.5 dark:bg-white/10">
+                        <ChatAvatar
+                          name={item.userName}
+                          imageUrl={item.userImageUrl}
+                          size="sm"
+                        />
+                        <p className="min-w-0 text-[11px] text-muted-foreground">
+                          {item.text}
+                          <span className="ml-1 tabular-nums opacity-70">
+                            {formatTime(item.at)}
+                          </span>
+                        </p>
+                      </div>
                     </div>
                   ) : (
                     <ChatMessageBubble
@@ -470,9 +558,9 @@ export function ChatDock() {
                 )}
                 <div ref={bottomRef} />
               </div>
-            </ScrollArea>
+            </div>
 
-            <footer className="border-t border-border p-2">
+            <footer className="shrink-0 border-t border-border p-2">
               <div className="flex gap-1.5">
                 <Input
                   value={draft}

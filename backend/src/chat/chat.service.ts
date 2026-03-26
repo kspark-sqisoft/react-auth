@@ -19,12 +19,14 @@ export class ChatService {
     roomId: string,
     authorId: number,
     authorName: string,
+    authorImageUrl: string | null,
     body: string,
   ): Promise<ChatMessage> {
     const row = this.msgRepo.create({
       roomId,
       authorId,
       authorName: authorName.slice(0, 80),
+      authorImageUrl,
       body,
     });
     return this.msgRepo.save(row);

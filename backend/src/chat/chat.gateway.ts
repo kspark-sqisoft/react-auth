@@ -12,6 +12,7 @@ import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { JWT_ACCESS_SECRET, corsOrigin } from '../env.constants';
+import { UsersService } from '../users/users.service';
 import { ChatMessage } from './chat-message.entity';
 import { ChatService } from './chat.service';
 
@@ -37,6 +38,8 @@ export type ChatMessageWire = {
   roomId: string;
   userId: number;
   userName: string;
+  /** 발신 시점 프로필 이미지 경로(`/uploads/...`), 없으면 null */
+  userImageUrl: string | null;
   text: string;
   createdAt: string;
 };
@@ -54,6 +57,7 @@ function toWireMessages(rows: ChatMessage[]): ChatMessageWire[] {
     roomId: m.roomId,
     userId: m.authorId,
     userName: m.authorName,
+    userImageUrl: m.authorImageUrl ?? null,
     text: m.body,
     createdAt: m.createdAt.toISOString(),
   }));
@@ -80,6 +84,7 @@ export class ChatGateway
   constructor(
     private readonly jwt: JwtService,
     private readonly chatService: ChatService,
+    private readonly usersService: UsersService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -250,11 +255,21 @@ export class ChatGateway
     client.emit('joinedRoom', { roomId: room });
     await this.emitMessageHistory(client, room);
 
+    let joinName = me.name;
+    let joinImageUrl: string | null = null;
+    try {
+      const profile = await this.usersService.getMeProfile(me.userId);
+      joinName = profile.name;
+      joinImageUrl = profile.imageUrl;
+    } catch {
+      joinImageUrl = null;
+    }
     client.to(room).emit('systemNotice', {
       type: 'join',
       roomId: room,
       userId: me.userId,
-      userName: me.name,
+      userName: joinName,
+      userImageUrl: joinImageUrl,
       at: new Date().toISOString(),
     });
     this.emitRoomList();
@@ -345,9 +360,25 @@ export class ChatGateway
       return { ok: false };
     }
 
+    let authorName = me.name;
+    let authorImageUrl: string | null = null;
+    try {
+      const profile = await this.usersService.getMeProfile(me.userId);
+      authorName = profile.name;
+      authorImageUrl = profile.imageUrl;
+    } catch {
+      authorImageUrl = null;
+    }
+
     let saved: ChatMessage;
     try {
-      saved = await this.chatService.append(room, me.userId, me.name, text);
+      saved = await this.chatService.append(
+        room,
+        me.userId,
+        authorName,
+        authorImageUrl,
+        text,
+      );
     } catch (e) {
       this.logger.error(`[채팅] 저장 실패: ${String(e)}`);
       client.emit('chatError', { message: '메시지 저장에 실패했습니다.' });
