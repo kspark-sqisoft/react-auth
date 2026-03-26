@@ -1,6 +1,7 @@
 import { Link } from "react-router-dom";
 import type { Post, PostLikeState } from "@/lib/api";
 import { formatDateMediumShort } from "@/lib/format-date";
+import { plainTextFromPostHtml } from "@/lib/post-html";
 import { AuthorAvatarInline } from "@/components/posts/AuthorAvatarInline";
 import { PostLikeButton } from "@/components/posts/PostLikeButton";
 import { Card } from "@/components/ui/card";
@@ -60,7 +61,7 @@ export function PostListItem({
                 </AuthorAvatarInline>
               </p>
               <p className="line-clamp-2 h-10 max-h-10 shrink-0 overflow-hidden text-sm leading-5 break-words text-muted-foreground">
-                {post.content}
+                {plainTextFromPostHtml(post.content)}
               </p>
             </Link>
             {!post.imageUrl ? (

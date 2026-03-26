@@ -23,6 +23,7 @@ import { CenteredSpinner } from "@/components/layout/CenteredSpinner";
 import { Button } from "@/components/ui/button";
 import { SafeImage } from "@/components/ui/safe-image";
 import { formatDateFullShort } from "@/lib/format-date";
+import { postBodyHtmlForRender } from "@/lib/post-html";
 import { toast } from "sonner";
 
 /** 공개 상세; 작성자에게만 수정·삭제 버튼 */
@@ -182,9 +183,10 @@ export function PostDetailPage() {
         </div>
       ) : null}
 
-      <div className="whitespace-pre-wrap border-t border-border pt-6 text-sm leading-relaxed">
-        {post.content}
-      </div>
+      <div
+        className="post-body border-t border-border pt-6 text-sm leading-relaxed"
+        dangerouslySetInnerHTML={{ __html: postBodyHtmlForRender(post.content) }}
+      />
 
       <PostCommentsSection postId={post.id} user={user} />
 

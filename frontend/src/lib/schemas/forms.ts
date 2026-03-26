@@ -23,14 +23,27 @@ export const signupSchema = z.object({
 
 export type SignupFormValues = z.infer<typeof signupSchema>;
 
-/** 글 작성·수정(제목·본문만; 이미지는 별도 state) */
+const POST_CONTENT_MAX = 200_000;
+
+function postContentPlainLen(html: string): number {
+  return html
+    .replace(/<[^>]*>/g, "")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/\s+/g, " ")
+    .trim().length;
+}
+
+/** 글 작성·수정(제목·본문만; 이미지는 별도 state). 본문은 리치 HTML 문자열 */
 export const postEditorSchema = z.object({
   title: z
     .string()
     .trim()
     .min(1, "제목을 입력해 주세요.")
     .max(200, "제목은 200자 이하여야 합니다."),
-  content: z.string().trim().min(1, "본문을 입력해 주세요."),
+  content: z
+    .string()
+    .max(POST_CONTENT_MAX, "본문이 너무 깁니다.")
+    .refine((s) => postContentPlainLen(s) > 0, "본문을 입력해 주세요."),
 });
 
 export type PostEditorFormValues = z.infer<typeof postEditorSchema>;

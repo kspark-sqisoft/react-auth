@@ -17,6 +17,10 @@ import {
 } from '../env.constants';
 import { Post } from './post.entity';
 import { PostLike } from './post-like.entity';
+import {
+  postContentPlainLength,
+  sanitizePostContentHtml,
+} from './post-content-sanitize';
 
 export type PostAuthorPublic = {
   id: number;
@@ -68,6 +72,7 @@ export class PostsService {
   }
 
   private static readonly SEARCH_MAX_LEN = 120;
+  private static readonly POST_CONTENT_MAX = 200_000;
 
   /**
    * SQLite LIKE + ESCAPE는 이스케이프 문자가 정확히 1글자여야 함.
@@ -213,9 +218,17 @@ export class PostsService {
     if (!title) {
       throw new BadRequestException('제목이 필요합니다.');
     }
+    const rawContent = body.content ?? '';
+    if (rawContent.length > PostsService.POST_CONTENT_MAX) {
+      throw new BadRequestException('본문이 너무 깁니다.');
+    }
+    const content = sanitizePostContentHtml(rawContent);
+    if (postContentPlainLength(content) === 0) {
+      throw new BadRequestException('본문이 비어 있습니다.');
+    }
     const entity = this.repo.create({
       title,
-      content: body.content ?? '',
+      content,
       imageFilename: body.imageFilename ?? null,
       author: { id: authorId },
     });
@@ -271,7 +284,17 @@ export class PostsService {
       if (!t) throw new BadRequestException('제목이 비어 있을 수 없습니다.');
       post.title = t;
     }
-    if (body.content !== undefined) post.content = body.content;
+    if (body.content !== undefined) {
+      const raw = body.content;
+      if (raw.length > PostsService.POST_CONTENT_MAX) {
+        throw new BadRequestException('본문이 너무 깁니다.');
+      }
+      const cleaned = sanitizePostContentHtml(raw);
+      if (postContentPlainLength(cleaned) === 0) {
+        throw new BadRequestException('본문이 비어 있습니다.');
+      }
+      post.content = cleaned;
+    }
     await this.repo.save(post);
 
     const refreshed = await this.repo.findOneOrFail({

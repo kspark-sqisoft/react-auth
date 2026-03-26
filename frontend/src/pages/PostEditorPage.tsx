@@ -30,7 +30,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SafeImage } from "@/components/ui/safe-image";
-import { Textarea } from "@/components/ui/textarea";
+import { PostRichEditor } from "@/components/posts/PostRichEditor";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
@@ -60,7 +60,6 @@ export function PostEditorPage() {
   const [forbidden, setForbidden] = useState(false);
 
   const [title, setTitle] = useState("");
-  const [content, setContent] = useState("");
 
   const initialState: PostEditorActionState = {
     serverError: null,
@@ -172,7 +171,6 @@ export function PostEditorPage() {
     startTransition(() => {
       if (!isEdit || !Number.isFinite(postId)) {
         setTitle("");
-        setContent("");
         setExistingImageUrl(null);
         setForbidden(false);
         return;
@@ -185,7 +183,6 @@ export function PostEditorPage() {
       }
       setForbidden(false);
       setTitle(loadedPost.title);
-      setContent(loadedPost.content);
       setExistingImageUrl(loadedPost.imageUrl);
     });
   }, [isEdit, postId, loadedPost, postLoading, user]);
@@ -244,7 +241,7 @@ export function PostEditorPage() {
           {isEdit ? "글 수정" : "글 작성"}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          제목·본문·선택 이미지(JPEG, PNG, GIF, WebP, 최대 5MB)를 등록할 수 있습니다.
+          제목·리치 텍스트 본문·선택 이미지(JPEG, PNG, GIF, WebP, 최대 5MB)를 등록할 수 있습니다.
         </p>
       </div>
 
@@ -274,15 +271,11 @@ export function PostEditorPage() {
               <FormFieldError message={optimisticState.fieldErrors.title} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="post-content">본문</Label>
-              <Textarea
-                id="post-content"
-                name="content"
-                rows={12}
-                className={cn("min-h-48", optimisticState.fieldErrors.content && "border-destructive")}
-                aria-invalid={Boolean(optimisticState.fieldErrors.content)}
-                value={content}
-                onChange={(e) => setContent(e.target.value)}
+              <Label>본문</Label>
+              <PostRichEditor
+                key={isEdit && Number.isFinite(postId) ? `edit-${postId}` : "new"}
+                initialHtml={isEdit && loadedPost ? loadedPost.content : ""}
+                invalid={Boolean(optimisticState.fieldErrors.content)}
               />
               <FormFieldError message={optimisticState.fieldErrors.content} />
             </div>
