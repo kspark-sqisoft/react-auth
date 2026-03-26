@@ -24,6 +24,14 @@ async function bootstrap() {
   app.enableCors({
     origin,
     credentials: true,
+    methods: ['GET', 'HEAD', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'Accept',
+      'X-Requested-With',
+      'Cookie',
+    ],
   });
 
   const swaggerConfig = new DocumentBuilder()

@@ -1,5 +1,6 @@
 import { ImageOff } from "lucide-react";
 import { useState, type ImgHTMLAttributes, type ReactNode } from "react";
+import { publicAssetUrl } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 export type SafeImageProps = Omit<ImgHTMLAttributes<HTMLImageElement>, "src"> & {
@@ -69,5 +70,6 @@ function SafeImageBody({
  */
 export function SafeImage({ src, ...rest }: SafeImageProps) {
   const trimmed = typeof src === "string" ? src.trim() : "";
-  return <SafeImageBody key={trimmed || "__empty__"} trimmed={trimmed} {...rest} />;
+  const resolved = trimmed ? publicAssetUrl(trimmed) ?? trimmed : "";
+  return <SafeImageBody key={trimmed || "__empty__"} trimmed={resolved} {...rest} />;
 }

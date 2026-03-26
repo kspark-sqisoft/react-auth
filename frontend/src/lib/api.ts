@@ -4,8 +4,41 @@ import { appLog } from "@/lib/app-log";
 type RetryableRequest = InternalAxiosRequestConfig & { _retry?: boolean };
 
 /**
+ * 빌드 시 `.env.production` 등에 `VITE_API_BASE_URL=http://localhost:3000` 처럼 넣으면
+ * `serve`로 프론트만 띄워도 API·쿠키 대상이 백엔드 오리진이 됩니다.
+ * 비우면 상대 경로(개발: Vite 프록시 / 단일 오리진 배포)를 씁니다.
+ */
+function normalizeApiBase(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  const t = raw.trim();
+  if (!t) return "";
+  return t.replace(/\/$/, "");
+}
+
+export const API_BASE_URL = normalizeApiBase(import.meta.env.VITE_API_BASE_URL);
+
+/** 채팅 소켓 등 “API 서버 오리진” (프론트와 포트가 다를 때 `VITE_API_BASE_URL` 사용) */
+export function apiOrigin(): string {
+  return API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "");
+}
+
+/**
+ * API가 내려주는 `/uploads/...` 상대 경로를, 프론트만 다른 포트에서 켠 경우 백엔드 절대 URL로 바꿉니다.
+ * (그렇지 않으면 브라우저가 `localhost:5713/uploads/...`로만 요청해 이미지·업로드 결과가 깨져 보일 수 있음)
+ */
+export function publicAssetUrl(path: string | null | undefined): string | null {
+  if (path == null) return null;
+  const p = path.trim();
+  if (!p) return null;
+  if (p.startsWith("blob:") || p.startsWith("data:")) return p;
+  if (p.startsWith("http://") || p.startsWith("https://")) return p;
+  if (API_BASE_URL && p.startsWith("/")) return `${API_BASE_URL}${p}`;
+  return p;
+}
+
+/**
  * HTTP 클라이언트 및 게시글·인증 관련 API 래퍼.
- * Vite 프록시로 동일 오리진에 붙으며, `withCredentials`로 리프레시 쿠키를 보냅니다.
+ * 개발: Vite 프록시로 동일 오리진. 프로덕션 분리 호스팅: `VITE_API_BASE_URL` + `withCredentials`.
  */
 
 export const ACCESS_TOKEN_KEY = "access_token";
@@ -72,37 +105,19 @@ export function parseApiErrorMessage(data: unknown): string {
 
 /** 공통 axios 인스턴스: Bearer(있을 때) + 쿠키 전송 */
 export const api = axios.create({
+  baseURL: API_BASE_URL || undefined,
   withCredentials: true,
 });
-
-api.interceptors.request.use((config) => {
-  const token = getAccessToken();
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-  /* 브라우저가 multipart boundary를 붙이도록 Content-Type 제거 */
-  if (config.data instanceof FormData) {
-    delete config.headers["Content-Type"];
-  }
-  return config;
-});
-
-export function rethrowAsApiError(e: unknown): never {
-  if (isAxiosError(e)) {
-    throw new Error(parseApiErrorMessage(e.response?.data));
-  }
-  if (e instanceof Error) throw e;
-  throw new Error("요청에 실패했습니다.");
-}
 
 /**
  * 리프레시는 httpOnly 쿠키만 사용(api 인스턴스·Bearer 미사용).
  * 성공 시 sessionStorage에 새 액세스 토큰을 저장합니다.
  */
 export async function refreshAccessToken(): Promise<boolean> {
+  const refreshUrl = API_BASE_URL ? `${API_BASE_URL}/auth/refresh` : "/auth/refresh";
   try {
     const { data } = await axios.post<{ access_token?: string }>(
-      "/auth/refresh",
+      refreshUrl,
       {},
       { withCredentials: true },
     );
@@ -131,6 +146,56 @@ function refreshSessionDeduped(): Promise<boolean> {
   return refreshInFlight;
 }
 
+const PROACTIVE_REFRESH_SKEW_MS = 60_000;
+
+function accessTokenExpiresWithin(token: string, withinMs: number): boolean {
+  try {
+    const parts = token.split(".");
+    if (parts.length < 2) return false;
+    const b64 = parts[1].replace(/-/g, "+").replace(/_/g, "/");
+    const pad = b64.length % 4 === 0 ? "" : "=".repeat(4 - (b64.length % 4));
+    const payload = JSON.parse(atob(b64 + pad)) as { exp?: unknown };
+    if (typeof payload.exp !== "number") return false;
+    return payload.exp * 1000 < Date.now() + withinMs;
+  } catch {
+    return false;
+  }
+}
+
+function requestSkipsProactiveRefresh(config: InternalAxiosRequestConfig): boolean {
+  const path = String(config.url ?? "");
+  return (
+    path.includes("/auth/refresh") ||
+    path.includes("/auth/signin") ||
+    path.includes("/auth/signup")
+  );
+}
+
+api.interceptors.request.use(async (config) => {
+  if (!requestSkipsProactiveRefresh(config)) {
+    const token = getAccessToken();
+    if (token && accessTokenExpiresWithin(token, PROACTIVE_REFRESH_SKEW_MS)) {
+      await refreshSessionDeduped();
+    }
+  }
+  const token = getAccessToken();
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  if (config.data instanceof FormData) {
+    delete config.headers["Content-Type"];
+  }
+  return config;
+});
+
+export function rethrowAsApiError(e: unknown): never {
+  if (isAxiosError(e)) {
+    throw new Error(parseApiErrorMessage(e.response?.data));
+  }
+  if (e instanceof Error) throw e;
+  throw new Error("요청에 실패했습니다.");
+}
+
 /**
  * 액세스 JWT 만료 시(401) 리프레시 쿠키로 새 토큰을 받은 뒤 원래 요청을 한 번 재시도합니다.
  * (로그인 직후에는 user가 있는데 sessionStorage 토큰만 만료된 경우에도 글 저장 등이 동작합니다.)
@@ -156,6 +221,14 @@ api.interceptors.response.use(
     const token = getAccessToken();
     if (token) {
       original.headers.Authorization = `Bearer ${token}`;
+    }
+    /* FormData 본문은 한 번 전송되면 소비되는 경우가 있어, 401 후 재시도 시 복제 */
+    if (original.data instanceof FormData) {
+      const next = new FormData();
+      for (const [k, v] of original.data.entries()) {
+        next.append(k, v);
+      }
+      original.data = next;
     }
     return api.request(original);
   },

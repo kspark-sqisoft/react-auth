@@ -258,7 +258,7 @@ export function PostEditorPage() {
             <CardTitle>내용</CardTitle>
             <CardDescription>저장 시 즉시 반영됩니다.</CardDescription>
           </CardHeader>
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pb-6">
             <FormErrorAlert message={optimisticState.serverError} />
             <div className="space-y-2">
               <Label htmlFor="post-title">제목</Label>

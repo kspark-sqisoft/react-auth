@@ -46,6 +46,8 @@ export function MyInfoPage() {
     },
     enabled: Boolean(user),
     initialData: user ?? undefined,
+    /* 세션 만료 시 fetchMe가 같은 401 경로를 두 번 타며 콘솔에 401이 중복 표시되는 것을 막음 */
+    retry: false,
   });
 
   const profile = me ?? user;

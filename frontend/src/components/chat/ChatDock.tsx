@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { io, type Socket } from "socket.io-client";
+import { apiOrigin } from "@/lib/api";
 import { LogOut, MessageCircle, Send, Trash2, X } from "lucide-react";
 import { useAuth } from "@/stores/auth-store";
 import { getAccessToken } from "@/lib/api";
@@ -162,12 +163,13 @@ export function ChatDock() {
       setBanner(null);
     });
 
-    const socket = io(`${window.location.origin}/chat`, {
+    const socket = io(`${apiOrigin()}/chat`, {
       path: "/socket.io",
       auth: { token },
       transports: ["websocket", "polling"],
       reconnectionAttempts: 8,
       reconnectionDelay: 1000,
+      withCredentials: true,
     });
     socketRef.current = socket;
 
