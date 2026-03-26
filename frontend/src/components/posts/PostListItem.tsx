@@ -1,3 +1,4 @@
+import { Play, Video } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { Post, PostLikeState } from "@/lib/api";
 import { formatDateMediumShort } from "@/lib/format-date";
@@ -20,6 +21,8 @@ export function PostListItem({
   onLikeApplied,
   onLikeSyncError,
 }: Props) {
+  const sideMedia = Boolean(post.imageUrl || post.videoUrl);
+
   const likeButton = (
     <PostLikeButton
       postId={post.id}
@@ -37,7 +40,7 @@ export function PostListItem({
       <Card className="group/card !gap-0 overflow-hidden !p-0 !py-0 transition-colors hover:bg-muted/40">
         <div
           className={
-            post.imageUrl
+            sideMedia
               ? "grid min-h-0 w-full grid-cols-1 sm:grid-cols-[minmax(0,1fr)_7rem] sm:grid-rows-1 sm:items-stretch sm:min-h-[7.5rem]"
               : "grid min-h-0 w-full grid-cols-1 sm:min-h-[7.5rem]"
           }
@@ -46,7 +49,7 @@ export function PostListItem({
             <Link
               to={`/posts/${post.id}`}
               className={
-                post.imageUrl
+                sideMedia
                   ? "flex h-full min-h-0 min-w-0 flex-col justify-center gap-1.5 px-4 py-3 sm:py-3.5"
                   : "flex h-full min-h-[7.5rem] min-w-0 flex-col justify-center gap-1.5 px-4 py-3 pb-10 pr-14 sm:min-h-0 sm:py-3.5"
               }
@@ -64,26 +67,51 @@ export function PostListItem({
                 {plainTextFromPostHtml(post.content)}
               </p>
             </Link>
-            {!post.imageUrl ? (
+            {!sideMedia ? (
               <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-end p-2">
                 <div className="pointer-events-auto">{likeButton}</div>
               </div>
             ) : null}
           </div>
-          {post.imageUrl ? (
+          {sideMedia ? (
             <div className="relative isolate h-28 min-h-28 w-full overflow-hidden border-border border-t sm:h-full sm:min-h-0 sm:w-full sm:border-t-0 sm:border-s max-sm:rounded-b-xl sm:rounded-e-xl sm:rounded-b-none">
               <Link
                 to={`/posts/${post.id}`}
                 className="absolute inset-0 z-0 block overflow-hidden outline-none ring-inset ring-transparent transition-[box-shadow] focus-visible:ring-2 focus-visible:ring-ring"
                 aria-label={`${post.title} 상세 보기`}
               >
-                <SafeImage
-                  src={post.imageUrl}
-                  alt=""
-                  className="absolute inset-0 size-full object-cover"
-                  loading="lazy"
-                  placeholderLabel={`「${post.title}」 대표 이미지`}
-                />
+                {post.imageUrl ? (
+                  <SafeImage
+                    src={post.imageUrl}
+                    alt=""
+                    className="absolute inset-0 size-full object-cover"
+                    loading="lazy"
+                    placeholderLabel={`「${post.title}」 대표 이미지`}
+                  />
+                ) : post.videoPosterUrl ? (
+                  <>
+                    <SafeImage
+                      src={post.videoPosterUrl}
+                      alt=""
+                      className="absolute inset-0 size-full object-cover"
+                      loading="lazy"
+                      placeholderLabel={`「${post.title}」 동영상 썸네일`}
+                    />
+                    <div
+                      className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/25"
+                      aria-hidden
+                    >
+                      <span className="flex size-12 items-center justify-center rounded-full bg-black/55 shadow-md">
+                        <Play className="size-6 translate-x-0.5 text-white" fill="currentColor" aria-hidden />
+                      </span>
+                    </div>
+                  </>
+                ) : (
+                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
+                    <Video className="size-10 opacity-80" strokeWidth={1.25} aria-hidden />
+                    <span className="sr-only">동영상 첨부</span>
+                  </div>
+                )}
               </Link>
               <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-end p-2">
                 <div className="pointer-events-auto">{likeButton}</div>

@@ -18,6 +18,12 @@ export const UPLOAD_ROOT =
 /** 글 이미지 하위 폴더명 (UPLOAD_ROOT 아래) */
 export const POST_IMAGES_SUBDIR = 'posts';
 
+/** 글 동영상 하위 폴더명 */
+export const POST_VIDEOS_SUBDIR = 'post-videos';
+
+/** 글 동영상 썸네일(포스터) 하위 폴더명 */
+export const POST_VIDEO_POSTERS_SUBDIR = 'post-video-posters';
+
 /** 프로필 이미지 하위 폴더명 (UPLOAD_ROOT 아래) */
 export const AVATARS_SUBDIR = 'avatars';
 

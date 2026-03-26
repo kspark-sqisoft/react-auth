@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   DefaultValuePipe,
@@ -10,11 +11,12 @@ import {
   Post as PostMethod,
   Query,
   Req,
-  UploadedFile,
+  UploadedFiles,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { FileInterceptor } from '@nestjs/platform-express';
+import { FileFieldsInterceptor } from '@nestjs/platform-express';
+import { unlink } from 'fs/promises';
 import {
   ApiBearerAuth,
   ApiBody,
@@ -27,7 +29,11 @@ import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import { OptionalJwtAuthGuard } from '../auth/jwt-optional.guard';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
-import { postImageMulterOptions } from './post-image-upload.options';
+import {
+  POST_MEDIA_IMAGE_MAX_BYTES,
+  POST_MEDIA_POSTER_MAX_BYTES,
+  postMediaMulterOptions,
+} from './post-media-upload.options';
 import { CommentsService } from './comments.service';
 import { PostsService } from './posts.service';
 
@@ -41,7 +47,19 @@ const multipartPostBody = {
       image: {
         type: 'string',
         format: 'binary',
-        description: '선택(JPEG/PNG/GIF/WebP)',
+        description:
+          '선택(JPEG/PNG/GIF/WebP, 최대 5MB). 동영상과 동시에 보낼 수 없습니다.',
+      },
+      video: {
+        type: 'string',
+        format: 'binary',
+        description:
+          '선택(MP4/WebM/MOV, 최대 80MB). 이미지와 동시에 보낼 수 없습니다.',
+      },
+      videoPoster: {
+        type: 'string',
+        format: 'binary',
+        description: '선택(동영상과 함께; JPEG/PNG/WebP 썸네일, 최대 2MB)',
       },
     },
   },
@@ -53,15 +71,38 @@ const multipartPatchBody = {
     properties: {
       title: { type: 'string' },
       content: { type: 'string' },
+      removeMedia: {
+        type: 'string',
+        enum: ['1', 'true', 'on'],
+        description: '기존 첨부 전부 제거(이미지·동영상·썸네일; 새 파일 없을 때)',
+      },
       removeImage: {
         type: 'string',
         enum: ['1', 'true', 'on'],
-        description: '기존 이미지 제거(새 파일 없을 때)',
+        description: '호환용: removeMedia와 동일하게 전체 첨부 제거',
+      },
+      removeVideo: {
+        type: 'string',
+        enum: ['1', 'true', 'on'],
+        description: '호환용: removeMedia와 동일하게 전체 첨부 제거',
       },
       image: { type: 'string', format: 'binary' },
+      video: { type: 'string', format: 'binary' },
+      videoPoster: { type: 'string', format: 'binary' },
     },
   },
 };
+
+async function cleanupPostUploads(
+  files: (Express.Multer.File | undefined)[],
+): Promise<void> {
+  await Promise.all(
+    files.filter(Boolean).map((f) => {
+      const p = f!.path;
+      return p ? unlink(p).catch(() => undefined) : Promise.resolve();
+    }),
+  );
+}
 
 @ApiTags('posts')
 @Controller('posts')
@@ -176,19 +217,60 @@ export class PostsController {
   @ApiBearerAuth('JWT-auth')
   @ApiConsumes('multipart/form-data')
   @ApiBody(multipartPostBody)
-  @UseInterceptors(FileInterceptor('image', postImageMulterOptions()))
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'image', maxCount: 1 },
+        { name: 'video', maxCount: 1 },
+        { name: 'videoPoster', maxCount: 1 },
+      ],
+      postMediaMulterOptions(),
+    ),
+  )
   @PostMethod()
   @ApiOperation({ summary: '글 작성' })
-  create(
+  async create(
     @Req() req: Request & { user: JwtPayload },
     @Body('title') title: string,
     @Body('content') content: string,
-    @UploadedFile() file?: Express.Multer.File,
+    @UploadedFiles()
+    files?: {
+      image?: Express.Multer.File[];
+      video?: Express.Multer.File[];
+      videoPoster?: Express.Multer.File[];
+    },
   ) {
+    const imageFile = files?.image?.[0];
+    const videoFile = files?.video?.[0];
+    const posterFile = files?.videoPoster?.[0];
+
+    if (posterFile && !videoFile) {
+      await cleanupPostUploads([imageFile, posterFile]);
+      throw new BadRequestException(
+        '동영상이 없으면 썸네일만 보낼 수 없습니다.',
+      );
+    }
+    if (imageFile && imageFile.size > POST_MEDIA_IMAGE_MAX_BYTES) {
+      await cleanupPostUploads([imageFile, videoFile, posterFile]);
+      throw new BadRequestException('이미지는 5MB 이하여야 합니다.');
+    }
+    if (posterFile && posterFile.size > POST_MEDIA_POSTER_MAX_BYTES) {
+      await cleanupPostUploads([imageFile, videoFile, posterFile]);
+      throw new BadRequestException('동영상 썸네일은 2MB 이하여야 합니다.');
+    }
+    if (imageFile && videoFile) {
+      await cleanupPostUploads([imageFile, videoFile, posterFile]);
+      throw new BadRequestException(
+        '이미지와 동영상을 동시에 올릴 수 없습니다. 하나만 선택하세요.',
+      );
+    }
+
     return this.postsService.create(req.user.sub, {
       title,
       content,
-      imageFilename: file?.filename ?? null,
+      imageFilename: imageFile?.filename ?? null,
+      videoFilename: videoFile?.filename ?? null,
+      videoPosterFilename: posterFile?.filename ?? null,
     });
   }
 
@@ -196,25 +278,72 @@ export class PostsController {
   @ApiBearerAuth('JWT-auth')
   @ApiConsumes('multipart/form-data')
   @ApiBody(multipartPatchBody)
-  @UseInterceptors(FileInterceptor('image', postImageMulterOptions()))
+  @UseInterceptors(
+    FileFieldsInterceptor(
+      [
+        { name: 'image', maxCount: 1 },
+        { name: 'video', maxCount: 1 },
+        { name: 'videoPoster', maxCount: 1 },
+      ],
+      postMediaMulterOptions(),
+    ),
+  )
   @Patch(':id')
   @ApiOperation({ summary: '글 수정(작성자만)' })
-  update(
+  async update(
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
     @Body('title') title?: string,
     @Body('content') content?: string,
+    @Body('removeMedia') removeMedia?: string,
     @Body('removeImage') removeImage?: string,
-    @UploadedFile() file?: Express.Multer.File,
+    @Body('removeVideo') removeVideo?: string,
+    @UploadedFiles()
+    files?: {
+      image?: Express.Multer.File[];
+      video?: Express.Multer.File[];
+      videoPoster?: Express.Multer.File[];
+    },
   ) {
-    const remove =
-      !file &&
-      (removeImage === '1' || removeImage === 'true' || removeImage === 'on');
+    const imageFile = files?.image?.[0];
+    const videoFile = files?.video?.[0];
+    const posterFile = files?.videoPoster?.[0];
+
+    if (posterFile && !videoFile) {
+      await cleanupPostUploads([imageFile, posterFile]);
+      throw new BadRequestException(
+        '새 동영상 파일과 함께 썸네일을 보내 주세요.',
+      );
+    }
+    if (imageFile && imageFile.size > POST_MEDIA_IMAGE_MAX_BYTES) {
+      await cleanupPostUploads([imageFile, videoFile, posterFile]);
+      throw new BadRequestException('이미지는 5MB 이하여야 합니다.');
+    }
+    if (posterFile && posterFile.size > POST_MEDIA_POSTER_MAX_BYTES) {
+      await cleanupPostUploads([imageFile, videoFile, posterFile]);
+      throw new BadRequestException('동영상 썸네일은 2MB 이하여야 합니다.');
+    }
+    if (imageFile && videoFile) {
+      await cleanupPostUploads([imageFile, videoFile, posterFile]);
+      throw new BadRequestException(
+        '이미지와 동영상을 동시에 올릴 수 없습니다. 하나만 선택하세요.',
+      );
+    }
+
+    const truthy = (v: string | undefined) =>
+      v === '1' || v === 'true' || v === 'on';
+    const clearAllMedia =
+      !imageFile &&
+      !videoFile &&
+      (truthy(removeMedia) || truthy(removeImage) || truthy(removeVideo));
+
     return this.postsService.update(req.user.sub, id, {
       title,
       content,
-      newImageFilename: file?.filename,
-      removeImage: remove,
+      newImageFilename: imageFile?.filename,
+      newVideoFilename: videoFile?.filename,
+      newVideoPosterFilename: posterFile?.filename,
+      clearAllMedia,
     });
   }
 

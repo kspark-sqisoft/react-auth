@@ -26,6 +26,14 @@ export class Post {
   @Column({ type: 'varchar', length: 255, nullable: true })
   imageFilename: string | null;
 
+  /** uploads/post-videos/ 아래 저장 파일명 */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  videoFilename: string | null;
+
+  /** uploads/post-video-posters/ 아래 저장 파일명 (목록 썸네일·플레이어 poster) */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  videoPosterFilename: string | null;
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   author: User;
 

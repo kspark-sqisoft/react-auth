@@ -13,6 +13,8 @@ import { QueryFailedError, Repository } from 'typeorm';
 import {
   AVATARS_SUBDIR,
   POST_IMAGES_SUBDIR,
+  POST_VIDEO_POSTERS_SUBDIR,
+  POST_VIDEOS_SUBDIR,
   UPLOAD_ROOT,
 } from '../env.constants';
 import { Post } from './post.entity';
@@ -33,6 +35,10 @@ export type PostPublic = {
   title: string;
   content: string;
   imageUrl: string | null;
+  /** `/uploads/post-videos/...` */
+  videoUrl: string | null;
+  /** 썸네일·`<video poster>`용 */
+  videoPosterUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
   author: PostAuthorPublic;
@@ -58,6 +64,16 @@ export class PostsService {
     return `/uploads/${POST_IMAGES_SUBDIR}/${filename}`;
   }
 
+  private videoPublicUrl(filename: string | null): string | null {
+    if (!filename) return null;
+    return `/uploads/${POST_VIDEOS_SUBDIR}/${filename}`;
+  }
+
+  private videoPosterPublicUrl(filename: string | null): string | null {
+    if (!filename) return null;
+    return `/uploads/${POST_VIDEO_POSTERS_SUBDIR}/${filename}`;
+  }
+
   private authorAvatarUrl(profileImageFilename: string | null): string | null {
     if (!profileImageFilename) return null;
     return `/uploads/${AVATARS_SUBDIR}/${profileImageFilename}`;
@@ -66,6 +82,22 @@ export class PostsService {
   private async unlinkPostImage(filename: string | null): Promise<void> {
     if (!filename) return;
     const full = join(UPLOAD_ROOT, POST_IMAGES_SUBDIR, filename);
+    if (existsSync(full)) {
+      await unlink(full);
+    }
+  }
+
+  private async unlinkPostVideo(filename: string | null): Promise<void> {
+    if (!filename) return;
+    const full = join(UPLOAD_ROOT, POST_VIDEOS_SUBDIR, filename);
+    if (existsSync(full)) {
+      await unlink(full);
+    }
+  }
+
+  private async unlinkPostVideoPoster(filename: string | null): Promise<void> {
+    if (!filename) return;
+    const full = join(UPLOAD_ROOT, POST_VIDEO_POSTERS_SUBDIR, filename);
     if (existsSync(full)) {
       await unlink(full);
     }
@@ -88,6 +120,8 @@ export class PostsService {
       title: post.title,
       content: post.content,
       imageUrl: this.imagePublicUrl(post.imageFilename),
+      videoUrl: this.videoPublicUrl(post.videoFilename),
+      videoPosterUrl: this.videoPosterPublicUrl(post.videoPosterFilename),
       createdAt: post.createdAt,
       updatedAt: post.updatedAt,
       author: {
@@ -212,7 +246,13 @@ export class PostsService {
 
   async create(
     authorId: number,
-    body: { title: string; content: string; imageFilename?: string | null },
+    body: {
+      title: string;
+      content: string;
+      imageFilename?: string | null;
+      videoFilename?: string | null;
+      videoPosterFilename?: string | null;
+    },
   ): Promise<PostPublic> {
     const title = body.title?.trim();
     if (!title) {
@@ -226,10 +266,17 @@ export class PostsService {
     if (postContentPlainLength(content) === 0) {
       throw new BadRequestException('본문이 비어 있습니다.');
     }
+    if (body.imageFilename && body.videoFilename) {
+      throw new BadRequestException(
+        '이미지와 동영상을 동시에 등록할 수 없습니다. 하나만 선택하세요.',
+      );
+    }
     const entity = this.repo.create({
       title,
       content,
       imageFilename: body.imageFilename ?? null,
+      videoFilename: body.videoFilename ?? null,
+      videoPosterFilename: body.videoPosterFilename ?? null,
       author: { id: authorId },
     });
     const saved = await this.repo.save(entity);
@@ -251,7 +298,10 @@ export class PostsService {
       title?: string;
       content?: string;
       newImageFilename?: string;
-      removeImage?: boolean;
+      newVideoFilename?: string;
+      newVideoPosterFilename?: string;
+      /** 기존 첨부(이미지·동영상·포스터) 전부 제거 */
+      clearAllMedia?: boolean;
     },
   ): Promise<PostPublic> {
     const post = await this.repo.findOne({
@@ -271,12 +321,27 @@ export class PostsService {
 
     this.logger.log(`[글] 수정 시도 postId=${id} authorId=${authorId}`);
 
-    if (body.newImageFilename) {
+    if (body.clearAllMedia) {
       await this.unlinkPostImage(post.imageFilename);
-      post.imageFilename = body.newImageFilename;
-    } else if (body.removeImage) {
-      await this.unlinkPostImage(post.imageFilename);
+      await this.unlinkPostVideo(post.videoFilename);
+      await this.unlinkPostVideoPoster(post.videoPosterFilename);
       post.imageFilename = null;
+      post.videoFilename = null;
+      post.videoPosterFilename = null;
+    } else if (body.newImageFilename) {
+      await this.unlinkPostImage(post.imageFilename);
+      await this.unlinkPostVideo(post.videoFilename);
+      await this.unlinkPostVideoPoster(post.videoPosterFilename);
+      post.imageFilename = body.newImageFilename;
+      post.videoFilename = null;
+      post.videoPosterFilename = null;
+    } else if (body.newVideoFilename) {
+      await this.unlinkPostImage(post.imageFilename);
+      await this.unlinkPostVideo(post.videoFilename);
+      await this.unlinkPostVideoPoster(post.videoPosterFilename);
+      post.imageFilename = null;
+      post.videoFilename = body.newVideoFilename;
+      post.videoPosterFilename = body.newVideoPosterFilename ?? null;
     }
 
     if (body.title !== undefined) {
@@ -323,6 +388,8 @@ export class PostsService {
     }
     this.logger.log(`[글] 삭제 완료 postId=${id} authorId=${authorId}`);
     await this.unlinkPostImage(post.imageFilename);
+    await this.unlinkPostVideo(post.videoFilename);
+    await this.unlinkPostVideoPoster(post.videoPosterFilename);
     await this.repo.remove(post);
   }
 

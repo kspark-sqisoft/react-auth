@@ -31,8 +31,18 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { SafeImage } from "@/components/ui/safe-image";
 import { PostRichEditor } from "@/components/posts/PostRichEditor";
+import { captureVideoPosterJpeg } from "@/lib/video-poster";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+
+function fileAttachmentKind(f: File): "image" | "video" | null {
+  if (f.type.startsWith("image/")) return "image";
+  if (f.type.startsWith("video/")) return "video";
+  const n = f.name.toLowerCase();
+  if (/\.(jpe?g|png|gif|webp)$/i.test(n)) return "image";
+  if (/\.(mp4|webm|mov)$/i.test(n)) return "video";
+  return null;
+}
 
 type PostEditorActionState = {
   serverError: string | null;
@@ -53,9 +63,17 @@ export function PostEditorPage() {
   const viewerKey = user?.sub ?? "anon";
 
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
+  const [existingVideoUrl, setExistingVideoUrl] = useState<string | null>(null);
+  const [existingVideoPosterUrl, setExistingVideoPosterUrl] = useState<string | null>(null);
+
   const [imageFile, setImageFile] = useState<File | null>(null);
+  const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoPosterFile, setVideoPosterFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [removeExistingImage, setRemoveExistingImage] = useState(false);
+  const [videoPreviewUrl, setVideoPreviewUrl] = useState<string | null>(null);
+  const [posterObjectUrl, setPosterObjectUrl] = useState<string | null>(null);
+  const [removeExistingMedia, setRemoveExistingMedia] = useState(false);
+  const [posterBusy, setPosterBusy] = useState(false);
 
   const [forbidden, setForbidden] = useState(false);
 
@@ -89,7 +107,9 @@ export function PostEditorPage() {
           title: parsed.data.title.trim(),
           content: parsed.data.content,
           image: imageFile ?? undefined,
-          removeImage: removeExistingImage && !imageFile,
+          video: videoFile ?? undefined,
+          videoPoster: videoPosterFile ?? undefined,
+          removeMedia: isEdit && removeExistingMedia && !imageFile && !videoFile,
         });
         queryClient.setQueryData(postKeys.detail(updated.id, viewerKey), updated);
         void queryClient.invalidateQueries({ queryKey: postKeys.lists() });
@@ -102,6 +122,8 @@ export function PostEditorPage() {
         title: parsed.data.title.trim(),
         content: parsed.data.content,
         image: imageFile ?? undefined,
+        video: videoFile ?? undefined,
+        videoPoster: videoPosterFile ?? undefined,
       });
       void queryClient.invalidateQueries({ queryKey: postKeys.all });
       appLog("posts", "글 작성 저장", { id: created.id });
@@ -135,6 +157,18 @@ export function PostEditorPage() {
       if (previewUrl) URL.revokeObjectURL(previewUrl);
     };
   }, [previewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (videoPreviewUrl) URL.revokeObjectURL(videoPreviewUrl);
+    };
+  }, [videoPreviewUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (posterObjectUrl) URL.revokeObjectURL(posterObjectUrl);
+    };
+  }, [posterObjectUrl]);
 
   const {
     data: loadedPost,
@@ -172,6 +206,8 @@ export function PostEditorPage() {
       if (!isEdit || !Number.isFinite(postId)) {
         setTitle("");
         setExistingImageUrl(null);
+        setExistingVideoUrl(null);
+        setExistingVideoPosterUrl(null);
         setForbidden(false);
         return;
       }
@@ -184,21 +220,87 @@ export function PostEditorPage() {
       setForbidden(false);
       setTitle(loadedPost.title);
       setExistingImageUrl(loadedPost.imageUrl);
+      setExistingVideoUrl(loadedPost.videoUrl);
+      setExistingVideoPosterUrl(loadedPost.videoPosterUrl);
+      setRemoveExistingMedia(false);
     });
   }, [isEdit, postId, loadedPost, postLoading, user]);
 
-  function onPickImage(file: File | null) {
+  function clearAttachment() {
     setPreviewUrl((prev) => {
       if (prev) URL.revokeObjectURL(prev);
-      return file ? URL.createObjectURL(file) : null;
+      return null;
     });
-    setImageFile(file);
-    if (file) setRemoveExistingImage(false);
+    setVideoPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setPosterObjectUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setImageFile(null);
+    setVideoFile(null);
+    setVideoPosterFile(null);
+    if (isEdit) setRemoveExistingMedia(true);
   }
 
-  function clearImage() {
-    onPickImage(null);
-    if (isEdit) setRemoveExistingImage(true);
+  async function onPickAttachment(file: File | null) {
+    if (!file) {
+      clearAttachment();
+      return;
+    }
+    const kind = fileAttachmentKind(file);
+    if (!kind) {
+      toast.error(
+        "JPEG, PNG, GIF, WebP 이미지 또는 MP4, WebM, MOV 동영상만 선택할 수 있습니다.",
+      );
+      return;
+    }
+    setRemoveExistingMedia(false);
+
+    if (kind === "image") {
+      setVideoPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setPosterObjectUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return null;
+      });
+      setVideoFile(null);
+      setVideoPosterFile(null);
+      setPreviewUrl((prev) => {
+        if (prev) URL.revokeObjectURL(prev);
+        return URL.createObjectURL(file);
+      });
+      setImageFile(file);
+      return;
+    }
+
+    setPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setImageFile(null);
+    setVideoPreviewUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return URL.createObjectURL(file);
+    });
+    setPosterObjectUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev);
+      return null;
+    });
+    setVideoFile(file);
+    setVideoPosterFile(null);
+    setPosterBusy(true);
+    try {
+      const poster = await captureVideoPosterJpeg(file);
+      setVideoPosterFile(poster);
+      if (poster) setPosterObjectUrl(URL.createObjectURL(poster));
+    } finally {
+      setPosterBusy(false);
+    }
   }
 
   if (!isReady) {
@@ -232,7 +334,21 @@ export function PostEditorPage() {
     );
   }
 
-  const displayImageSrc = previewUrl ?? (removeExistingImage ? null : existingImageUrl);
+  const displayImageSrc = previewUrl
+    ? previewUrl
+    : !removeExistingMedia && !imageFile && !videoFile
+      ? existingImageUrl
+      : null;
+
+  const displayVideoSrc = videoPreviewUrl
+    ? videoPreviewUrl
+    : !removeExistingMedia && !imageFile && !videoFile
+      ? existingVideoUrl
+      : null;
+
+  const displayVideoPoster =
+    posterObjectUrl ??
+    (!removeExistingMedia && !imageFile && !videoFile ? existingVideoPosterUrl : null);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -241,7 +357,8 @@ export function PostEditorPage() {
           {isEdit ? "글 수정" : "글 작성"}
         </h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          제목·리치 텍스트 본문·선택 이미지(JPEG, PNG, GIF, WebP, 최대 5MB)를 등록할 수 있습니다.
+          제목·리치 텍스트 본문·선택 첨부 1개(이미지 최대 5MB 또는 동영상 MP4/WebM/MOV 최대 80MB)만 등록할 수 있습니다. 동영상은
+          가능하면 자동으로 목록용 썸네일을 만듭니다.
         </p>
       </div>
 
@@ -280,18 +397,21 @@ export function PostEditorPage() {
               <FormFieldError message={optimisticState.fieldErrors.content} />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="post-image">이미지 (선택)</Label>
+              <Label htmlFor="post-attachment">첨부 파일 (선택, 이미지 또는 동영상 1개)</Label>
               <Input
-                id="post-image"
-                name="image"
+                id="post-attachment"
                 type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
+                accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime,.mp4,.webm,.mov"
                 className="cursor-pointer text-sm"
+                disabled={posterBusy}
                 onChange={(e) => {
                   const f = e.target.files?.[0] ?? null;
-                  onPickImage(f);
+                  void onPickAttachment(f);
                 }}
               />
+              {posterBusy ? (
+                <p className="text-xs text-muted-foreground">동영상에서 썸네일을 만드는 중…</p>
+              ) : null}
               {displayImageSrc ? (
                 <div className="relative mt-2 overflow-hidden rounded-lg border border-border bg-muted/30">
                   <SafeImage
@@ -306,12 +426,35 @@ export function PostEditorPage() {
                     size="sm"
                     className="absolute end-2 top-2"
                     onClick={() => {
-                      clearImage();
-                      const input = document.getElementById("post-image") as HTMLInputElement | null;
+                      clearAttachment();
+                      const input = document.getElementById("post-attachment") as HTMLInputElement | null;
                       if (input) input.value = "";
                     }}
                   >
-                    이미지 제거
+                    첨부 제거
+                  </Button>
+                </div>
+              ) : displayVideoSrc ? (
+                <div className="relative mt-2 overflow-hidden rounded-lg border border-border bg-muted/30">
+                  <video
+                    src={displayVideoSrc}
+                    controls
+                    playsInline
+                    className="max-h-64 w-full object-contain"
+                    poster={displayVideoPoster ?? undefined}
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    className="absolute end-2 top-2"
+                    onClick={() => {
+                      clearAttachment();
+                      const input = document.getElementById("post-attachment") as HTMLInputElement | null;
+                      if (input) input.value = "";
+                    }}
+                  >
+                    첨부 제거
                   </Button>
                 </div>
               ) : null}

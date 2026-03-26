@@ -65,6 +65,8 @@ export type Post = {
   title: string;
   content: string;
   imageUrl: string | null;
+  videoUrl: string | null;
+  videoPosterUrl: string | null;
   createdAt: string;
   updatedAt: string;
   author: PostAuthor;
@@ -361,18 +363,22 @@ export async function unlikePost(id: number): Promise<PostLikeState> {
   }
 }
 
-/** Nest multipart 필드와 맞춤: title, content, image, removeImage */
+/** Nest multipart: title, content, image 또는 video(+videoPoster), removeMedia */
 function buildPostFormData(input: {
   title: string;
   content: string;
   image?: File | null;
-  removeImage?: boolean;
+  video?: File | null;
+  videoPoster?: File | null;
+  removeMedia?: boolean;
 }): FormData {
   const fd = new FormData();
   fd.append("title", input.title);
   fd.append("content", input.content);
   if (input.image) fd.append("image", input.image);
-  if (input.removeImage) fd.append("removeImage", "1");
+  if (input.video) fd.append("video", input.video);
+  if (input.videoPoster) fd.append("videoPoster", input.videoPoster);
+  if (input.removeMedia) fd.append("removeMedia", "1");
   return fd;
 }
 
@@ -381,6 +387,8 @@ export async function createPost(input: {
   title: string;
   content: string;
   image?: File | null;
+  video?: File | null;
+  videoPoster?: File | null;
 }): Promise<Post> {
   try {
     const { data } = await api.post<Post>(
@@ -389,6 +397,8 @@ export async function createPost(input: {
         title: input.title,
         content: input.content,
         image: input.image,
+        video: input.video,
+        videoPoster: input.videoPoster,
       }),
     );
     return data;
@@ -404,7 +414,9 @@ export async function updatePost(
     title: string;
     content: string;
     image?: File | null;
-    removeImage?: boolean;
+    video?: File | null;
+    videoPoster?: File | null;
+    removeMedia?: boolean;
   },
 ): Promise<Post> {
   try {

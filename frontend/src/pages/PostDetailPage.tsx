@@ -183,6 +183,21 @@ export function PostDetailPage() {
         </div>
       ) : null}
 
+      {post.videoUrl ? (
+        <div className="overflow-hidden rounded-xl border border-border bg-black/90 px-2 py-3 sm:px-3 sm:py-4">
+          <video
+            src={post.videoUrl}
+            controls
+            playsInline
+            preload="metadata"
+            poster={post.videoPosterUrl ?? undefined}
+            className="mx-auto max-h-[min(70vh,560px)] w-full max-w-full object-contain"
+          >
+            브라우저가 이 동영상 형식을 재생하지 못합니다.
+          </video>
+        </div>
+      ) : null}
+
       <div
         className="post-body border-t border-border pt-6 text-sm leading-relaxed"
         dangerouslySetInnerHTML={{ __html: postBodyHtmlForRender(post.content) }}
