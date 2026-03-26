@@ -85,9 +85,8 @@ export class AuthController {
       this.logger.warn('[토큰 갱신] 요청 거절: 리프레시 쿠키 없음');
       throw new UnauthorizedException();
     }
-    const { access_token, refresh_token } = await this.authService.refresh(
-      token,
-    );
+    const { access_token, refresh_token } =
+      await this.authService.refresh(token);
     res.cookie(REFRESH_TOKEN_COOKIE, refresh_token, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
