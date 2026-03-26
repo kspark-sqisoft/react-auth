@@ -32,6 +32,7 @@ import { Label } from "@/components/ui/label";
 import { SafeImage } from "@/components/ui/safe-image";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type PostEditorActionState = {
   serverError: string | null;
@@ -94,6 +95,7 @@ export function PostEditorPage() {
         queryClient.setQueryData(postKeys.detail(updated.id, viewerKey), updated);
         void queryClient.invalidateQueries({ queryKey: postKeys.lists() });
         appLog("posts", "글 수정 저장", { id: updated.id });
+        toast.success("글이 수정되었습니다.");
         return { serverError: null, fieldErrors: {}, redirectTo: `/posts/${updated.id}` };
       }
 
@@ -104,11 +106,14 @@ export function PostEditorPage() {
       });
       void queryClient.invalidateQueries({ queryKey: postKeys.all });
       appLog("posts", "글 작성 저장", { id: created.id });
+      toast.success("글이 등록되었습니다.");
       return { serverError: null, fieldErrors: {}, redirectTo: `/posts/${created.id}` };
     } catch (err) {
       appLog("posts", "저장 실패", err instanceof Error ? err.message : err);
+      const msg = err instanceof Error ? err.message : "저장에 실패했습니다.";
+      toast.error(msg);
       return {
-        serverError: err instanceof Error ? err.message : "저장에 실패했습니다.",
+        serverError: msg,
         fieldErrors: {},
         redirectTo: null,
       };
@@ -146,6 +151,15 @@ export function PostEditorPage() {
     },
     enabled: isEdit && Number.isFinite(postId),
   });
+
+  useEffect(() => {
+    if (!isEdit || !Number.isFinite(postId) || !isError) return;
+    const msg =
+      postQueryError instanceof Error
+        ? postQueryError.message
+        : "글을 불러오지 못했습니다.";
+    toast.error(msg);
+  }, [isEdit, postId, isError, postQueryError]);
 
   const loadError =
     isEdit && isError

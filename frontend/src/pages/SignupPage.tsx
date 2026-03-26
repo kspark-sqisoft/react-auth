@@ -20,6 +20,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type SignupActionState = {
   serverError: string | null;
@@ -62,10 +63,12 @@ export function SignupPage() {
         name: parsed.data.name.trim(),
       });
       appLog("signup", "가입 완료 → 로그인 화면 이동");
+      toast.success("회원가입이 완료되었습니다. 로그인해 주세요.");
       return { serverError: null, fieldErrors: {}, redirectToLogin: true };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "회원가입에 실패했습니다.";
       appLog("signup", "가입 실패", msg);
+      toast.error(msg);
       return { serverError: msg, fieldErrors: {}, redirectToLogin: false };
     }
   }
@@ -102,7 +105,7 @@ export function SignupPage() {
           onSubmit={() => addOptimistic({ serverError: null, fieldErrors: {} })}
           noValidate
         >
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pb-6">
             <FormErrorAlert message={optimisticState.serverError} />
             <div className="space-y-2">
               <Label htmlFor="signup-name">이름</Label>

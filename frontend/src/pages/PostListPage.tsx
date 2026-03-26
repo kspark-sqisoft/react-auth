@@ -19,6 +19,7 @@ import {
   type PostsPageResponse,
 } from "@/lib/api";
 import { appLog } from "@/lib/app-log";
+import { toast } from "sonner";
 import { postKeys } from "@/lib/query-keys";
 import { PostListItem } from "@/components/posts/PostListItem";
 import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
@@ -94,6 +95,11 @@ export function PostListPage() {
       : isError
         ? "목록을 불러오지 못했습니다."
         : null;
+
+  useEffect(() => {
+    if (!error) return;
+    toast.error(error);
+  }, [error]);
 
   /** 직전에 디바운스로 URL을 바꾼 경우, URL→입력 동기화 effect를 한 번 건너뜀 */
   const skipUrlToStateSyncRef = useRef(false);
@@ -352,7 +358,10 @@ export function PostListPage() {
             post={post}
             onLikeInteractionStart={() => setLikeActionError(null)}
             onLikeApplied={onLikeApplied}
-            onLikeSyncError={setLikeActionError}
+            onLikeSyncError={(msg) => {
+              setLikeActionError(msg);
+              toast.error(msg);
+            }}
           />
         ))}
       </ul>

@@ -1,5 +1,6 @@
 import {
   useActionState,
+  useEffect,
   useOptimistic,
   useState,
   useTransition,
@@ -23,6 +24,7 @@ import { FormStatusSubmitButton } from "@/components/forms/FormStatusSubmitButto
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
+import { toast } from "sonner";
 
 type CommentFormState = {
   error: string | null;
@@ -70,13 +72,14 @@ function CommentItem({
       await createPostComment(postId, { content: text, parentId: comment.id });
       onCommentsInvalidate();
       appLog("posts", "대댓글 작성", { postId, parentId: comment.id });
+      toast.success("답글이 등록되었습니다.");
       setReplyOpen(false);
       return { error: null, tick: prev.tick + 1 };
     } catch (e) {
-      return {
-        error: e instanceof Error ? e.message : "댓글을 저장하지 못했습니다.",
-        tick: prev.tick,
-      };
+      const msg =
+        e instanceof Error ? e.message : "댓글을 저장하지 못했습니다.";
+      toast.error(msg);
+      return { error: msg, tick: prev.tick };
     }
   }
 
@@ -93,8 +96,11 @@ function CommentItem({
         await deletePostComment(postId, comment.id);
         onCommentsInvalidate();
         appLog("posts", "댓글 삭제", { postId, commentId: comment.id });
+        toast.success("댓글이 삭제되었습니다.");
       } catch (e) {
-        onError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+        const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+        toast.error(msg);
+        onError(msg);
       }
     });
   }
@@ -237,6 +243,11 @@ export function PostCommentsSection({ postId, user }: PostCommentsSectionProps) 
         ? "댓글을 불러오지 못했습니다."
         : null;
 
+  useEffect(() => {
+    if (!error) return;
+    toast.error(error);
+  }, [error]);
+
   const initialRoot: CommentFormState = { error: null, tick: 0 };
 
   async function rootCommentAction(
@@ -254,12 +265,13 @@ export function PostCommentsSection({ postId, user }: PostCommentsSectionProps) 
       await createPostComment(postId, { content: text });
       invalidateComments();
       appLog("posts", "댓글 작성", { postId });
+      toast.success("댓글이 등록되었습니다.");
       return { error: null, tick: prev.tick + 1 };
     } catch (e) {
-      return {
-        error: e instanceof Error ? e.message : "댓글을 저장하지 못했습니다.",
-        tick: prev.tick,
-      };
+      const msg =
+        e instanceof Error ? e.message : "댓글을 저장하지 못했습니다.";
+      toast.error(msg);
+      return { error: msg, tick: prev.tick };
     }
   }
 

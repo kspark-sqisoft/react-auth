@@ -59,7 +59,9 @@ export class UsersController {
   @ApiOperation({ summary: '내 프로필(sub·이메일·이름·프로필 이미지 URL)' })
   async getMe(@Req() req: Request & { user: JwtPayload }): Promise<MePublic> {
     const me: MePublic = await this.usersService.getMeProfile(req.user.sub);
-    this.logger.log(`[내 정보] 조회 sub=${me.sub} email=${me.email}`);
+    this.logger.log(
+      `[내 정보] 조회 sub=${me.sub} email=${me.email} name=${me.name}`,
+    );
     return me;
   }
 

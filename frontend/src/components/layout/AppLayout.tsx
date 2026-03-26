@@ -1,5 +1,7 @@
 import { Link, NavLink, Outlet } from "react-router-dom";
 import { ChatDock } from "@/components/chat/ChatDock";
+import { ThemeToggle } from "@/components/layout/ThemeToggle";
+import { Toaster } from "@/components/ui/sonner";
 import { useAuth } from "@/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { SafeImage } from "@/components/ui/safe-image";
@@ -39,7 +41,8 @@ export function AppLayout() {
               글
             </NavLink>
           </nav>
-          <div className="flex min-w-0 items-center gap-2 sm:gap-2.5">
+          <div className="flex min-w-0 items-center gap-1 sm:gap-2">
+            <ThemeToggle />
             {user ? (
               <>
                 <Link
@@ -121,6 +124,7 @@ export function AppLayout() {
         </div>
       </footer>
       {user ? <ChatDock /> : null}
+      <Toaster position="bottom-center" richColors closeButton duration={4000} />
     </div>
   );
 }

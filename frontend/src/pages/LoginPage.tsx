@@ -21,6 +21,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 type LoginActionState = {
   serverError: string | null;
@@ -56,10 +57,12 @@ export function LoginPage() {
     try {
       await signIn(parsed.data.email.trim(), parsed.data.password);
       appLog("login", "폼 제출 후 signIn 성공", { redirectTo: from });
+      toast.success("로그인되었습니다.");
       return { serverError: null, fieldErrors: {} };
     } catch (err) {
       const msg = err instanceof Error ? err.message : "로그인에 실패했습니다.";
       appLog("login", "폼 제출 실패", msg);
+      toast.error(msg);
       return { serverError: msg, fieldErrors: {} };
     }
   }
@@ -91,7 +94,7 @@ export function LoginPage() {
           onSubmit={() => addOptimistic({ serverError: null, fieldErrors: {} })}
           noValidate
         >
-          <CardContent className="space-y-4">
+          <CardContent className="space-y-4 pb-6">
             {justRegistered ? (
               <Alert>
                 <AlertTitle>가입 완료</AlertTitle>

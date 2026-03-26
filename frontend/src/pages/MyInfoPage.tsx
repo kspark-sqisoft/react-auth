@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { useEffect, useId, useRef, useState, startTransition } from "react";
 import { useAuth } from "@/stores/auth-store";
 import { appLog } from "@/lib/app-log";
@@ -78,12 +79,29 @@ export function MyInfoPage() {
         setFileKey((k) => k + 1);
       }
       appLog("me", "프로필 반영 완료", { sub: next.sub });
+      if (variables.name != null) toast.success("표시 이름을 저장했습니다.");
+      else if (variables.image != null) toast.success("프로필 이미지를 저장했습니다.");
+      else if (variables.removeImage) toast.success("프로필 이미지를 제거했습니다.");
+    },
+    onError: (e) => {
+      const msg =
+        e instanceof Error ? e.message : "프로필을 저장하지 못했습니다.";
+      toast.error(msg);
     },
   });
 
   useEffect(() => {
     appLog("me", "내 정보 화면", profile ? { sub: profile.sub } : {});
   }, [profile]);
+
+  useEffect(() => {
+    if (!meQueryFailed) return;
+    const msg =
+      meQueryError instanceof Error
+        ? meQueryError.message
+        : "프로필을 불러오지 못했습니다.";
+    toast.error(msg);
+  }, [meQueryFailed, meQueryError]);
 
   const displayUrl = previewUrl ?? profile?.imageUrl ?? null;
 

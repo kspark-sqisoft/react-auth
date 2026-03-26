@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { deletePost, fetchPost } from "@/lib/api";
@@ -23,6 +23,7 @@ import { CenteredSpinner } from "@/components/layout/CenteredSpinner";
 import { Button } from "@/components/ui/button";
 import { SafeImage } from "@/components/ui/safe-image";
 import { formatDateFullShort } from "@/lib/format-date";
+import { toast } from "sonner";
 
 /** 공개 상세; 작성자에게만 수정·삭제 버튼 */
 export function PostDetailPage() {
@@ -57,14 +58,26 @@ export function PostDetailPage() {
     mutationFn: () => deletePost(id),
     onSuccess: () => {
       appLog("posts", "글 삭제 완료", { id });
+      toast.success("글이 삭제되었습니다.");
       void queryClient.invalidateQueries({ queryKey: postKeys.all });
       setDeleteOpen(false);
       navigate("/posts", { replace: true });
     },
     onError: (e) => {
-      setError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+      const msg = e instanceof Error ? e.message : "삭제에 실패했습니다.";
+      toast.error(msg);
+      setError(msg);
     },
   });
+
+  useEffect(() => {
+    if (!Number.isFinite(id) || !isError) return;
+    const msg =
+      queryError instanceof Error
+        ? queryError.message
+        : "글을 불러오지 못했습니다.";
+    toast.error(msg);
+  }, [id, isError, queryError]);
 
   if (!Number.isFinite(id)) {
     return (
@@ -133,7 +146,10 @@ export function PostDetailPage() {
                 );
                 void queryClient.invalidateQueries({ queryKey: postKeys.lists() });
               }}
-              onSyncError={(msg) => setError(msg)}
+              onSyncError={(msg) => {
+                toast.error(msg);
+                setError(msg);
+              }}
             />
           </div>
         </div>
