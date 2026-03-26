@@ -69,25 +69,50 @@ export class AuthController {
   @ApiCookieAuth('refresh')
   @ApiOperation({
     summary: '액세스 토큰 갱신',
-    description: `쿠키(${REFRESH_TOKEN_COOKIE})만 보냅니다. Authorize에 Bearer를 넣지 않습니다.`,
+    description: [
+      `쿠키(${REFRESH_TOKEN_COOKIE})만 보냅니다. Authorize에 Bearer를 넣지 않습니다.`,
+      '',
+      '성공 시 액세스 토큰은 JSON으로, 리프레시는 **로테이션**되어 새 값이 같은 이름의 httpOnly 쿠키로 다시 설정됩니다.',
+    ].join('\n'),
   })
-  async refresh(@Req() req: Request) {
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
     const cookies = req.cookies as Record<string, string> | undefined;
     const token = cookies?.[REFRESH_TOKEN_COOKIE];
     if (!token) {
       this.logger.warn('[토큰 갱신] 요청 거절: 리프레시 쿠키 없음');
       throw new UnauthorizedException();
     }
-    return this.authService.refresh(token);
+    const { access_token, refresh_token } = await this.authService.refresh(
+      token,
+    );
+    res.cookie(REFRESH_TOKEN_COOKIE, refresh_token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: REFRESH_TOKEN_MAX_AGE_MS,
+      path: '/',
+    });
+    return { access_token };
   }
 
   @Post('logout')
   @ApiOperation({
     summary: '로그아웃',
-    description: '리프레시 쿠키를 제거합니다.',
+    description: [
+      '서버에 저장된 해당 리프레시 토큰을 폐기한 뒤 쿠키를 제거합니다.',
+      '이후 같은 리프레시 JWT로는 갱신할 수 없습니다.',
+    ].join('\n'),
   })
-  logout(@Res({ passthrough: true }) res: Response) {
-    this.logger.log('[로그아웃] 리프레시 쿠키 제거');
+  async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    const cookies = req.cookies as Record<string, string> | undefined;
+    const token = cookies?.[REFRESH_TOKEN_COOKIE];
+    if (token) {
+      await this.authService.revokeRefreshToken(token);
+    }
+    this.logger.log('[로그아웃] 리프레시 쿠키 제거·DB 폐기');
     res.clearCookie(REFRESH_TOKEN_COOKIE, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
