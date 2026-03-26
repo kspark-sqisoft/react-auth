@@ -171,13 +171,17 @@ export async function fetchMe(): Promise<AuthUser | null> {
   }
 }
 
-/** JWT 필요; 프로필 이미지 교체 또는 `removeImage`로 제거 */
+/** JWT 필요; 표시 이름·프로필 이미지 교체 또는 `removeImage`로 제거(최소 한 항목) */
 export async function updateMyProfile(input: {
+  name?: string;
   image?: File | null;
   removeImage?: boolean;
 }): Promise<AuthUser> {
   try {
     const fd = new FormData();
+    if (input.name != null && input.name.trim() !== "") {
+      fd.append("name", input.name.trim());
+    }
     if (input.image) fd.append("image", input.image);
     if (input.removeImage) fd.append("removeImage", "1");
     const { data } = await api.patch<AuthUser>("/users/me", fd);

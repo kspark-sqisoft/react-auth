@@ -1,7 +1,9 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+import { QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { appLog } from "@/lib/app-log";
+import { queryClient } from "@/lib/query-client";
 import { useAuthStore } from "@/stores/auth-store";
 import "./index.css";
 import App from "./App.tsx";
@@ -20,9 +22,11 @@ void useAuthStore.getState().hydrate().then(() => {
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    {/* 클라이언트 사이드 라우팅; basename이 필요하면 여기서 지정 */}
-    <BrowserRouter>
-      <App />
-    </BrowserRouter>
+    <QueryClientProvider client={queryClient}>
+      {/* 클라이언트 사이드 라우팅; basename이 필요하면 여기서 지정 */}
+      <BrowserRouter>
+        <App />
+      </BrowserRouter>
+    </QueryClientProvider>
   </StrictMode>,
 );

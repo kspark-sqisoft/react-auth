@@ -1,9 +1,25 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  startTransition,
+} from "react";
+import { useInfiniteQuery, useQueryClient, type InfiniteData } from "@tanstack/react-query";
 import { Search, X } from "lucide-react";
 import { Link, useSearchParams } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
-import { fetchPostsPage, POST_PAGE_DEFAULT, type Post } from "@/lib/api";
+import {
+  fetchPostsPage,
+  POST_PAGE_DEFAULT,
+  type Post,
+  type PostLikeState,
+  type PostsPageResponse,
+} from "@/lib/api";
 import { appLog } from "@/lib/app-log";
+import { postKeys } from "@/lib/query-keys";
 import { PostListItem } from "@/components/posts/PostListItem";
 import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
 import { Button } from "@/components/ui/button";
@@ -16,53 +32,81 @@ const NEAR_BOTTOM_PX = 280;
 /** 하단 도달 후 실제 요청까지 대기(연속 스크롤 시 타이머 리셋) */
 const LOAD_MORE_DEBOUNCE_MS = 400;
 
-/** 네트워크가 빨라도 로딩 문구·스피너가 잠깐은 보이도록 */
-const LOAD_MORE_MIN_VISIBLE_MS = 350;
-
 /** 검색어 입력 후 API 호출까지 대기 */
 const SEARCH_DEBOUNCE_MS = 400;
 
 /**
  * 공개 목록 + 무한 스크롤(사용자 스크롤 의도 후 하단 근접 시 추가 로드).
- * `loadingLock`으로 동시 요청을 막습니다.
  */
 export function PostListPage() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlSearchRaw = searchParams.get("search") ?? "";
 
-  const [posts, setPosts] = useState<Post[]>([]);
-  const [total, setTotal] = useState<number | null>(null);
-  const [initialLoading, setInitialLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  /** 디바운스 구간: 곧 요청할 예정 */
   const [loadMoreScheduled, setLoadMoreScheduled] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [likeActionError, setLikeActionError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState(urlSearchRaw);
   const [searchQuery, setSearchQuery] = useState(urlSearchRaw.trim());
 
+  const listQueryKey = postKeys.list(searchQuery);
+
+  const {
+    data,
+    error: queryError,
+    fetchNextPage,
+    hasNextPage,
+    isError,
+    isFetchingNextPage,
+    isPending,
+  } = useInfiniteQuery({
+    queryKey: listQueryKey,
+    queryFn: async ({ pageParam }) => {
+      const q = searchQuery || undefined;
+      const res = await fetchPostsPage({
+        skip: pageParam,
+        take: POST_PAGE_DEFAULT,
+        search: q,
+      });
+      appLog("posts", pageParam === 0 ? "목록 초기 로드" : "목록 추가 로드", {
+        received: res.items.length,
+        total: res.total,
+        skip: pageParam,
+        search: q ?? "",
+      });
+      return res;
+    },
+    initialPageParam: 0,
+    getNextPageParam: (lastPage, allPages) => {
+      const loaded = allPages.reduce((acc, p) => acc + p.items.length, 0);
+      return loaded < lastPage.total ? loaded : undefined;
+    },
+  });
+
+  const posts: Post[] = useMemo(
+    () => data?.pages.flatMap((p) => p.items) ?? [],
+    [data],
+  );
+  const total = useMemo(() => data?.pages[0]?.total ?? null, [data]);
+  const error =
+    isError && queryError instanceof Error
+      ? queryError.message
+      : isError
+        ? "목록을 불러오지 못했습니다."
+        : null;
+
   /** 직전에 디바운스로 URL을 바꾼 경우, URL→입력 동기화 effect를 한 번 건너뜀 */
   const skipUrlToStateSyncRef = useRef(false);
 
-  const postsRef = useRef(posts);
-  postsRef.current = posts;
-
+  const postsRef = useRef<Post[]>([]);
   const totalRef = useRef<number | null>(null);
-  totalRef.current = total;
-
-  const initialLoadingRef = useRef(initialLoading);
-  initialLoadingRef.current = initialLoading;
-
+  const initialLoadingRef = useRef(false);
   /** 스크롤/휠/터치 전에는 추가 로드하지 않음 (첫 화면에서 감시 요소가 보여도 자동 연속 요청 방지) */
   const scrollArmedRef = useRef(false);
 
-  const loadingLock = useRef(false);
   const loadMoreDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  /** 검색·초기 로드가 바뀌면 진행 중인 추가 로드 응답 무시 */
-  const listGenerationRef = useRef(0);
 
-  const hasMore = total !== null && posts.length < total;
+  const hasMore = Boolean(hasNextPage);
 
   const clearLoadMoreDebounce = useCallback(() => {
     if (loadMoreDebounceRef.current) {
@@ -96,85 +140,22 @@ export function PostListPage() {
       skipUrlToStateSyncRef.current = false;
       return;
     }
-    setSearchQuery(urlSearchRaw.trim());
-    setSearchInput(urlSearchRaw);
+    startTransition(() => {
+      setSearchQuery(urlSearchRaw.trim());
+      setSearchInput(urlSearchRaw);
+    });
   }, [urlSearchRaw]);
 
   useEffect(() => {
-    clearLoadMoreDebounce();
+    startTransition(() => {
+      clearLoadMoreDebounce();
+    });
     scrollArmedRef.current = false;
   }, [searchQuery, clearLoadMoreDebounce]);
 
-  const fetchInitial = useCallback(async () => {
-    const gen = ++listGenerationRef.current;
-    setInitialLoading(true);
-    try {
-      const q = searchQuery || undefined;
-      const { items, total: t } = await fetchPostsPage({
-        skip: 0,
-        take: POST_PAGE_DEFAULT,
-        search: q,
-      });
-      if (gen !== listGenerationRef.current) return;
-      setTotal(t);
-      setPosts(items);
-      setError(null);
-      appLog("posts", "목록 초기 로드", {
-        received: items.length,
-        total: t,
-        skip: 0,
-        search: q ?? "",
-      });
-    } catch (e) {
-      if (gen !== listGenerationRef.current) return;
-      appLog("posts", "목록 로드 실패", e instanceof Error ? e.message : e);
-      setError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
-    } finally {
-      if (gen === listGenerationRef.current) {
-        setInitialLoading(false);
-      }
-    }
-  }, [searchQuery]);
-
-  const appendPostsPage = useCallback(async (skip: number) => {
-    if (loadingLock.current) return;
-    setLoadMoreScheduled(false);
-    loadingLock.current = true;
-    setLoadingMore(true);
-    const started = Date.now();
-    const genAtStart = listGenerationRef.current;
-    const q = searchQuery || undefined;
-    try {
-      const { items, total: t } = await fetchPostsPage({
-        skip,
-        take: POST_PAGE_DEFAULT,
-        search: q,
-      });
-      if (genAtStart !== listGenerationRef.current) return;
-      setTotal(t);
-      setPosts((prev) => [...prev, ...items]);
-      setError(null);
-      appLog("posts", "목록 추가 로드", {
-        received: items.length,
-        total: t,
-        skip,
-        search: q ?? "",
-      });
-    } catch (e) {
-      if (genAtStart !== listGenerationRef.current) return;
-      appLog("posts", "목록 로드 실패", e instanceof Error ? e.message : e);
-      setError(e instanceof Error ? e.message : "목록을 불러오지 못했습니다.");
-    } finally {
-      loadingLock.current = false;
-      const elapsed = Date.now() - started;
-      await new Promise((r) =>
-        setTimeout(r, Math.max(0, LOAD_MORE_MIN_VISIBLE_MS - elapsed)),
-      );
-      if (genAtStart === listGenerationRef.current) {
-        setLoadingMore(false);
-      }
-    }
-  }, [searchQuery]);
+  const runFetchNextPage = useCallback(() => {
+    void fetchNextPage();
+  }, [fetchNextPage]);
 
   const scheduleAppendPosts = useCallback(() => {
     if (loadMoreDebounceRef.current) {
@@ -183,16 +164,18 @@ export function PostListPage() {
     setLoadMoreScheduled(true);
     loadMoreDebounceRef.current = setTimeout(() => {
       loadMoreDebounceRef.current = null;
-      void appendPostsPage(postsRef.current.length);
+      runFetchNextPage();
     }, LOAD_MORE_DEBOUNCE_MS);
-  }, [appendPostsPage]);
+  }, [runFetchNextPage]);
 
   const scheduleAppendPostsRef = useRef(scheduleAppendPosts);
-  scheduleAppendPostsRef.current = scheduleAppendPosts;
 
-  useEffect(() => {
-    void fetchInitial();
-  }, [fetchInitial]);
+  useLayoutEffect(() => {
+    postsRef.current = posts;
+    totalRef.current = total;
+    initialLoadingRef.current = isPending;
+    scheduleAppendPostsRef.current = scheduleAppendPosts;
+  }, [posts, total, isPending, scheduleAppendPosts]);
 
   useEffect(() => {
     return () => {
@@ -204,6 +187,32 @@ export function PostListPage() {
   }, []);
 
   useEffect(() => {
+    if (!isFetchingNextPage) {
+      startTransition(() => setLoadMoreScheduled(false));
+    }
+  }, [isFetchingNextPage]);
+
+  const onLikeApplied = useCallback(
+    (postId: number, state: PostLikeState) => {
+      queryClient.setQueryData<InfiniteData<PostsPageResponse>>(listQueryKey, (old) => {
+        if (!old) return old;
+        return {
+          ...old,
+          pages: old.pages.map((page) => ({
+            ...page,
+            items: page.items.map((p) =>
+              p.id === postId
+                ? { ...p, likeCount: state.likeCount, likedByMe: state.likedByMe }
+                : p,
+            ),
+          })),
+        };
+      });
+    },
+    [queryClient, listQueryKey],
+  );
+
+  useEffect(() => {
     const pageScrollHeight = () =>
       Math.max(
         document.documentElement.scrollHeight,
@@ -212,7 +221,7 @@ export function PostListPage() {
 
     const checkLoadMore = () => {
       if (!scrollArmedRef.current) return;
-      if (initialLoadingRef.current || loadingLock.current) return;
+      if (initialLoadingRef.current || isFetchingNextPage) return;
 
       const t = totalRef.current;
       if (t === null) return;
@@ -241,7 +250,7 @@ export function PostListPage() {
       window.removeEventListener("wheel", onUserScrollIntent);
       window.removeEventListener("touchmove", onUserScrollIntent);
     };
-  }, []);
+  }, [isFetchingNextPage]);
 
   return (
     <div className="space-y-6">
@@ -293,7 +302,7 @@ export function PostListPage() {
               </button>
             ) : null}
           </div>
-          {searchQuery && !initialLoading && total !== null ? (
+          {searchQuery && !isPending && total !== null ? (
             <p className="text-sm text-muted-foreground" aria-live="polite">
               검색 결과{" "}
               <span className="font-semibold tabular-nums text-foreground">{total}</span>
@@ -322,13 +331,13 @@ export function PostListPage() {
 
       <FormErrorAlert message={likeActionError} title="좋아요" />
 
-      {initialLoading ? (
+      {isPending ? (
         <div className="flex justify-center py-16">
           <Spinner className="size-8 text-muted-foreground" />
         </div>
       ) : null}
 
-      {!initialLoading && posts.length === 0 && !error ? (
+      {!isPending && posts.length === 0 && !error ? (
         <p className="text-sm text-muted-foreground">
           {searchQuery
             ? `「${searchQuery}」에 맞는 글이 없습니다.`
@@ -342,15 +351,7 @@ export function PostListPage() {
             key={post.id}
             post={post}
             onLikeInteractionStart={() => setLikeActionError(null)}
-            onLikeApplied={(postId, state) => {
-              setPosts((prev) =>
-                prev.map((p) =>
-                  p.id === postId
-                    ? { ...p, likeCount: state.likeCount, likedByMe: state.likedByMe }
-                    : p,
-                ),
-              );
-            }}
+            onLikeApplied={onLikeApplied}
             onLikeSyncError={setLikeActionError}
           />
         ))}
@@ -358,11 +359,11 @@ export function PostListPage() {
 
       {hasMore ? (
         <div className="flex min-h-12 flex-col items-center justify-center gap-3 py-4">
-          {loadMoreScheduled || loadingMore ? (
+          {loadMoreScheduled || isFetchingNextPage ? (
             <div className="flex flex-col items-center gap-2 text-center">
               <Spinner className="size-6 text-muted-foreground" />
               <span className="text-sm text-muted-foreground">
-                {loadingMore
+                {isFetchingNextPage
                   ? "다음 글을 불러오는 중…"
                   : "곧 다음 글을 불러옵니다…"}
               </span>
@@ -376,10 +377,10 @@ export function PostListPage() {
             type="button"
             variant="outline"
             size="sm"
-            disabled={loadingMore || loadMoreScheduled || initialLoading}
+            disabled={isFetchingNextPage || loadMoreScheduled || isPending}
             onClick={() => {
               clearLoadMoreDebounce();
-              void appendPostsPage(posts.length);
+              void fetchNextPage();
             }}
           >
             더 불러오기
@@ -387,7 +388,7 @@ export function PostListPage() {
         </div>
       ) : null}
 
-      {!initialLoading && total !== null ? (
+      {!isPending && total !== null ? (
         <p className="text-center text-xs text-muted-foreground">
           {searchQuery ? (
             <>

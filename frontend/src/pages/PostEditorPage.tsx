@@ -1,7 +1,15 @@
-import { useActionState, useEffect, useOptimistic, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useActionState,
+  useEffect,
+  useOptimistic,
+  useState,
+  startTransition,
+} from "react";
 import { Link, Navigate, useLocation, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
 import { createPost, fetchPost, updatePost } from "@/lib/api";
+import { postKeys } from "@/lib/query-keys";
 import { appLog } from "@/lib/app-log";
 import { formDataGetString } from "@/lib/form-data-utils";
 import { fieldErrorsFromZodIssues } from "@/lib/zod-form";
@@ -40,14 +48,14 @@ export function PostEditorPage() {
   const { user, isReady } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
+  const queryClient = useQueryClient();
+  const viewerKey = user?.sub ?? "anon";
 
   const [existingImageUrl, setExistingImageUrl] = useState<string | null>(null);
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [removeExistingImage, setRemoveExistingImage] = useState(false);
 
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(isEdit);
   const [forbidden, setForbidden] = useState(false);
 
   const [title, setTitle] = useState("");
@@ -83,6 +91,8 @@ export function PostEditorPage() {
           image: imageFile ?? undefined,
           removeImage: removeExistingImage && !imageFile,
         });
+        queryClient.setQueryData(postKeys.detail(updated.id, viewerKey), updated);
+        void queryClient.invalidateQueries({ queryKey: postKeys.lists() });
         appLog("posts", "글 수정 저장", { id: updated.id });
         return { serverError: null, fieldErrors: {}, redirectTo: `/posts/${updated.id}` };
       }
@@ -92,6 +102,7 @@ export function PostEditorPage() {
         content: parsed.data.content,
         image: imageFile ?? undefined,
       });
+      void queryClient.invalidateQueries({ queryKey: postKeys.all });
       appLog("posts", "글 작성 저장", { id: created.id });
       return { serverError: null, fieldErrors: {}, redirectTo: `/posts/${created.id}` };
     } catch (err) {
@@ -121,42 +132,49 @@ export function PostEditorPage() {
     };
   }, [previewUrl]);
 
+  const {
+    data: loadedPost,
+    isPending: postLoading,
+    isError,
+    error: postQueryError,
+  } = useQuery({
+    queryKey: postKeys.detail(postId, viewerKey),
+    queryFn: async () => {
+      const post = await fetchPost(postId);
+      appLog("posts", "에디터 기존 글 로드", { postId });
+      return post;
+    },
+    enabled: isEdit && Number.isFinite(postId),
+  });
+
+  const loadError =
+    isEdit && isError
+      ? postQueryError instanceof Error
+        ? postQueryError.message
+        : "글을 불러오지 못했습니다."
+      : null;
+
   useEffect(() => {
-    if (!isEdit || !Number.isFinite(postId)) {
-      setLoading(false);
-      setTitle("");
-      setContent("");
-      setExistingImageUrl(null);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const post = await fetchPost(postId);
-        if (cancelled) return;
-        if (user && post.author.id !== user.sub) {
-          appLog("posts", "수정 권한 없음 — 상세로 이동", { postId });
-          setForbidden(true);
-          return;
-        }
-        setTitle(post.title);
-        setContent(post.content);
-        setExistingImageUrl(post.imageUrl);
-        appLog("posts", "에디터 기존 글 로드", { postId });
-      } catch (e) {
-        if (!cancelled) {
-          const msg = e instanceof Error ? e.message : "글을 불러오지 못했습니다.";
-          appLog("posts", "에디터 로드 실패", { postId, msg });
-          setLoadError(msg);
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
+    startTransition(() => {
+      if (!isEdit || !Number.isFinite(postId)) {
+        setTitle("");
+        setContent("");
+        setExistingImageUrl(null);
+        setForbidden(false);
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [isEdit, postId, user]);
+      if (postLoading || !loadedPost) return;
+      if (user && loadedPost.author.id !== user.sub) {
+        appLog("posts", "수정 권한 없음 — 상세로 이동", { postId });
+        setForbidden(true);
+        return;
+      }
+      setForbidden(false);
+      setTitle(loadedPost.title);
+      setContent(loadedPost.content);
+      setExistingImageUrl(loadedPost.imageUrl);
+    });
+  }, [isEdit, postId, loadedPost, postLoading, user]);
 
   function onPickImage(file: File | null) {
     setPreviewUrl((prev) => {
@@ -188,7 +206,7 @@ export function PostEditorPage() {
     return <Navigate to="/posts" replace />;
   }
 
-  if (loading) {
+  if (isEdit && postLoading) {
     return <CenteredSpinner className="min-h-0 py-16" />;
   }
 

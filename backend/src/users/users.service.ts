@@ -1,7 +1,11 @@
 import { existsSync } from 'fs';
 import { unlink } from 'fs/promises';
 import { join } from 'path';
-import { Injectable, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AVATARS_SUBDIR, UPLOAD_ROOT } from '../env.constants';
@@ -67,16 +71,40 @@ export class UsersService {
 
   async updateMyProfile(
     userId: number,
-    body: { newImageFilename?: string; removeImage?: boolean },
+    body: {
+      newImageFilename?: string;
+      removeImage?: boolean;
+      /** trim된 표시 이름(비어 있으면 호출부에서 넘기지 않음) */
+      name?: string;
+    },
   ): Promise<MePublic> {
     const user = await this.findByIdOrFail(userId);
+    let touched = false;
+
+    if (body.name !== undefined) {
+      const n = body.name.trim();
+      if (!n) {
+        throw new BadRequestException('이름은 비울 수 없습니다.');
+      }
+      if (n.length > 100) {
+        throw new BadRequestException('이름은 100자 이하로 입력해 주세요.');
+      }
+      user.name = n;
+      touched = true;
+    }
 
     if (body.newImageFilename) {
       await this.unlinkAvatar(user.profileImageFilename);
       user.profileImageFilename = body.newImageFilename;
+      touched = true;
     } else if (body.removeImage) {
       await this.unlinkAvatar(user.profileImageFilename);
       user.profileImageFilename = null;
+      touched = true;
+    }
+
+    if (!touched) {
+      throw new BadRequestException('변경할 내용이 없습니다.');
     }
 
     await this.repo.save(user);

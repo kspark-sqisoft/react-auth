@@ -28,6 +28,10 @@ const multipartMePatchBody = {
   schema: {
     type: 'object',
     properties: {
+      name: {
+        type: 'string',
+        description: '표시 이름(1~100자, 공백만은 불가)',
+      },
       removeImage: {
         type: 'string',
         enum: ['1', 'true', 'on'],
@@ -65,25 +69,31 @@ export class UsersController {
   @ApiBody(multipartMePatchBody)
   @UseInterceptors(FileInterceptor('image', userAvatarMulterOptions()))
   @Patch('me')
-  @ApiOperation({ summary: '내 프로필 이미지 변경 또는 제거' })
+  @ApiOperation({ summary: '내 프로필(이름·이미지) 변경 또는 이미지 제거' })
   async patchMe(
     @Req() req: Request & { user: JwtPayload },
     @UploadedFile() file?: Express.Multer.File,
     @Body('removeImage') removeImage?: string,
+    @Body('name') nameRaw?: string,
   ): Promise<MePublic> {
     const remove =
       !file &&
       (removeImage === '1' || removeImage === 'true' || removeImage === 'on');
-    if (!file && !remove) {
+    const nameTrimmed = typeof nameRaw === 'string' ? nameRaw.trim() : '';
+    const hasName = nameTrimmed.length > 0;
+
+    if (!file && !remove && !hasName) {
       throw new BadRequestException(
-        '프로필 이미지 파일을 선택하거나, 기존 이미지 제거를 선택해 주세요.',
+        '이름을 입력하거나, 프로필 이미지를 선택·제거해 주세요.',
       );
     }
+
     const me: MePublic = await this.usersService.updateMyProfile(req.user.sub, {
       newImageFilename: file?.filename,
       removeImage: remove,
+      ...(hasName ? { name: nameTrimmed } : {}),
     });
-    this.logger.log(`[내 정보] 프로필 이미지 갱신 sub=${me.sub}`);
+    this.logger.log(`[내 정보] 프로필 갱신 sub=${me.sub}`);
     return me;
   }
 }

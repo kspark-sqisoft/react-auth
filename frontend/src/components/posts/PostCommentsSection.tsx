@@ -1,11 +1,10 @@
 import {
   useActionState,
-  useCallback,
-  useEffect,
   useOptimistic,
   useState,
   useTransition,
 } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   createPostComment,
   deletePostComment,
@@ -13,6 +12,7 @@ import {
   type AuthUser,
   type PostComment,
 } from "@/lib/api";
+import { postKeys } from "@/lib/query-keys";
 import { formatDateMediumShort } from "@/lib/format-date";
 import { formDataGetString } from "@/lib/form-data-utils";
 import { AuthorAvatarInline } from "@/components/posts/AuthorAvatarInline";
@@ -34,7 +34,7 @@ type CommentItemProps = {
   comment: PostComment;
   depth: number;
   user: AuthUser | null;
-  onTreeChange: () => void;
+  onCommentsInvalidate: () => void;
   onError: (msg: string) => void;
 };
 
@@ -43,7 +43,7 @@ function CommentItem({
   comment,
   depth,
   user,
-  onTreeChange,
+  onCommentsInvalidate,
   onError,
 }: CommentItemProps) {
   const [replyOpen, setReplyOpen] = useState(false);
@@ -68,7 +68,7 @@ function CommentItem({
     }
     try {
       await createPostComment(postId, { content: text, parentId: comment.id });
-      onTreeChange();
+      onCommentsInvalidate();
       appLog("posts", "대댓글 작성", { postId, parentId: comment.id });
       setReplyOpen(false);
       return { error: null, tick: prev.tick + 1 };
@@ -91,7 +91,7 @@ function CommentItem({
     startDeleteTransition(async () => {
       try {
         await deletePostComment(postId, comment.id);
-        onTreeChange();
+        onCommentsInvalidate();
         appLog("posts", "댓글 삭제", { postId, commentId: comment.id });
       } catch (e) {
         onError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
@@ -190,7 +190,7 @@ function CommentItem({
                 comment={r}
                 depth={depth + 1}
                 user={user}
-                onTreeChange={onTreeChange}
+                onCommentsInvalidate={onCommentsInvalidate}
                 onError={onError}
               />
             </li>
@@ -207,22 +207,35 @@ type PostCommentsSectionProps = {
 };
 
 export function PostCommentsSection({ postId, user }: PostCommentsSectionProps) {
-  const [tree, setTree] = useState<PostComment[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const commentsKey = postKeys.comments(postId);
 
-  const reload = useCallback(() => {
-    void (async () => {
-      try {
-        const data = await fetchPostComments(postId);
-        setTree(data);
-        setError(null);
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : "댓글을 불러오지 못했습니다.";
-        setError(msg);
-      }
-    })();
-  }, [postId]);
+  const [sectionError, setSectionError] = useState<string | null>(null);
+
+  const invalidateComments = () => {
+    void queryClient.invalidateQueries({ queryKey: commentsKey });
+  };
+
+  const {
+    data: tree = [],
+    isPending: loading,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: commentsKey,
+    queryFn: async () => {
+      const data = await fetchPostComments(postId);
+      appLog("posts", "댓글 트리 로드", { postId, count: flattenCount(data) });
+      return data;
+    },
+  });
+
+  const error =
+    isError && queryError instanceof Error
+      ? queryError.message
+      : isError
+        ? "댓글을 불러오지 못했습니다."
+        : null;
 
   const initialRoot: CommentFormState = { error: null, tick: 0 };
 
@@ -239,7 +252,7 @@ export function PostCommentsSection({ postId, user }: PostCommentsSectionProps) 
     }
     try {
       await createPostComment(postId, { content: text });
-      reload();
+      invalidateComments();
       appLog("posts", "댓글 작성", { postId });
       return { error: null, tick: prev.tick + 1 };
     } catch (e) {
@@ -256,42 +269,20 @@ export function PostCommentsSection({ postId, user }: PostCommentsSectionProps) 
     (current, next: Partial<CommentFormState>) => ({ ...current, ...next }),
   );
 
-  useEffect(() => {
-    let cancelled = false;
-    setLoading(true);
-    void (async () => {
-      try {
-        const data = await fetchPostComments(postId);
-        if (!cancelled) {
-          setTree(data);
-          setError(null);
-          appLog("posts", "댓글 트리 로드", { postId, count: flattenCount(data) });
-        }
-      } catch (e) {
-        if (!cancelled) {
-          setError(e instanceof Error ? e.message : "댓글을 불러오지 못했습니다.");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [postId]);
+  const displayError = sectionError ?? error;
 
   return (
     <section className="border-t border-border pt-8" aria-label="댓글">
       <h2 className="font-heading text-lg font-semibold tracking-tight">댓글</h2>
 
-      <FormErrorAlert message={error} className="mt-4" />
+      <FormErrorAlert message={displayError} className="mt-4" />
 
       {user ? (
         <form
           action={rootFormAction}
           onSubmit={() => {
             addOptimisticRoot({ error: null });
-            setError(null);
+            setSectionError(null);
           }}
           className="mt-4 space-y-2"
         >
@@ -319,7 +310,7 @@ export function PostCommentsSection({ postId, user }: PostCommentsSectionProps) 
           <div className="flex justify-center py-8">
             <Spinner className="size-7 text-muted-foreground" />
           </div>
-        ) : tree.length === 0 ? (
+        ) : isError ? null : tree.length === 0 ? (
           <p className="text-sm text-muted-foreground">아직 댓글이 없습니다.</p>
         ) : (
           <ul className="space-y-3">
@@ -330,8 +321,8 @@ export function PostCommentsSection({ postId, user }: PostCommentsSectionProps) 
                   comment={c}
                   depth={0}
                   user={user}
-                  onTreeChange={reload}
-                  onError={setError}
+                  onCommentsInvalidate={invalidateComments}
+                  onError={setSectionError}
                 />
               </li>
             ))}

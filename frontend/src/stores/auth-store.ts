@@ -13,6 +13,8 @@ import {
   type AuthUser,
 } from "@/lib/api";
 import { appLog } from "@/lib/app-log";
+import { queryClient } from "@/lib/query-client";
+import { userKeys } from "@/lib/query-keys";
 
 export type SignUpInput = { email: string; password: string; name: string };
 
@@ -35,6 +37,8 @@ type AuthState = {
   signOut: () => Promise<void>;
   /** GET /users/me 로 `user` 갱신(프로필 이미지 변경 후 등) */
   refreshUser: () => Promise<void>;
+  /** PATCH /users/me 응답 등 서버가 준 프로필로 즉시 동기화(추가 GET 없음) */
+  applyServerUser: (me: AuthUser) => void;
 };
 
 /** 스토어 본체. 컴포넌트에서 직접 쓰면 구독 범위가 넓어져 불필요한 리렌더가 잘 납니다. 가능하면 `useAuth()` 사용. */
@@ -93,6 +97,8 @@ export const useAuthStore = create<AuthState>()(
           false,
           "auth/hydrate",
         );
+        if (user) queryClient.setQueryData(userKeys.me(), user);
+        else void queryClient.removeQueries({ queryKey: userKeys.all });
         appLog("auth", "hydrate 결과", { loggedIn: Boolean(user) });
       },
 
@@ -116,6 +122,7 @@ export const useAuthStore = create<AuthState>()(
             false,
             "auth/signIn",
           );
+          queryClient.setQueryData(userKeys.me(), me);
           appLog("auth", "signIn 성공", { sub: me.sub });
         } catch (e) {
           appLog("auth", "signIn 실패", e instanceof Error ? e.message : e);
@@ -161,12 +168,14 @@ export const useAuthStore = create<AuthState>()(
           false,
           "auth/signOut",
         );
+        void queryClient.removeQueries({ queryKey: userKeys.all });
       },
 
       refreshUser: async () => {
         const me = await fetchMe();
         if (!me) {
           setAccessToken(null);
+          void queryClient.removeQueries({ queryKey: userKeys.all });
           set(
             (state) => {
               state.user = null;
@@ -182,6 +191,16 @@ export const useAuthStore = create<AuthState>()(
           },
           false,
           "auth/refreshUser",
+        );
+      },
+
+      applyServerUser: (me) => {
+        set(
+          (state) => {
+            state.user = me;
+          },
+          false,
+          "auth/applyServerUser",
         );
       },
     })),
@@ -217,6 +236,7 @@ export function useAuth() {
       signUp: s.signUp,
       signOut: s.signOut,
       refreshUser: s.refreshUser,
+      applyServerUser: s.applyServerUser,
     })),
   );
 }

@@ -1,8 +1,10 @@
-import { useEffect, useState, useTransition } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
-import { deletePost, fetchPost, type Post } from "@/lib/api";
+import { deletePost, fetchPost } from "@/lib/api";
 import { appLog } from "@/lib/app-log";
+import { postKeys } from "@/lib/query-keys";
 import { AuthorAvatarInline } from "@/components/posts/AuthorAvatarInline";
 import { PostLikeButton } from "@/components/posts/PostLikeButton";
 import { PostCommentsSection } from "@/components/posts/PostCommentsSection";
@@ -28,35 +30,41 @@ export function PostDetailPage() {
   const id = idParam ? Number(idParam) : NaN;
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
-  const [post, setPost] = useState<Post | null>(null);
+  const viewerKey = user?.sub ?? "anon";
+  const detailKey = postKeys.detail(id, viewerKey);
+
   const [error, setError] = useState<string | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
-  const [isDeletePending, startDeleteTransition] = useTransition();
 
-  useEffect(() => {
-    if (!Number.isFinite(id)) return;
-    let cancelled = false;
-    void (async () => {
-      try {
-        const p = await fetchPost(id);
-        if (!cancelled) {
-          setPost(p);
-          setError(null);
-          appLog("posts", "상세 로드 완료", { id: p.id });
-        }
-      } catch (e) {
-        if (!cancelled) {
-          const msg = e instanceof Error ? e.message : "글을 불러오지 못했습니다.";
-          appLog("posts", "상세 로드 실패", { id, msg });
-          setError(msg);
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [id, user?.sub]);
+  const {
+    data: post,
+    isPending,
+    isError,
+    error: queryError,
+  } = useQuery({
+    queryKey: detailKey,
+    queryFn: async () => {
+      const p = await fetchPost(id);
+      appLog("posts", "상세 로드 완료", { id: p.id });
+      return p;
+    },
+    enabled: Number.isFinite(id),
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deletePost(id),
+    onSuccess: () => {
+      appLog("posts", "글 삭제 완료", { id });
+      void queryClient.invalidateQueries({ queryKey: postKeys.all });
+      setDeleteOpen(false);
+      navigate("/posts", { replace: true });
+    },
+    onError: (e) => {
+      setError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
+    },
+  });
 
   if (!Number.isFinite(id)) {
     return (
@@ -69,26 +77,17 @@ export function PostDetailPage() {
     );
   }
 
-  const isOwner = user && post && user.sub === post.author.id;
+  const loadError =
+    isError && queryError instanceof Error
+      ? queryError.message
+      : isError
+        ? "글을 불러오지 못했습니다."
+        : null;
 
-  function onDelete() {
-    if (!Number.isFinite(id)) return;
-    startDeleteTransition(async () => {
-      try {
-        await deletePost(id);
-        appLog("posts", "글 삭제 완료", { id });
-        setDeleteOpen(false);
-        navigate("/posts", { replace: true });
-      } catch (e) {
-        setError(e instanceof Error ? e.message : "삭제에 실패했습니다.");
-      }
-    });
-  }
-
-  if (error && !post) {
+  if (isError && !post && loadError) {
     return (
       <div className="space-y-4">
-        <FormErrorAlert message={error} />
+        <FormErrorAlert message={loadError} />
         <Button asChild variant="outline" size="sm">
           <Link to="/posts">목록으로</Link>
         </Button>
@@ -96,9 +95,19 @@ export function PostDetailPage() {
     );
   }
 
-  if (!post) {
+  if (isPending || !post) {
     return <CenteredSpinner className="min-h-0 py-16" />;
   }
+
+  const isOwner = user && user.sub === post.author.id;
+
+  function onDelete() {
+    if (!Number.isFinite(id)) return;
+    setError(null);
+    deleteMutation.mutate();
+  }
+
+  const deleteBusy = deleteMutation.isPending;
 
   return (
     <article className="space-y-6">
@@ -118,11 +127,12 @@ export function PostDetailPage() {
               postId={post.id}
               likeCount={post.likeCount}
               likedByMe={post.likedByMe}
-              onApplied={(state) =>
-                setPost((p) =>
+              onApplied={(state) => {
+                queryClient.setQueryData(detailKey, (p) =>
                   p ? { ...p, likeCount: state.likeCount, likedByMe: state.likedByMe } : p,
-                )
-              }
+                );
+                void queryClient.invalidateQueries({ queryKey: postKeys.lists() });
+              }}
               onSyncError={(msg) => setError(msg)}
             />
           </div>
@@ -185,16 +195,16 @@ export function PostDetailPage() {
             <AlertDialogDescription>이 작업은 되돌릴 수 없습니다.</AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isDeletePending}>취소</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteBusy}>취소</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
               onClick={(e) => {
                 e.preventDefault();
                 onDelete();
               }}
-              disabled={isDeletePending}
+              disabled={deleteBusy}
             >
-              {isDeletePending ? "삭제 중…" : "삭제"}
+              {deleteBusy ? "삭제 중…" : "삭제"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
