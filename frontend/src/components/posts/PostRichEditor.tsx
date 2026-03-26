@@ -46,6 +46,28 @@ const PRESET_COLORS = [
   "#db2777",
 ] as const;
 
+/** 클릭 시 커서 위치에 삽입 (이모지·기호) */
+const QUICK_INSERT_CHIPS: { char: string; tip: string }[] = [
+  { char: "⭐", tip: "별 · 중요 표시 삽입" },
+  { char: "❤️", tip: "하트 삽입" },
+  { char: "👍", tip: "좋아요 삽입" },
+  { char: "✅", tip: "체크(완료) 삽입" },
+  { char: "❌", tip: "엑스 삽입" },
+  { char: "📌", tip: "핀 · 고정 표시 삽입" },
+  { char: "🔥", tip: "불 · 인기 표시 삽입" },
+  { char: "💡", tip: "전구 · 아이디어 삽입" },
+  { char: "📝", tip: "메모 표시 삽입" },
+  { char: "⚠️", tip: "주의 삽입" },
+  { char: "✨", tip: "반짝임 삽입" },
+  { char: "🎉", tip: "축하 삽입" },
+  { char: "💬", tip: "말풍선 삽입" },
+  { char: "➡️", tip: "오른쪽 화살표 삽입" },
+  { char: "▶", tip: "재생/다음 표시 삽입" },
+  { char: "✓", tip: "체크 표(단순) 삽입" },
+  { char: "→", tip: "화살표(텍스트) 삽입" },
+  { char: "…", tip: "말줄임표 삽입" },
+];
+
 /** 선택한 글자만 적용되는 글자 크기(px) */
 const FONT_SIZE_PRESETS: { value: string; label: string; tip: string }[] = [
   { value: "12px", label: "12", tip: "글자 크기 작게 (12px)" },
@@ -94,6 +116,36 @@ function TipToolbarBtn({
       </TooltipTrigger>
       <TooltipContent side="bottom" className="max-w-[16rem] text-pretty">
         {tip}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+function TipInsertChip({
+  char,
+  tip,
+  onInsert,
+}: {
+  char: string;
+  tip: string;
+  onInsert: () => void;
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="flex size-8 shrink-0 items-center justify-center rounded-md border border-border bg-background text-lg leading-none transition hover:bg-muted/80 hover:shadow-sm focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none"
+          onClick={onInsert}
+          aria-label={`${tip} — ${char}`}
+        >
+          <span className="select-none" aria-hidden>
+            {char}
+          </span>
+        </button>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-[14rem] text-pretty">
+        {tip} (커서 위치에 넣기)
       </TooltipContent>
     </Tooltip>
   );
@@ -192,9 +244,10 @@ export function PostRichEditor({ initialHtml, invalid, onHtmlChange }: Props) {
       <div className="space-y-2">
         <input type="hidden" name="content" value={html} readOnly aria-hidden />
 
-        <div className="flex flex-wrap gap-0.5 rounded-md border border-border bg-muted/30 p-1">
+        <div className="rounded-md border border-border bg-muted/30 p-1">
           {editor ? (
             <>
+              <div className="flex flex-wrap gap-0.5">
               <TipToolbarBtn
                 tip="선택한 글자를 굵게 표시합니다. (단락 전체 제목과는 다릅니다)"
                 ariaLabel="굵게"
@@ -420,6 +473,23 @@ export function PostRichEditor({ initialHtml, invalid, onHtmlChange }: Props) {
               >
                 <Redo2 className="size-4" />
               </TipToolbarBtn>
+              </div>
+
+              <div
+                role="group"
+                aria-label="즐겨 쓰는 기호 삽입"
+                className="mt-1 flex flex-wrap items-center gap-0.5 border-t border-border pt-1"
+              >
+                <span className="sr-only">즐겨 쓰는 기호</span>
+                {QUICK_INSERT_CHIPS.map(({ char, tip }) => (
+                  <TipInsertChip
+                    key={char + tip}
+                    char={char}
+                    tip={tip}
+                    onInsert={() => editor.chain().focus().insertContent(char).run()}
+                  />
+                ))}
+              </div>
             </>
           ) : (
             <span className="px-2 py-1 text-xs text-muted-foreground">에디터 로드 중…</span>
