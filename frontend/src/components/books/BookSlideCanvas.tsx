@@ -23,6 +23,7 @@ import {
   konvaBookTopLeftFromNode,
   resolveBookElementOpacity,
   resolveBookElementRotation,
+  resolveBookMediaObjectFit,
   type BookCanvasElement,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
@@ -195,6 +196,7 @@ function BookSlideVideoOverlay({
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const [intrinsic, setIntrinsic] = useState<{ src: string; w: number; h: number } | null>(null);
 
   const src = publicAssetUrl(el.src) ?? el.src;
   const poster =
@@ -259,6 +261,15 @@ function BookSlideVideoOverlay({
   const vh = liveFrame?.height ?? el.height;
   const vDeg = liveFrame != null ? liveFrame.rotation : vRot;
 
+  const fit = resolveBookMediaObjectFit(el.objectFit);
+  const layout =
+    intrinsic && intrinsic.src === src && intrinsic.w > 0 && intrinsic.h > 0
+      ? computeKonvaFittedImageLayout(el.objectFit, vw, vh, intrinsic.w, intrinsic.h)
+      : null;
+  /** cover·fill은 브라우저 object-*로 처리. contain·scale-down·none은 박스만큼만 비디오를 두어 레터박스 검정을 피함 */
+  const fullBleedFit = fit === "cover" || fit === "fill";
+  const useLayoutBox = Boolean(layout && !fullBleedFit);
+
   return (
     <div
       className="absolute pointer-events-none"
@@ -275,15 +286,34 @@ function BookSlideVideoOverlay({
       <video
         ref={videoRef}
         className={cn(
-          "pointer-events-none absolute inset-0 size-full outline-none",
-          mediaObjectFitToCssClass(el.objectFit),
+          "pointer-events-none absolute outline-none",
+          useLayoutBox ? undefined : "inset-0 size-full",
+          !useLayoutBox && mediaObjectFitToCssClass(el.objectFit),
         )}
+        style={
+          useLayoutBox && layout
+            ? {
+                left: layout.x * scale,
+                top: layout.y * scale,
+                width: layout.width * scale,
+                height: layout.height * scale,
+                objectFit: "fill",
+                backgroundColor: "transparent",
+              }
+            : { backgroundColor: "transparent" }
+        }
         src={src}
         poster={poster || undefined}
         muted
         playsInline
         preload="metadata"
         controls={false}
+        onLoadedMetadata={(e) => {
+          const v = e.currentTarget;
+          const w = v.videoWidth;
+          const h = v.videoHeight;
+          if (w > 0 && h > 0) setIntrinsic({ src, w, h });
+        }}
       />
       <div
         className={cn(
@@ -738,7 +768,6 @@ export function BookSlideCanvas({
                   key={el.id}
                   el={el}
                   liveSync={shapeLiveSync}
-                  pageBackgroundColor={pageBackgroundColor}
                   attachRef={attachRef}
                   selectedRef={selectedNodeRef}
                   mode={mode}
@@ -770,6 +799,9 @@ export function BookSlideCanvas({
             <Transformer
               ref={trRef}
               rotateEnabled
+              /** 기본 true면 비율 고정이라 한쪽 핸들만 잡아도 다른 축·반대쪽까지 같이 변하는 느낌이 남. Shift 누르면 비율 유지 */
+              keepRatio={false}
+              centeredScaling={false}
               borderStroke="#3b82f6"
               anchorFill="#fff"
               anchorStroke="#3b82f6"
@@ -994,8 +1026,8 @@ function BookTextHitShape({
       onTransformEnd={(e) => {
         liveSync.clearTransformLive();
         const node = e.target;
-        const sx = node.scaleX();
-        const sy = node.scaleY();
+        const sx = Math.abs(node.scaleX());
+        const sy = Math.abs(node.scaleY());
         node.scaleX(1);
         node.scaleY(1);
         const nw = Math.max(24, node.width() * sx);
@@ -1020,7 +1052,6 @@ function BookTextHitShape({
 function BookImageShape({
   el,
   liveSync,
-  pageBackgroundColor,
   attachRef,
   selectedRef,
   mode,
@@ -1031,7 +1062,6 @@ function BookImageShape({
 }: {
   el: Extract<BookCanvasElement, { type: "image" }>;
   liveSync: BookShapeLiveSync;
-  pageBackgroundColor: string;
   attachRef: boolean;
   selectedRef: MutableRefObject<Konva.Node | null>;
   mode: "edit" | "view";
@@ -1078,6 +1108,8 @@ function BookImageShape({
       offsetX={pivot.offsetX}
       offsetY={pivot.offsetY}
       rotation={pivot.rotation}
+      width={fw}
+      height={fh}
       scaleX={tf ? 1 : undefined}
       scaleY={tf ? 1 : undefined}
       opacity={imgOpacity}
@@ -1116,11 +1148,11 @@ function BookImageShape({
       onTransformEnd={(e) => {
         liveSync.clearTransformLive();
         const node = e.target as Konva.Group;
-        const sx = node.scaleX();
-        const sy = node.scaleY();
+        const sx = Math.abs(node.scaleX());
+        const sy = Math.abs(node.scaleY());
         node.scaleX(1);
         node.scaleY(1);
-        const { w: nw, h: nh } = clampSize(el.width * sx, el.height * sy);
+        const { w: nw, h: nh } = clampSize(node.width() * sx, node.height() * sy);
         node.offsetX(nw / 2);
         node.offsetY(nh / 2);
         const tl = konvaBookTopLeftFromNode(node);
@@ -1133,16 +1165,6 @@ function BookImageShape({
         });
       }}
     >
-      {layout?.showLetterboxRect ? (
-        <Rect
-          x={0}
-          y={0}
-          width={fw}
-          height={fh}
-          fill={pageBackgroundColor}
-          listening={false}
-        />
-      ) : null}
       {img && layout ? (
         <KonvaImage
           image={img}
@@ -1273,8 +1295,8 @@ function BookVideoBox({
       onTransformEnd={(e) => {
         liveSync.clearTransformLive();
         const node = e.target;
-        const sx = node.scaleX();
-        const sy = node.scaleY();
+        const sx = Math.abs(node.scaleX());
+        const sy = Math.abs(node.scaleY());
         node.scaleX(1);
         node.scaleY(1);
         const { w: nw, h: nh } = clampSize(node.width() * sx, node.height() * sy);

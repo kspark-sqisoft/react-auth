@@ -445,7 +445,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     return (
       <BookWorkspaceShell
         titleArea={
-          <div className="flex min-w-0 flex-wrap items-center gap-y-2">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
             <Input
               className="h-9 min-w-[10rem] max-w-md flex-1 border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none focus-visible:ring-0 sm:text-lg"
               value={bookTitle}
@@ -525,7 +525,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   return (
     <BookWorkspaceShell
       titleArea={
-        <div className="flex min-w-0 flex-wrap items-center gap-y-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
           <Input
             className="h-9 min-w-[10rem] max-w-md flex-1 border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none focus-visible:ring-0 sm:text-lg"
             value={bookTitle}

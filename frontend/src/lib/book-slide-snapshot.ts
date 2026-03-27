@@ -279,17 +279,6 @@ export async function captureBookSlideToDataURL(
               ctx.rect(0, 0, iw, ih);
             },
           });
-          if (L.showLetterboxRect) {
-            g.add(
-              new Konva.Rect({
-                x: 0,
-                y: 0,
-                width: sx(el.width),
-                height: sx(el.height),
-                fill: bg,
-              }),
-            );
-          }
           const ki = new Konva.Image({
             x: sx(L.x),
             y: sx(L.y),
@@ -344,17 +333,6 @@ export async function captureBookSlideToDataURL(
               ctx.rect(0, 0, vw, vh);
             },
           });
-          if (L.showLetterboxRect) {
-            g.add(
-              new Konva.Rect({
-                x: 0,
-                y: 0,
-                width: vw,
-                height: vh,
-                fill: bg,
-              }),
-            );
-          }
           const ki = new Konva.Image({
             x: sx(L.x),
             y: sx(L.y),

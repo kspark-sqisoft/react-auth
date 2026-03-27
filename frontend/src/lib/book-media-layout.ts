@@ -7,8 +7,6 @@ export type KonvaFittedImageLayout = {
   width: number;
   height: number;
   crop?: { x: number; y: number; width: number; height: number };
-  /** 프레임 안 빈 여백을 슬라이드 배경으로 채움 */
-  showLetterboxRect: boolean;
 };
 
 /**
@@ -25,11 +23,11 @@ export function computeKonvaFittedImageLayout(
   const bw = Math.max(1, boxW);
   const bh = Math.max(1, boxH);
   if (!natW || !natH) {
-    return { x: 0, y: 0, width: bw, height: bh, showLetterboxRect: false };
+    return { x: 0, y: 0, width: bw, height: bh };
   }
 
   if (fit === "fill") {
-    return { x: 0, y: 0, width: bw, height: bh, showLetterboxRect: false };
+    return { x: 0, y: 0, width: bw, height: bh };
   }
 
   if (fit === "none") {
@@ -41,7 +39,6 @@ export function computeKonvaFittedImageLayout(
       width: dw,
       height: dh,
       crop: { x: 0, y: 0, width: dw, height: dh },
-      showLetterboxRect: dw < bw || dh < bh,
     };
   }
 
@@ -57,7 +54,6 @@ export function computeKonvaFittedImageLayout(
       width: bw,
       height: bh,
       crop: { x: cx, y: cy, width: sliceW, height: sliceH },
-      showLetterboxRect: false,
     };
   }
 
@@ -72,7 +68,6 @@ export function computeKonvaFittedImageLayout(
     y,
     width: w,
     height: h,
-    showLetterboxRect: true,
   };
 }
 
