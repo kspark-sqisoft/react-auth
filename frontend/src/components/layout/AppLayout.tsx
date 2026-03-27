@@ -35,14 +35,17 @@ export function AppLayout() {
   /** `BookWorkspaceShell` 사용 라우트 — 사이트 헤더 아래에 맞추려 main 패딩 제거·flex 높이 체인 */
   const bookShellRoute =
     location.pathname === "/books/new" || /^\/books\/\d+$/.test(location.pathname);
+  /** 홈: 3D 씬이 헤더~푸터 사이를 꽉 채우도록 뷰포트 높이·main flex 체인 */
+  const homeRoute = location.pathname === "/";
+  const fullViewportShell = bookShellRoute || homeRoute;
 
   return (
     <div
       className={cn(
         "flex flex-col bg-background text-foreground",
-        /* 북 워크스페이스: 문서 높이가 늘어나지 않게 뷰포트에 고정(푸터·헤더 항상 보임) */
-        bookShellRoute
-          ? "h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden"
+        /* 북·홈: 문서 스크롤 없이 뷰포트에 고정(푸터·헤더 항상 보임) */
+        fullViewportShell
+          ? "h-dvh max-h-dvh min-h-0 overflow-hidden"
           : "min-h-screen",
       )}
     >
@@ -112,7 +115,7 @@ export function AppLayout() {
       <main
         className={cn(
           "w-full flex-1",
-          bookShellRoute
+          fullViewportShell
             ? "flex min-h-0 max-w-none flex-col overflow-hidden p-0"
             : cn(
                 "mx-auto px-4 py-8",
