@@ -8,10 +8,11 @@ import {
   type SetStateAction,
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Link, useParams } from "react-router-dom";
-import { Save } from "lucide-react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
+  deleteBook,
   fetchBook,
   updateBook,
   uploadBookMedia,
@@ -25,6 +26,7 @@ import {
   DEFAULT_PAGE_BACKGROUND,
   DEFAULT_SLIDE_HEIGHT,
   DEFAULT_SLIDE_WIDTH,
+  duplicateBookEditorPage,
   pageIndexAfterRemove,
   pageIndexAfterReorder,
   reorderElementsZ,
@@ -34,6 +36,7 @@ import {
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
 import { defaultTextWidgetBoxHeight } from "@/lib/book-text-widget";
+import { warmBookCanvasImagesForNeighborPages } from "@/lib/book-image-cache";
 import { bookKeys } from "@/lib/query-keys";
 import { useBookCanvasDisplayScale } from "@/lib/use-book-canvas-display-scale";
 import { useBookDocumentHistory } from "@/lib/use-book-document-history";
@@ -50,6 +53,15 @@ import {
 } from "@/components/books/BookSlideCanvas";
 import { BookWidgetPalette } from "@/components/books/BookWidgetPalette";
 import { BookWorkspaceShell } from "@/components/books/BookWorkspaceShell";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -75,6 +87,7 @@ function mapServerPagesToLocal(pages: BookPageDto[]): BookEditorPageState[] {
  * 북 진입 시 곧바로 편집 UI(위젯·저장). 서버 스냅샷이 바뀌면 `key`로 마운트 초기화.
  */
 function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBook: BookDetail }) {
+  const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [bookTitle, setBookTitle] = useState(serverBook.title);
   const [pageIndex, setPageIndex] = useState(0);
@@ -94,6 +107,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   const pendingMediaKindRef = useRef<"image" | "video" | null>(null);
   const pendingPlacementRef = useRef<{ x: number; y: number } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [slideWidth, setSlideWidth] = useState(
     () => serverBook.slideWidth ?? DEFAULT_SLIDE_WIDTH,
   );
@@ -121,6 +135,10 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     slideHeight,
     bottomPad: 120,
   });
+
+  useEffect(() => {
+    warmBookCanvasImagesForNeighborPages(localPages, activePageIndex);
+  }, [localPages, activePageIndex]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -156,6 +174,45 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  const deleteMutation = useMutation({
+    mutationFn: () => deleteBook(bookId),
+    onSuccess: () => {
+      setDeleteConfirmOpen(false);
+      void queryClient.removeQueries({ queryKey: bookKeys.detail(bookId) });
+      void queryClient.invalidateQueries({ queryKey: bookKeys.lists() });
+      toast.success("북을 삭제했습니다.");
+      void navigate("/books", { replace: true });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
+  const deleteBookDialog = (
+    <AlertDialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>북을 삭제할까요?</AlertDialogTitle>
+          <AlertDialogDescription>
+            “{bookTitle.trim() || "제목 없음"}” 북과 포함된 모든 페이지가 삭제됩니다. 이 작업은 되돌릴 수 없습니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel type="button" disabled={deleteMutation.isPending}>
+            취소
+          </AlertDialogCancel>
+          <Button
+            type="button"
+            variant="destructive"
+            disabled={deleteMutation.isPending}
+            onClick={() => deleteMutation.mutate()}
+          >
+            {deleteMutation.isPending ? <Spinner className="mr-2 size-4" /> : null}
+            삭제
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 
   const onElementChange = useCallback(
     (elId: string, patch: Partial<BookCanvasElement>) => {
@@ -314,6 +371,20 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     [activePageIndex, commitPages],
   );
 
+  const duplicatePageAt = useCallback(
+    (index: number) => {
+      commitPages((prev) => {
+        if (index < 0 || index >= prev.length) return prev;
+        const dup = duplicateBookEditorPage(prev[index]);
+        const next = [...prev.slice(0, index + 1), dup, ...prev.slice(index + 1)];
+        return applyAutoSlideNamesByIndex(next.map((p, i) => ({ ...p, sortOrder: i })));
+      });
+      setPageIndex(index + 1);
+      setSelectedId(null);
+    },
+    [commitPages],
+  );
+
   const removeElementById = useCallback(
     (elementId: string) => {
       updatePages((draft) => {
@@ -376,7 +447,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         titleArea={
           <div className="flex min-w-0 flex-wrap items-center gap-y-2">
             <Input
-              className="h-9 min-w-[10rem] max-w-md flex-1 border-transparent bg-transparent px-0 text-base font-semibold shadow-none focus-visible:ring-0 sm:text-lg"
+              className="h-9 min-w-[10rem] max-w-md flex-1 border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none focus-visible:ring-0 sm:text-lg"
               value={bookTitle}
               onChange={(e) => setBookTitle(e.target.value)}
               placeholder="북 제목"
@@ -392,15 +463,35 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
           </div>
         }
         actions={
-          <Button
-            type="button"
-            size="sm"
-            onClick={() => saveMutation.mutate()}
-            disabled={saveMutation.isPending || localPages.length === 0}
-          >
-            {saveMutation.isPending ? <Spinner className="mr-2 size-4" /> : <Save className="mr-2 size-4" />}
-            저장
-          </Button>
+          <>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button
+                type="button"
+                size="sm"
+                className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40"
+                onClick={() => saveMutation.mutate()}
+                disabled={saveMutation.isPending || localPages.length === 0}
+              >
+                {saveMutation.isPending ? (
+                  <Spinner className="mr-2 size-4 text-white" />
+                ) : (
+                  <Save className="mr-2 size-4" />
+                )}
+                저장
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                className="border-transparent bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/40"
+                disabled={deleteMutation.isPending}
+                onClick={() => setDeleteConfirmOpen(true)}
+              >
+                <Trash2 className="mr-2 size-4" />
+                삭제
+              </Button>
+            </div>
+            {deleteBookDialog}
+          </>
         }
         left={
           <BookPageSidebar
@@ -436,7 +527,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       titleArea={
         <div className="flex min-w-0 flex-wrap items-center gap-y-2">
           <Input
-            className="h-9 min-w-[10rem] max-w-md flex-1 border-transparent bg-transparent px-0 text-base font-semibold shadow-none focus-visible:ring-0 sm:text-lg"
+            className="h-9 min-w-[10rem] max-w-md flex-1 border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none focus-visible:ring-0 sm:text-lg"
             value={bookTitle}
             onChange={(e) => setBookTitle(e.target.value)}
             placeholder="북 제목"
@@ -452,15 +543,35 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         </div>
       }
       actions={
-        <Button
-          type="button"
-          size="sm"
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending}
-        >
-          {saveMutation.isPending ? <Spinner className="mr-2 size-4" /> : <Save className="mr-2 size-4" />}
-          저장
-        </Button>
+        <>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button
+              type="button"
+              size="sm"
+              className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40"
+              onClick={() => saveMutation.mutate()}
+              disabled={saveMutation.isPending}
+            >
+              {saveMutation.isPending ? (
+                <Spinner className="mr-2 size-4 text-white" />
+              ) : (
+                <Save className="mr-2 size-4" />
+              )}
+              저장
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              className="border-transparent bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/40"
+              disabled={deleteMutation.isPending}
+              onClick={() => setDeleteConfirmOpen(true)}
+            >
+              <Trash2 className="mr-2 size-4" />
+              삭제
+            </Button>
+          </div>
+          {deleteBookDialog}
+        </>
       }
       left={
         <BookPageSidebar
@@ -477,6 +588,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
           onReorderPages={reorderPages}
           onAddPage={addPage}
           onRemovePageAtIndex={removePageAt}
+          onDuplicatePageAtIndex={duplicatePageAt}
           canRemovePage={localPages.length > 1}
         />
       }
@@ -500,6 +612,11 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
               ref={canvasWrapRef}
               className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 pb-24"
               onWheel={handleWheel}
+              onPointerDown={(e) => {
+                const slide = (e.currentTarget as HTMLElement).querySelector("[data-book-slide-root]");
+                if (slide?.contains(e.target as Node)) return;
+                setSelectedId(null);
+              }}
             >
               <BookSlideCanvas
                 pageWidth={slideWidth}
@@ -552,6 +669,8 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         canvasSelectedId ? (
           <BookInspectorPanel
             selected={selectedEl}
+            slideWidth={slideWidth}
+            slideHeight={slideHeight}
             onChange={onElementChange}
             onDelete={removeSelected}
             mediaHint={mediaHint}
@@ -618,6 +737,10 @@ function BookDetailGuestBookView({
 
   const safeIndex = Math.min(pageIndex, Math.max(0, sortedPagesView.length - 1));
   const viewPage = sortedPagesView[safeIndex];
+
+  useEffect(() => {
+    warmBookCanvasImagesForNeighborPages(guestThumbSources, safeIndex);
+  }, [guestThumbSources, safeIndex]);
 
   return (
     <BookWorkspaceShell

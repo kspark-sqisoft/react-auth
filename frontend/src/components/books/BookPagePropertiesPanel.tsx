@@ -4,6 +4,8 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { DEFAULT_PAGE_BACKGROUND, slideDisplayLabel } from "@/lib/book-canvas";
+import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
+import { cn } from "@/lib/utils";
 
 type BookPagePropertiesPanelProps = {
   pageIndex: number;
@@ -57,6 +59,28 @@ export function BookPagePropertiesPanel({
           </div>
           <div className="space-y-2">
             <Label htmlFor="page-bg-hex">슬라이드 배경색</Label>
+            <p className="text-[11px] text-muted-foreground">자주 쓰는 색</p>
+            <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/25 p-1">
+              {BOOK_HEX_COLOR_PRESETS.map((c) => {
+                const active =
+                  backgroundColor.trim().replace(/\s/g, "").toLowerCase() === c.toLowerCase();
+                return (
+                  <button
+                    key={c}
+                    type="button"
+                    title={c}
+                    aria-label={`배경 ${c}`}
+                    aria-pressed={active}
+                    className={cn(
+                      "size-7 shrink-0 rounded-md border border-border shadow-sm ring-offset-background hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
+                      active && "ring-2 ring-primary ring-offset-2",
+                    )}
+                    style={{ backgroundColor: c }}
+                    onClick={() => onChangeBackgroundColor(c)}
+                  />
+                );
+              })}
+            </div>
             <div className="flex flex-wrap items-center gap-2">
               <input
                 id="page-bg-picker"

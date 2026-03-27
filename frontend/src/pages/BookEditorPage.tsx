@@ -10,6 +10,7 @@ import {
   DEFAULT_PAGE_BACKGROUND,
   DEFAULT_SLIDE_HEIGHT,
   DEFAULT_SLIDE_WIDTH,
+  duplicateBookEditorPage,
   pageIndexAfterRemove,
   pageIndexAfterReorder,
   reorderElementsZ,
@@ -18,6 +19,7 @@ import {
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
 import { defaultTextWidgetBoxHeight } from "@/lib/book-text-widget";
+import { warmBookCanvasImagesForNeighborPages } from "@/lib/book-image-cache";
 import { bookKeys } from "@/lib/query-keys";
 import { useBookCanvasDisplayScale } from "@/lib/use-book-canvas-display-scale";
 import { useBookDocumentHistory } from "@/lib/use-book-document-history";
@@ -65,6 +67,10 @@ export function BookEditorPage() {
     selectedId && currentPage?.elements.some((e) => e.id === selectedId)
       ? selectedId
       : null;
+
+  useEffect(() => {
+    warmBookCanvasImagesForNeighborPages(pages, activePageIndex);
+  }, [pages, activePageIndex]);
 
   const {
     displayScale,
@@ -234,6 +240,20 @@ export function BookEditorPage() {
     [activePageIndex, commitPages],
   );
 
+  const duplicatePageAt = useCallback(
+    (index: number) => {
+      commitPages((prev) => {
+        if (index < 0 || index >= prev.length) return prev;
+        const dup = duplicateBookEditorPage(prev[index]);
+        const next = [...prev.slice(0, index + 1), dup, ...prev.slice(index + 1)];
+        return applyAutoSlideNamesByIndex(next.map((p, i) => ({ ...p, sortOrder: i })));
+      });
+      setPageIndex(index + 1);
+      setSelectedId(null);
+    },
+    [commitPages],
+  );
+
   const reorderPages = useCallback(
     (from: number, to: number) => {
       if (from === to) return;
@@ -281,7 +301,7 @@ export function BookEditorPage() {
       titleArea={
         <div className="flex min-w-0 flex-wrap items-center gap-y-2">
           <Input
-            className="h-9 min-w-[10rem] max-w-md flex-1 border-transparent bg-transparent px-0 text-base font-semibold shadow-none focus-visible:ring-0 sm:text-lg"
+            className="h-9 min-w-[10rem] max-w-md flex-1 border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none focus-visible:ring-0 sm:text-lg"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             placeholder="북 제목"
@@ -317,6 +337,7 @@ export function BookEditorPage() {
           onReorderPages={reorderPages}
           onAddPage={addPage}
           onRemovePageAtIndex={removePageAt}
+          onDuplicatePageAtIndex={duplicatePageAt}
           canRemovePage={pages.length > 1}
         />
       }
@@ -340,6 +361,11 @@ export function BookEditorPage() {
               ref={canvasWrapRef}
               className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 pb-24"
               onWheel={handleWheel}
+              onPointerDown={(e) => {
+                const slide = (e.currentTarget as HTMLElement).querySelector("[data-book-slide-root]");
+                if (slide?.contains(e.target as Node)) return;
+                setSelectedId(null);
+              }}
             >
               {currentPage ? (
                 <BookSlideCanvas
@@ -368,6 +394,8 @@ export function BookEditorPage() {
         canvasSelectedId ? (
           <BookInspectorPanel
             selected={selectedEl}
+            slideWidth={slideWidth}
+            slideHeight={slideHeight}
             onChange={onElementChange}
             onDelete={removeSelected}
             mediaHint={mediaHint}

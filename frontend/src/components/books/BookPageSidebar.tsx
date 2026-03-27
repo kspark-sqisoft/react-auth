@@ -18,7 +18,7 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { FileStack, Plus, Trash2 } from "lucide-react";
+import { Copy, FileStack, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   ContextMenuFloatingItem,
@@ -45,6 +45,8 @@ type BookPageSidebarProps = {
   /** 편집 모드: 인덱스별 삭제(하단 버튼·우클릭 메뉴) */
   onRemovePageAtIndex?: (index: number) => void;
   canRemovePage?: boolean;
+  /** 편집 모드: 우클릭 — 복사본을 해당 페이지 바로 아래에 삽입 */
+  onDuplicatePageAtIndex?: (index: number) => void;
 };
 
 function slideRowClass(active: boolean) {
@@ -105,6 +107,7 @@ function SortableSlideRow({
   onSelect,
   onRemovePageAtIndex,
   canRemovePage,
+  onDuplicatePageAtIndex,
 }: {
   id: string;
   index: number;
@@ -114,6 +117,7 @@ function SortableSlideRow({
   onSelect: (i: number) => void;
   onRemovePageAtIndex?: (i: number) => void;
   canRemovePage?: boolean;
+  onDuplicatePageAtIndex?: (i: number) => void;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const [ctxPoint, setCtxPoint] = useState<{ x: number; y: number } | null>(null);
@@ -154,45 +158,70 @@ function SortableSlideRow({
     isDragging && "relative z-[1] opacity-[0.35]",
   );
 
-  const onRowContextMenu =
-    onRemovePageAtIndex != null
-      ? (e: MouseEvent) => {
-          e.preventDefault();
-          e.stopPropagation();
-          setCtxPoint({ x: e.clientX, y: e.clientY });
-        }
-      : undefined;
+  const ctxEnabled = onRemovePageAtIndex != null || onDuplicatePageAtIndex != null;
+
+  const onRowContextMenu = ctxEnabled
+    ? (e: MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setCtxPoint({ x: e.clientX, y: e.clientY });
+      }
+    : undefined;
 
   const menuPortal =
-    ctxPoint && onRemovePageAtIndex != null
+    ctxPoint && ctxEnabled
       ? createPortal(
           <ContextMenuFloatingPanel
             ref={menuRef}
-            className="animate-in fade-in-0 zoom-in-95"
+            className="animate-in fade-in-0 zoom-in-95 flex min-w-[11rem] flex-col gap-0.5"
             style={{
               position: "fixed",
               left: Math.min(
                 ctxPoint.x,
-                typeof window !== "undefined" ? Math.max(8, window.innerWidth - 180) : ctxPoint.x,
+                typeof window !== "undefined" ? Math.max(8, window.innerWidth - 200) : ctxPoint.x,
               ),
               top: Math.min(
                 ctxPoint.y,
-                typeof window !== "undefined" ? Math.max(8, window.innerHeight - 52) : ctxPoint.y,
+                typeof window !== "undefined" ? Math.max(8, window.innerHeight - 120) : ctxPoint.y,
               ),
             }}
           >
-            <ContextMenuFloatingItem
-              variant="destructive"
-              disabled={!canRemovePage}
-              onClick={() => {
-                if (!canRemovePage) return;
-                onRemovePageAtIndex(index);
-                setCtxPoint(null);
-              }}
-            >
-              <Trash2 className="size-4" aria-hidden />
-              이 페이지 삭제
-            </ContextMenuFloatingItem>
+            {onDuplicatePageAtIndex ? (
+              <div className="flex flex-col gap-0.5" role="group" aria-label="복사">
+                <ContextMenuFloatingItem
+                  onClick={() => {
+                    onDuplicatePageAtIndex(index);
+                    setCtxPoint(null);
+                  }}
+                >
+                  <Copy className="size-4" aria-hidden />
+                  페이지 복사
+                </ContextMenuFloatingItem>
+              </div>
+            ) : null}
+            {onDuplicatePageAtIndex && onRemovePageAtIndex ? (
+              <div
+                className="-mx-1 my-0.5 h-px shrink-0 bg-border"
+                role="separator"
+                aria-hidden="true"
+              />
+            ) : null}
+            {onRemovePageAtIndex ? (
+              <div className="flex flex-col gap-0.5" role="group" aria-label="삭제">
+                <ContextMenuFloatingItem
+                  variant="destructive"
+                  disabled={!canRemovePage}
+                  onClick={() => {
+                    if (!canRemovePage) return;
+                    onRemovePageAtIndex(index);
+                    setCtxPoint(null);
+                  }}
+                >
+                  <Trash2 className="size-4" aria-hidden />
+                  이 페이지 삭제
+                </ContextMenuFloatingItem>
+              </div>
+            ) : null}
           </ContextMenuFloatingPanel>,
           document.body,
         )
@@ -275,6 +304,7 @@ export function BookPageSidebar({
   onAddPage,
   onRemovePageAtIndex,
   canRemovePage,
+  onDuplicatePageAtIndex,
 }: BookPageSidebarProps) {
   const edit = mode === "edit";
   const reorder = Boolean(edit && onReorderPages);
@@ -345,6 +375,7 @@ export function BookPageSidebar({
                 onSelect={onSelectPage}
                 onRemovePageAtIndex={edit ? onRemovePageAtIndex : undefined}
                 canRemovePage={canRemovePage}
+                onDuplicatePageAtIndex={edit ? onDuplicatePageAtIndex : undefined}
               />
             ))}
           </div>

@@ -40,6 +40,10 @@ export type BookCanvasElementPublic =
       fill: string;
       width?: number;
       height?: number;
+      /** 0~1, 생략 시 1 */
+      opacity?: number;
+      /** 시계 방향 도(°), 생략 시 0 */
+      rotation?: number;
     }
   | {
       id: string;
@@ -49,6 +53,9 @@ export type BookCanvasElementPublic =
       width: number;
       height: number;
       src: string;
+      objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
+      opacity?: number;
+      rotation?: number;
     }
   | {
       id: string;
@@ -59,6 +66,9 @@ export type BookCanvasElementPublic =
       height: number;
       src: string;
       posterSrc: string | null;
+      objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
+      opacity?: number;
+      rotation?: number;
     };
 
 export type BookPagePublic = {
@@ -245,6 +255,42 @@ export class BooksService {
               throw new BadRequestException('posterSrc가 올바르지 않습니다.');
             }
           }
+        }
+        if (o.objectFit != null) {
+          const allowed = new Set([
+            'cover',
+            'contain',
+            'fill',
+            'none',
+            'scale-down',
+          ]);
+          if (typeof o.objectFit !== 'string' || !allowed.has(o.objectFit)) {
+            throw new BadRequestException('objectFit 값이 올바르지 않습니다.');
+          }
+        }
+      }
+      if (o.opacity != null) {
+        if (
+          typeof o.opacity !== 'number' ||
+          !Number.isFinite(o.opacity) ||
+          o.opacity < 0 ||
+          o.opacity > 1
+        ) {
+          throw new BadRequestException(
+            '요소 opacity는 0 이상 1 이하 숫자여야 합니다.',
+          );
+        }
+      }
+      if (o.rotation != null) {
+        if (
+          typeof o.rotation !== 'number' ||
+          !Number.isFinite(o.rotation) ||
+          o.rotation < -360 ||
+          o.rotation > 360
+        ) {
+          throw new BadRequestException(
+            '요소 rotation은 -360~360 도 사이여야 합니다.',
+          );
         }
       }
     }

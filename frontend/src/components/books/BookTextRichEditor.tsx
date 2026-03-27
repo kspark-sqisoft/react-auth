@@ -19,21 +19,9 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
+import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
 import { richHtmlToPlainText, sanitizeBookRichHtml } from "@/lib/book-text-widget";
 import { cn } from "@/lib/utils";
-
-const PRESET_TEXT_COLORS = [
-  "#111827",
-  "#dc2626",
-  "#ea580c",
-  "#ca8a04",
-  "#16a34a",
-  "#2563eb",
-  "#9333ea",
-  "#db2777",
-  "#64748b",
-  "#ffffff",
-] as const;
 
 type Props = {
   /** 선택이 바뀔 때마다 바꿔 에디터를 초기화합니다. */
@@ -157,7 +145,7 @@ export function BookTextRichEditor({
             </Btn>
             <span className="mx-0.5 w-px self-stretch bg-border" aria-hidden />
             <span className="sr-only">글자 색</span>
-            {PRESET_TEXT_COLORS.map((c) => (
+            {BOOK_HEX_COLOR_PRESETS.map((c) => (
               <button
                 key={c}
                 type="button"

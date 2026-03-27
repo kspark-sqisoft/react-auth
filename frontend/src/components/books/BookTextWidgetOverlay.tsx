@@ -1,13 +1,30 @@
 import { useLayoutEffect, useRef } from "react";
 import { cn } from "@/lib/utils";
-import type { BookCanvasElement } from "@/lib/book-canvas";
+import {
+  bookElementOverlayTopLeftFromPivot,
+  bookElementPivotKonva,
+  resolveBookElementOpacity,
+  resolveBookElementRotation,
+  type BookCanvasElement,
+} from "@/lib/book-canvas";
 import { getTextWidgetDisplayHtml, textWidgetHitHeight } from "@/lib/book-text-widget";
+
+/** 드래그·트랜스폼 중 Konva와 동일(논리 좌표: 회전 전 박스 왼쪽 위·크기·도) */
+export type BookTextOverlayLiveFrame = {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation: number;
+};
 
 type Props = {
   el: Extract<BookCanvasElement, { type: "text" }>;
   scale: number;
   mode: "edit" | "view";
   isSelected: boolean;
+  /** Konva `dragLive` / `transformLive`와 맞춤. 없으면 `el`만 사용. */
+  liveFrame?: BookTextOverlayLiveFrame | null;
   /** 논리 높이(px) — 콘텐츠에 맞춤(편집 모드). */
   onReportLogicalHeight?: (logicalPx: number) => void;
 };
@@ -17,12 +34,22 @@ export function BookTextWidgetOverlay({
   scale,
   mode,
   isSelected,
+  liveFrame,
   onReportLogicalHeight,
 }: Props) {
   const rootRef = useRef<HTMLDivElement>(null);
   const html = getTextWidgetDisplayHtml(el);
   const w = el.width ?? 720;
   const h = textWidgetHitHeight(el);
+  const o = resolveBookElementOpacity(el.opacity);
+  const rot = resolveBookElementRotation(el.rotation);
+  const pivot = bookElementPivotKonva({ x: el.x, y: el.y, width: w, height: h, rotation: el.rotation });
+  const layoutOrigin = bookElementOverlayTopLeftFromPivot(pivot, w, h);
+  const fx = liveFrame?.x ?? layoutOrigin.x;
+  const fy = liveFrame?.y ?? layoutOrigin.y;
+  const fw = liveFrame?.width ?? w;
+  const fh = liveFrame?.height ?? h;
+  const fRot = liveFrame != null ? liveFrame.rotation : rot;
 
   useLayoutEffect(() => {
     if (mode !== "edit" || !onReportLogicalHeight) return;
@@ -40,7 +67,7 @@ export function BookTextWidgetOverlay({
     const ro = new ResizeObserver(() => measure());
     ro.observe(node);
     return () => ro.disconnect();
-  }, [html, scale, mode, onReportLogicalHeight, w]);
+  }, [html, scale, mode, onReportLogicalHeight, w, fh, liveFrame]);
 
   return (
     <div
@@ -50,13 +77,16 @@ export function BookTextWidgetOverlay({
         isSelected && mode === "edit" && "ring-2 ring-primary ring-offset-0",
       )}
       style={{
-        left: el.x * scale,
-        top: el.y * scale,
-        width: w * scale,
-        height: h * scale,
+        left: fx * scale,
+        top: fy * scale,
+        width: fw * scale,
+        height: fh * scale,
         fontSize: el.fontSize * scale,
         color: el.fill?.startsWith("#") ? el.fill : "#111827",
         lineHeight: 1.35,
+        opacity: o,
+        transform: fRot !== 0 ? `rotate(${fRot}deg)` : undefined,
+        transformOrigin: "center center",
       }}
     >
       <div

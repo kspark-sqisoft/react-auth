@@ -1,7 +1,12 @@
 import Konva from "konva";
 import { publicAssetUrl } from "@/lib/api";
 import type { BookCanvasElement } from "@/lib/book-canvas";
-import { DEFAULT_PAGE_BACKGROUND } from "@/lib/book-canvas";
+import {
+  bookElementPivotKonva,
+  DEFAULT_PAGE_BACKGROUND,
+  resolveBookElementOpacity,
+} from "@/lib/book-canvas";
+import { computeKonvaFittedImageLayout } from "@/lib/book-media-layout";
 import { getTextWidgetDisplayHtml, richHtmlToPlainText, textWidgetHitHeight } from "@/lib/book-text-widget";
 
 export type BookSlideSnapshotPage = {
@@ -212,17 +217,26 @@ export async function captureBookSlideToDataURL(
     const sx = (v: number) => v * scale;
 
     for (const el of page.elements) {
+      const elOp = resolveBookElementOpacity(el.opacity);
       if (el.type === "text") {
         const tw = sx(el.width ?? 720);
         const th = sx(textWidgetHitHeight(el));
-        const tx = sx(el.x);
-        const ty = sx(el.y);
+        const tPivot = bookElementPivotKonva({
+          x: sx(el.x),
+          y: sx(el.y),
+          width: tw,
+          height: th,
+          rotation: el.rotation,
+        });
         const plain =
           richHtmlToPlainText(getTextWidgetDisplayHtml(el)) || el.text || " ";
         layer.add(
           new Konva.Text({
-            x: tx,
-            y: ty,
+            x: tPivot.cx,
+            y: tPivot.cy,
+            offsetX: tPivot.offsetX,
+            offsetY: tPivot.offsetY,
+            rotation: tPivot.rotation,
             width: tw,
             height: th,
             text: plain,
@@ -232,20 +246,60 @@ export async function captureBookSlideToDataURL(
             lineHeight: 1.35,
             wrap: "word",
             ellipsis: true,
+            opacity: elOp,
           }),
         );
       } else if (el.type === "image") {
         const img = await loadImageForSnapshot(el.src);
         if (img) {
-          layer.add(
-            new Konva.Image({
-              x: sx(el.x),
-              y: sx(el.y),
-              width: sx(el.width),
-              height: sx(el.height),
-              image: img,
-            }),
+          const L = computeKonvaFittedImageLayout(
+            el.objectFit,
+            el.width,
+            el.height,
+            img.naturalWidth,
+            img.naturalHeight,
           );
+          const iw = sx(el.width);
+          const ih = sx(el.height);
+          const imgPivot = bookElementPivotKonva({
+            x: sx(el.x),
+            y: sx(el.y),
+            width: iw,
+            height: ih,
+            rotation: el.rotation,
+          });
+          const g = new Konva.Group({
+            x: imgPivot.cx,
+            y: imgPivot.cy,
+            offsetX: imgPivot.offsetX,
+            offsetY: imgPivot.offsetY,
+            rotation: imgPivot.rotation,
+            opacity: elOp,
+            clipFunc: (ctx) => {
+              ctx.rect(0, 0, iw, ih);
+            },
+          });
+          if (L.showLetterboxRect) {
+            g.add(
+              new Konva.Rect({
+                x: 0,
+                y: 0,
+                width: sx(el.width),
+                height: sx(el.height),
+                fill: bg,
+              }),
+            );
+          }
+          const ki = new Konva.Image({
+            x: sx(L.x),
+            y: sx(L.y),
+            width: sx(L.width),
+            height: sx(L.height),
+            image: img,
+          });
+          if (L.crop) ki.crop(L.crop);
+          g.add(ki);
+          layer.add(g);
         } else {
           layer.add(
             new Konva.Rect({
@@ -256,30 +310,83 @@ export async function captureBookSlideToDataURL(
               fill: "#e5e7eb",
               stroke: "#94a3b8",
               strokeWidth: Math.max(0.5, scale),
+              opacity: elOp,
             }),
           );
         }
       } else {
         const thumb = await resolveVideoThumbnailImage(el);
         if (thumb) {
-          layer.add(
-            new Konva.Image({
-              x: sx(el.x),
-              y: sx(el.y),
-              width: sx(el.width),
-              height: sx(el.height),
-              image: thumb,
-            }),
+          const L = computeKonvaFittedImageLayout(
+            el.objectFit,
+            el.width,
+            el.height,
+            thumb.naturalWidth,
+            thumb.naturalHeight,
           );
+          const vw = sx(el.width);
+          const vh = sx(el.height);
+          const vidPivot = bookElementPivotKonva({
+            x: sx(el.x),
+            y: sx(el.y),
+            width: vw,
+            height: vh,
+            rotation: el.rotation,
+          });
+          const g = new Konva.Group({
+            x: vidPivot.cx,
+            y: vidPivot.cy,
+            offsetX: vidPivot.offsetX,
+            offsetY: vidPivot.offsetY,
+            rotation: vidPivot.rotation,
+            opacity: elOp,
+            clipFunc: (ctx) => {
+              ctx.rect(0, 0, vw, vh);
+            },
+          });
+          if (L.showLetterboxRect) {
+            g.add(
+              new Konva.Rect({
+                x: 0,
+                y: 0,
+                width: vw,
+                height: vh,
+                fill: bg,
+              }),
+            );
+          }
+          const ki = new Konva.Image({
+            x: sx(L.x),
+            y: sx(L.y),
+            width: sx(L.width),
+            height: sx(L.height),
+            image: thumb,
+          });
+          if (L.crop) ki.crop(L.crop);
+          g.add(ki);
+          layer.add(g);
         } else {
+          const vw = sx(el.width);
+          const vh = sx(el.height);
+          const vp = bookElementPivotKonva({
+            x: sx(el.x),
+            y: sx(el.y),
+            width: vw,
+            height: vh,
+            rotation: el.rotation,
+          });
           layer.add(
             new Konva.Rect({
-              x: sx(el.x),
-              y: sx(el.y),
-              width: sx(el.width),
-              height: sx(el.height),
+              x: vp.cx,
+              y: vp.cy,
+              offsetX: vp.offsetX,
+              offsetY: vp.offsetY,
+              width: vw,
+              height: vh,
+              rotation: vp.rotation,
               fill: "#1e293b",
               strokeWidth: 0,
+              opacity: elOp,
             }),
           );
         }

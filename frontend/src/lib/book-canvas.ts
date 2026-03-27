@@ -2,6 +2,92 @@
  * 북 슬라이드 캔버스(Konva)와 API `elementsJson`에 맞춘 요소 타입.
  */
 
+import type Konva from "konva";
+
+export const BOOK_MEDIA_OBJECT_FIT_VALUES = ["cover", "contain", "fill", "none", "scale-down"] as const;
+export type BookMediaObjectFit = (typeof BOOK_MEDIA_OBJECT_FIT_VALUES)[number];
+export const DEFAULT_BOOK_MEDIA_OBJECT_FIT: BookMediaObjectFit = "cover";
+
+export function parseBookMediaObjectFit(raw: unknown): BookMediaObjectFit | undefined {
+  if (typeof raw !== "string") return undefined;
+  return (BOOK_MEDIA_OBJECT_FIT_VALUES as readonly string[]).includes(raw)
+    ? (raw as BookMediaObjectFit)
+    : undefined;
+}
+
+export function resolveBookMediaObjectFit(raw: BookMediaObjectFit | undefined): BookMediaObjectFit {
+  return raw ?? DEFAULT_BOOK_MEDIA_OBJECT_FIT;
+}
+
+/** 요소 불투명도 0~1. 생략 시 1(완전 불투명). */
+export const DEFAULT_BOOK_ELEMENT_OPACITY = 1;
+
+export function resolveBookElementOpacity(opacity: number | undefined): number {
+  if (typeof opacity !== "number" || !Number.isFinite(opacity)) return DEFAULT_BOOK_ELEMENT_OPACITY;
+  return Math.min(1, Math.max(0, opacity));
+}
+
+/** 도(°) 단위, 생략 시 0 */
+export const DEFAULT_BOOK_ELEMENT_ROTATION = 0;
+
+export function resolveBookElementRotation(deg: number | undefined): number {
+  if (typeof deg !== "number" || !Number.isFinite(deg)) return DEFAULT_BOOK_ELEMENT_ROTATION;
+  return deg;
+}
+
+/**
+ * 저장값: (x,y) = Konva `getTransform().point({0,0})` (로컬 왼쪽 위), rotation = `node.rotation()` 도.
+ * 피벗 (cx,cy) = `node.x()/y()` 와 같아야 하며, TL에서 중심까지 벡터 (w/2,h/2)를 rotation만큼 돌린 값을 더합니다.
+ * (Konva 10 `Rect` + offset 반크기로 런타임 대조해 부호 확정.)
+ */
+export function bookElementPivotKonva(el: {
+  x: number;
+  y: number;
+  width: number;
+  height: number;
+  rotation?: number;
+}): { cx: number; cy: number; offsetX: number; offsetY: number; rotation: number } {
+  const w = el.width;
+  const h = el.height;
+  const deg = resolveBookElementRotation(el.rotation);
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  const cx = el.x + (w / 2) * cos - (h / 2) * sin;
+  const cy = el.y + (w / 2) * sin + (h / 2) * cos;
+  return {
+    cx,
+    cy,
+    offsetX: w / 2,
+    offsetY: h / 2,
+    rotation: deg,
+  };
+}
+
+/**
+ * HTML 오버레이(`transform-origin: center`)용: 부모 좌표에서 회전축(중심)이 (cx,cy)가 되도록
+ * 배치 박스의 왼쪽 위(논리 좌표).
+ */
+export function bookElementOverlayTopLeftFromPivot(
+  pivot: ReturnType<typeof bookElementPivotKonva>,
+  width: number,
+  height: number,
+): { x: number; y: number } {
+  return {
+    x: pivot.cx - width / 2,
+    y: pivot.cy - height / 2,
+  };
+}
+
+/**
+ * 드래그·변형 후 저장용 (x,y): 로컬 원점 (0,0)이 박스 왼쪽 위일 때( Rect / clip 과 동일 ),
+ * Konva가 적용하는 변환 순서와 동일하게 부모 좌표로 옮깁니다. 수식 역변환보다 정확합니다.
+ */
+export function konvaBookTopLeftFromNode(node: Konva.Node): { x: number; y: number } {
+  const p = node.getTransform().point({ x: 0, y: 0 });
+  return { x: p.x, y: p.y };
+}
+
 export type BookCanvasElement =
   | {
       id: string;
@@ -17,6 +103,10 @@ export type BookCanvasElement =
       width?: number;
       /** 리치 텍스트 박스 논리 높이(Konva 히트·오버레이). 없으면 기본값 계산. */
       height?: number;
+      /** 0~1, 생략 시 1 */
+      opacity?: number;
+      /** 시계 방향 도(°), 생략 시 0 */
+      rotation?: number;
     }
   | {
       id: string;
@@ -26,6 +116,10 @@ export type BookCanvasElement =
       width: number;
       height: number;
       src: string;
+      /** 프레임 안 표시 방식(CSS object-fit과 동일). 생략 시 cover */
+      objectFit?: BookMediaObjectFit;
+      opacity?: number;
+      rotation?: number;
     }
   | {
       id: string;
@@ -36,6 +130,9 @@ export type BookCanvasElement =
       height: number;
       src: string;
       posterSrc: string | null;
+      objectFit?: BookMediaObjectFit;
+      opacity?: number;
+      rotation?: number;
     };
 
 export type BookEditorPageState = {
@@ -89,6 +186,27 @@ export function createEmptyEditorPage(sortOrder: number): BookEditorPageState {
     name: "",
     backgroundColor: DEFAULT_PAGE_BACKGROUND,
     elements: [],
+  };
+}
+
+/** 같은 내용의 새 페이지(새 `clientKey`·요소 `id`). 목록에 바로 아래에 끼워 넣은 뒤 `applyAutoSlideNamesByIndex` 권장. */
+export function duplicateBookEditorPage(page: BookEditorPageState): BookEditorPageState {
+  const elements = page.elements.map((el) => {
+    const id = crypto.randomUUID();
+    if (el.type === "text") {
+      return { ...el, id };
+    }
+    if (el.type === "image") {
+      return { ...el, id };
+    }
+    return { ...el, id };
+  });
+  return {
+    clientKey: crypto.randomUUID(),
+    sortOrder: page.sortOrder,
+    name: page.name,
+    backgroundColor: page.backgroundColor,
+    elements,
   };
 }
 
@@ -176,13 +294,29 @@ export function reorderElementsZ(
   return elements;
 }
 
+function parseElementOpacity(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+  const v = Math.min(1, Math.max(0, raw));
+  return v === DEFAULT_BOOK_ELEMENT_OPACITY ? undefined : v;
+}
+
+function parseElementRotation(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+  const v = Math.min(360, Math.max(-360, raw));
+  return v === DEFAULT_BOOK_ELEMENT_ROTATION ? undefined : v;
+}
+
 export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
   const out: BookCanvasElement[] = [];
   for (const el of raw) {
     if (!el || typeof el !== "object") continue;
     const o = el as Record<string, unknown>;
     if (typeof o.id !== "string" || typeof o.type !== "string") continue;
+    const opacity = parseElementOpacity(o.opacity);
+    const rotation = parseElementRotation(o.rotation);
     if (o.type === "text") {
+      const width = typeof o.width === "number" ? o.width : undefined;
+      const height = typeof o.height === "number" ? o.height : undefined;
       out.push({
         id: o.id,
         type: "text",
@@ -194,10 +328,13 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
           : {}),
         fontSize: typeof o.fontSize === "number" ? o.fontSize : 24,
         fill: typeof o.fill === "string" ? o.fill : "#111827",
-        ...(typeof o.width === "number" ? { width: o.width } : {}),
-        ...(typeof o.height === "number" ? { height: o.height } : {}),
+        ...(width !== undefined ? { width } : {}),
+        ...(height !== undefined ? { height } : {}),
+        ...(opacity !== undefined ? { opacity } : {}),
+        ...(rotation !== undefined ? { rotation } : {}),
       });
     } else if (o.type === "image") {
+      const objectFit = parseBookMediaObjectFit(o.objectFit);
       out.push({
         id: o.id,
         type: "image",
@@ -206,8 +343,12 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         width: Number(o.width) || 320,
         height: Number(o.height) || 180,
         src: typeof o.src === "string" ? o.src : "",
+        ...(objectFit ? { objectFit } : {}),
+        ...(opacity !== undefined ? { opacity } : {}),
+        ...(rotation !== undefined ? { rotation } : {}),
       });
     } else if (o.type === "video") {
+      const objectFit = parseBookMediaObjectFit(o.objectFit);
       out.push({
         id: o.id,
         type: "video",
@@ -220,6 +361,9 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
           typeof o.posterSrc === "string" && o.posterSrc.length > 0
             ? o.posterSrc
             : null,
+        ...(objectFit ? { objectFit } : {}),
+        ...(opacity !== undefined ? { opacity } : {}),
+        ...(rotation !== undefined ? { rotation } : {}),
       });
     }
   }
