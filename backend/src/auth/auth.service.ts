@@ -139,7 +139,11 @@ export class AuthService {
     }
 
     const user = await this.usersService.findByEmail(payload.email);
-    if (!user || user.id !== payload.sub) {
+    const subId =
+      typeof payload.sub === 'string'
+        ? parseInt(payload.sub, 10)
+        : Number(payload.sub);
+    if (!user || !Number.isFinite(subId) || user.id !== subId) {
       this.logger.warn(
         `[토큰 갱신] 실패: 사용자 불일치 또는 없음 sub=${payload.sub}`,
       );

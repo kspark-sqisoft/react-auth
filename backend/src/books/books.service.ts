@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { In, Repository } from 'typeorm';
 import {
   AVATARS_SUBDIR,
   BOOK_IMAGES_SUBDIR,
@@ -124,6 +124,14 @@ export type BookPagePublic = {
   elements: BookCanvasElementPublic[];
 };
 
+/** 목록 카드 배경용 첫 슬라이드 미리보기 */
+export type BookListCoverPreviewPublic = {
+  slideWidth: number;
+  slideHeight: number;
+  backgroundColor: string;
+  elements: BookCanvasElementPublic[];
+};
+
 export type BookListItemPublic = {
   id: number;
   title: string;
@@ -131,6 +139,8 @@ export type BookListItemPublic = {
   updatedAt: Date;
   author: BookAuthorPublic;
   pageCount: number;
+  /** 첫 페이지(정렬 기준) — 없으면 null */
+  coverPreview: BookListCoverPreviewPublic | null;
 };
 
 export type BookPublic = {
@@ -189,6 +199,28 @@ export class BooksService {
       name: u.name,
       imageUrl: this.authorAvatarUrl(u.profileImageFilename),
     };
+  }
+
+  /** 저장·응답은 `/uploads/...` 경로만 쓰도록 맞춤(절대 URL·쿼리 제거). */
+  private normalizeBookMediaUploadsPath(raw: unknown, maxLen = 500): string | null {
+    if (typeof raw !== 'string') return null;
+    const t = raw.trim();
+    if (!t) return null;
+    const noQuery = t.includes('?') ? t.slice(0, t.indexOf('?')) : t;
+    const idx = noQuery.indexOf('/uploads/');
+    if (idx >= 0) {
+      const path = noQuery.slice(idx);
+      return path.length > maxLen ? path.slice(0, maxLen) : path;
+    }
+    try {
+      const p = new URL(noQuery).pathname;
+      if (p.startsWith('/uploads/')) {
+        return p.length > maxLen ? p.slice(0, maxLen) : p;
+      }
+    } catch {
+      return null;
+    }
+    return null;
   }
 
   private parseElementsJson(raw: string): BookCanvasElementPublic[] {
@@ -437,23 +469,19 @@ export class BooksService {
             '이미지·비디오 크기가 올바르지 않습니다.',
           );
         }
-        if (
-          typeof o.src !== 'string' ||
-          o.src.length > 500 ||
-          !o.src.startsWith('/uploads/')
-        ) {
+        const normSrc = this.normalizeBookMediaUploadsPath(o.src);
+        if (normSrc == null) {
           throw new BadRequestException('미디어 src가 올바르지 않습니다.');
         }
+        o.src = normSrc;
         if (o.type === 'video') {
           const ps = o.posterSrc;
           if (ps != null && ps !== '') {
-            if (
-              typeof ps !== 'string' ||
-              ps.length > 500 ||
-              !ps.startsWith('/uploads/')
-            ) {
+            const normPs = this.normalizeBookMediaUploadsPath(ps);
+            if (normPs == null) {
               throw new BadRequestException('posterSrc가 올바르지 않습니다.');
             }
+            o.posterSrc = normPs;
           }
         }
         if (o.objectFit != null) {
@@ -636,6 +664,7 @@ export class BooksService {
 
     const ids = rows.map((r) => r.id);
     const countMap = new Map<number, number>();
+    const firstPageByBookId = new Map<number, BookPage>();
     if (ids.length > 0) {
       const raw = await this.pageRepo
         .createQueryBuilder('p')
@@ -647,16 +676,50 @@ export class BooksService {
       for (const r of raw) {
         countMap.set(Number(r.bookId), Number(r.cnt));
       }
+
+      const orderedPages = await this.pageRepo.find({
+        where: { book: { id: In(ids) } },
+        relations: ['book'],
+        order: { sortOrder: 'ASC', id: 'ASC' },
+      });
+      for (const p of orderedPages) {
+        const bid = p.book?.id;
+        if (bid == null) continue;
+        if (!firstPageByBookId.has(bid)) firstPageByBookId.set(bid, p);
+      }
     }
 
-    const items: BookListItemPublic[] = rows.map((b) => ({
-      id: b.id,
-      title: b.title,
-      createdAt: b.createdAt,
-      updatedAt: b.updatedAt,
-      author: this.mapAuthor(b.author),
-      pageCount: countMap.get(b.id) ?? 0,
-    }));
+    const items: BookListItemPublic[] = rows.map((b) => {
+      const fp = firstPageByBookId.get(b.id);
+      let coverPreview: BookListCoverPreviewPublic | null = null;
+      if (fp) {
+        try {
+          const elements = this.parseElementsJson(fp.elementsJson || '[]');
+          coverPreview = {
+            slideWidth: b.slideWidth ?? DEFAULT_PAGE_W,
+            slideHeight: b.slideHeight ?? DEFAULT_PAGE_H,
+            backgroundColor: fp.backgroundColor?.trim() || '#ffffff',
+            elements,
+          };
+        } catch {
+          coverPreview = {
+            slideWidth: b.slideWidth ?? DEFAULT_PAGE_W,
+            slideHeight: b.slideHeight ?? DEFAULT_PAGE_H,
+            backgroundColor: fp.backgroundColor?.trim() || '#ffffff',
+            elements: [],
+          };
+        }
+      }
+      return {
+        id: b.id,
+        title: b.title,
+        createdAt: b.createdAt,
+        updatedAt: b.updatedAt,
+        author: this.mapAuthor(b.author),
+        pageCount: countMap.get(b.id) ?? 0,
+        coverPreview,
+      };
+    });
 
     return { items, total };
   }
@@ -751,7 +814,7 @@ export class BooksService {
       relations: ['author'],
     });
     if (!book) throw new NotFoundException('북을 찾을 수 없습니다.');
-    if (book.author.id !== userId) {
+    if (Number(book.author.id) !== Number(userId)) {
       throw new ForbiddenException('수정 권한이 없습니다.');
     }
 
@@ -802,7 +865,7 @@ export class BooksService {
       relations: ['author'],
     });
     if (!book) throw new NotFoundException('북을 찾을 수 없습니다.');
-    if (book.author.id !== userId) {
+    if (Number(book.author.id) !== Number(userId)) {
       throw new ForbiddenException('삭제 권한이 없습니다.');
     }
     await this.bookRepo.remove(book);
@@ -814,7 +877,7 @@ export class BooksService {
       relations: ['author'],
     });
     if (!b) throw new NotFoundException('북을 찾을 수 없습니다.');
-    if (b.author.id !== userId) {
+    if (Number(b.author.id) !== Number(userId)) {
       throw new ForbiddenException('업로드 권한이 없습니다.');
     }
     return b;

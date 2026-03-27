@@ -1,4 +1,4 @@
-import { Play, Video } from "lucide-react";
+import { Video } from "lucide-react";
 import { Link } from "react-router-dom";
 import type { Post, PostLikeState } from "@/lib/api";
 import { formatDateMediumShort } from "@/lib/format-date";
@@ -22,6 +22,7 @@ export function PostListItem({
   onLikeSyncError,
 }: Props) {
   const sideMedia = (post.media?.length ?? 0) > 0;
+  const thumbUrl = post.coverThumbUrl;
 
   const likeButton = (
     <PostLikeButton
@@ -37,22 +38,36 @@ export function PostListItem({
 
   return (
     <li>
-      <Card className="group/card !gap-0 overflow-hidden !p-0 !py-0 transition-colors hover:bg-muted/40">
-        <div
-          className={
-            sideMedia
-              ? "grid min-h-0 w-full grid-cols-1 sm:grid-cols-[minmax(0,1fr)_7rem] sm:grid-rows-1 sm:items-stretch sm:min-h-[7.5rem]"
-              : "grid min-h-0 w-full grid-cols-1 sm:min-h-[7.5rem]"
-          }
-        >
-          <div className="relative isolate min-h-0 min-w-0">
+      <Card className="group/card relative !gap-0 overflow-hidden !p-0 !py-0 transition-colors hover:bg-muted/30">
+        <div className="relative min-h-[7.5rem] w-full overflow-hidden rounded-xl">
+          {sideMedia && thumbUrl ? (
+            <>
+              {/* 썸네일은 그대로 보이게 두고, 위 스크림만 옅게(이전: img opacity + card/95 이중으로 거의 안 보임) */}
+              <SafeImage
+                src={thumbUrl}
+                alt=""
+                className="pointer-events-none absolute inset-0 z-0 size-full object-cover saturate-[0.95]"
+                loading="lazy"
+                placeholderLabel={`「${post.title}」 목록 배경`}
+              />
+              <div
+                className="pointer-events-none absolute inset-0 z-1 bg-linear-to-r from-card/82 via-card/48 to-card/28 dark:from-card/85 dark:via-card/52 dark:to-card/32"
+                aria-hidden
+              />
+            </>
+          ) : sideMedia ? (
+            <div
+              className="pointer-events-none absolute inset-0 z-0 flex items-center justify-center bg-muted/35 text-muted-foreground/20 dark:bg-muted/25 dark:text-muted-foreground/15"
+              aria-hidden
+            >
+              <Video className="size-24" strokeWidth={1} />
+            </div>
+          ) : null}
+
+          <div className="relative z-10 min-h-[7.5rem] min-w-0">
             <Link
               to={`/posts/${post.id}`}
-              className={
-                sideMedia
-                  ? "flex h-full min-h-0 min-w-0 flex-col justify-center gap-1.5 px-4 py-3 sm:py-3.5"
-                  : "flex h-full min-h-[7.5rem] min-w-0 flex-col justify-center gap-1.5 px-4 py-3 pb-10 pr-14 sm:min-h-0 sm:py-3.5"
-              }
+              className="flex min-h-[7.5rem] min-w-0 flex-col justify-center gap-1.5 px-4 py-3 pb-10 pr-14 sm:py-3.5"
             >
               <h3 className="font-heading line-clamp-1 h-6 shrink-0 text-base font-semibold leading-6 text-foreground transition-colors group-hover/card:text-primary">
                 {post.title}
@@ -67,57 +82,10 @@ export function PostListItem({
                 {plainTextFromPostHtml(post.content)}
               </p>
             </Link>
-            {!sideMedia ? (
-              <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-end p-2">
-                <div className="pointer-events-auto">{likeButton}</div>
-              </div>
-            ) : null}
-          </div>
-          {sideMedia ? (
-            <div className="relative isolate h-28 min-h-28 w-full overflow-hidden border-border border-t sm:h-full sm:min-h-0 sm:w-full sm:border-t-0 sm:border-s max-sm:rounded-b-xl sm:rounded-e-xl sm:rounded-b-none">
-              <Link
-                to={`/posts/${post.id}`}
-                className="absolute inset-0 z-0 block overflow-hidden outline-none ring-inset ring-transparent transition-[box-shadow] focus-visible:ring-2 focus-visible:ring-ring"
-                aria-label={`${post.title} 상세 보기`}
-              >
-                {post.coverKind === "image" && post.coverThumbUrl ? (
-                  <SafeImage
-                    src={post.coverThumbUrl}
-                    alt=""
-                    className="absolute inset-0 size-full object-cover"
-                    loading="lazy"
-                    placeholderLabel={`「${post.title}」 대표 이미지`}
-                  />
-                ) : post.coverKind === "video" && post.coverThumbUrl ? (
-                  <>
-                    <SafeImage
-                      src={post.coverThumbUrl}
-                      alt=""
-                      className="absolute inset-0 size-full object-cover"
-                      loading="lazy"
-                      placeholderLabel={`「${post.title}」 동영상 썸네일`}
-                    />
-                    <div
-                      className="pointer-events-none absolute inset-0 flex items-center justify-center bg-black/25"
-                      aria-hidden
-                    >
-                      <span className="flex size-12 items-center justify-center rounded-full bg-black/55 shadow-md">
-                        <Play className="size-6 translate-x-0.5 text-white" fill="currentColor" aria-hidden />
-                      </span>
-                    </div>
-                  </>
-                ) : (
-                  <div className="absolute inset-0 flex flex-col items-center justify-center gap-1 bg-muted text-muted-foreground">
-                    <Video className="size-10 opacity-80" strokeWidth={1.25} aria-hidden />
-                    <span className="sr-only">미디어 첨부</span>
-                  </div>
-                )}
-              </Link>
-              <div className="pointer-events-none absolute inset-0 z-10 flex items-end justify-end p-2">
-                <div className="pointer-events-auto">{likeButton}</div>
-              </div>
+            <div className="pointer-events-none absolute inset-0 z-20 flex items-end justify-end p-2">
+              <div className="pointer-events-auto">{likeButton}</div>
             </div>
-          ) : null}
+          </div>
         </div>
       </Card>
     </li>

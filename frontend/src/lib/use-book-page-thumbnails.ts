@@ -7,23 +7,35 @@ import {
 
 const DEBOUNCE_MS = 320;
 
+type ThumbnailPageInput = BookSlideSnapshotPage & {
+  clientKey: string;
+  /** 생략 시 아래 `defaultSlideWidth`·`defaultSlideHeight` 사용(북마다 슬라이드 크기가 다를 때) */
+  slideWidth?: number;
+  slideHeight?: number;
+};
+
 /**
  * 각 슬라이드의 시각적 내용이 바뀌면(디바운스 후) PNG 데이터 URL 썸네일을 다시 만듭니다.
  * `clientKey`로 `Record` 키를 맞춥니다.
  */
 export function useBookPageThumbnails(
-  pages: Array<BookSlideSnapshotPage & { clientKey: string }>,
-  slideWidth: number,
-  slideHeight: number,
+  pages: ThumbnailPageInput[],
+  defaultSlideWidth: number,
+  defaultSlideHeight: number,
 ): Record<string, string> {
   const [thumbnails, setThumbnails] = useState<Record<string, string>>({});
   const sigRef = useRef<Record<string, string>>({});
 
   const captureKey = useMemo(
     () =>
-      `${slideWidth}x${slideHeight}:` +
-      pages.map((p) => `${p.clientKey}:${pageSnapshotSignature(p)}`).join("\n"),
-    [pages, slideWidth, slideHeight],
+      pages
+        .map((p) => {
+          const w = p.slideWidth ?? defaultSlideWidth;
+          const h = p.slideHeight ?? defaultSlideHeight;
+          return `${p.clientKey}:${w}x${h}:${pageSnapshotSignature(p)}`;
+        })
+        .join("\n"),
+    [pages, defaultSlideWidth, defaultSlideHeight],
   );
 
   useEffect(() => {
@@ -36,12 +48,14 @@ export function useBookPageThumbnails(
 
         for (const p of pages) {
           if (cancelled) return;
-          const fullSig = `${slideWidth}x${slideHeight}:${pageSnapshotSignature(p)}`;
+          const w = p.slideWidth ?? defaultSlideWidth;
+          const h = p.slideHeight ?? defaultSlideHeight;
+          const fullSig = `${w}x${h}:${pageSnapshotSignature(p)}`;
           if (sigRef.current[p.clientKey] === fullSig) continue;
 
           let url: string | null = null;
           try {
-            url = await captureBookSlideToDataURL(p, slideWidth, slideHeight);
+            url = await captureBookSlideToDataURL(p, w, h);
           } catch {
             url = null;
           }
@@ -67,7 +81,7 @@ export function useBookPageThumbnails(
       cancelled = true;
       window.clearTimeout(id);
     };
-  }, [captureKey, pages, slideWidth, slideHeight]);
+  }, [captureKey, pages, defaultSlideWidth, defaultSlideHeight]);
 
   return thumbnails;
 }

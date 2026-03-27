@@ -173,10 +173,20 @@ export function PostDetailPage() {
 
       {post.media?.length ? <PostMediaCarousel items={post.media} /> : null}
 
-      <div
-        className="post-body border-t border-border pt-6 text-sm leading-relaxed"
-        dangerouslySetInnerHTML={{ __html: postBodyHtmlForRender(post.content) }}
-      />
+      <section aria-label="글 본문" className="space-y-4">
+        <div className="flex items-center gap-3 pt-2">
+          <span className="shrink-0 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+            본문
+          </span>
+          <div className="h-px min-w-0 flex-1 bg-border" />
+        </div>
+        <div className="rounded-xl border border-border/90 bg-muted/25 p-5 shadow-sm ring-1 ring-black/[0.03] dark:border-border dark:bg-muted/20 dark:ring-white/[0.05] sm:p-7 md:p-8">
+          <div
+            className="post-body text-[15px] leading-[1.75] text-foreground sm:text-base sm:leading-relaxed"
+            dangerouslySetInnerHTML={{ __html: postBodyHtmlForRender(post.content) }}
+          />
+        </div>
+      </section>
 
       <PostCommentsSection postId={post.id} user={user} />
 

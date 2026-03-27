@@ -492,6 +492,14 @@ export type BookPageDto = {
   elements: BookCanvasElement[];
 };
 
+/** 북 목록 카드 — 첫 슬라이드 썸네일 합성용 */
+export type BookListCoverPreview = {
+  slideWidth: number;
+  slideHeight: number;
+  backgroundColor: string;
+  elements: BookCanvasElement[];
+};
+
 export type BookListItem = {
   id: number;
   title: string;
@@ -499,6 +507,7 @@ export type BookListItem = {
   updatedAt: string;
   author: PostAuthor;
   pageCount: number;
+  coverPreview: BookListCoverPreview | null;
 };
 
 export type BookDetail = {

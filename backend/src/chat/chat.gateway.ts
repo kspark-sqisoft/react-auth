@@ -11,6 +11,7 @@ import { Logger, OnModuleInit } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { Server, Socket } from 'socket.io';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import { parseJwtSubToUserId } from '../auth/jwt-sub.util';
 import { JWT_ACCESS_SECRET, corsOrigin } from '../env.constants';
 import { UsersService } from '../users/users.service';
 import { ChatMessage } from './chat-message.entity';
@@ -185,8 +186,14 @@ export class ChatGateway
       const payload = await this.jwt.verifyAsync<JwtPayload>(token, {
         secret: JWT_ACCESS_SECRET,
       });
+      const subId = parseJwtSubToUserId(payload.sub);
+      if (subId == null) {
+        client.emit('chatError', { message: '토큰이 유효하지 않습니다.' });
+        client.disconnect(true);
+        return;
+      }
       const data: ClientData = {
-        userId: payload.sub,
+        userId: subId,
         name: (payload.name?.trim() || payload.email || 'user').slice(0, 80),
       };
       (client.data as ClientData) = data;

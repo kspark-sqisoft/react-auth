@@ -587,9 +587,9 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
               <Button
                 type="button"
                 size="sm"
-                className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40"
+                className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
                 onClick={() => saveMutation.mutate()}
-                disabled={saveMutation.isPending || localPages.length === 0}
+                disabled={saveMutation.isPending}
               >
                 {saveMutation.isPending ? (
                   <Spinner className="mr-2 size-4 text-white" />
@@ -670,7 +670,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
             <Button
               type="button"
               size="sm"
-              className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40"
+              className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
               onClick={() => saveMutation.mutate()}
               disabled={saveMutation.isPending}
             >
@@ -937,7 +937,12 @@ export function BookDetailPage() {
     enabled: Number.isFinite(id) && id > 0,
   });
 
-  const canEdit = Boolean(user && data && user.sub === data.author.id);
+  /** JWT `sub`·API `author.id`가 숫자/문자열로 섞여도 소유자 판별 */
+  const canEdit = Boolean(
+    user &&
+      data &&
+      Number(user.sub) === Number(data.author.id),
+  );
 
   const sortedPagesView = useMemo(() => {
     if (!data?.pages) return [];

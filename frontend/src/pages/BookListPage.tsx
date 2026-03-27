@@ -1,10 +1,17 @@
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { Link, useSearchParams } from "react-router-dom";
-import { BookMarked, Plus, Search, X } from "lucide-react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useNavigate, useSearchParams } from "react-router-dom";
+import { Plus, Search, X } from "lucide-react";
+import { toast } from "sonner";
 import { useAuth } from "@/stores/auth-store";
-import { BOOK_PAGE_DEFAULT, fetchBooksPage } from "@/lib/api";
+import { BOOK_PAGE_DEFAULT, createBook, fetchBooksPage } from "@/lib/api";
+import {
+  DEFAULT_SLIDE_HEIGHT,
+  DEFAULT_SLIDE_WIDTH,
+} from "@/lib/book-canvas";
+import { useBookPageThumbnails } from "@/lib/use-book-page-thumbnails";
 import { bookKeys } from "@/lib/query-keys";
+import { BookListItem } from "@/components/books/BookListItem";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -12,6 +19,8 @@ import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
 
 export function BookListPage() {
   const { user } = useAuth();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlSearch = searchParams.get("search") ?? "";
   const [searchInput, setSearchInput] = useState(urlSearch);
@@ -29,12 +38,52 @@ export function BookListPage() {
       }),
   });
 
+  const createDefaultBook = useMutation({
+    mutationFn: () =>
+      createBook({
+        title: "제목 없음",
+        slideWidth: DEFAULT_SLIDE_WIDTH,
+        slideHeight: DEFAULT_SLIDE_HEIGHT,
+      }),
+    onSuccess: (res) => {
+      void queryClient.invalidateQueries({ queryKey: bookKeys.lists() });
+      void queryClient.setQueryData(bookKeys.detail(res.id), res);
+      void navigate(`/books/${res.id}`, { replace: true });
+    },
+    onError: (e: Error) => toast.error(e.message),
+  });
+
   const applySearch = () => {
     const q = searchInput.trim();
     setSearchQuery(q);
     if (q) setSearchParams({ search: q });
     else setSearchParams({});
   };
+
+  const items = data?.items ?? [];
+
+  const listThumbPages = useMemo(
+    () =>
+      items
+        .filter((b) => b.coverPreview)
+        .map((b) => {
+          const c = b.coverPreview!;
+          return {
+            clientKey: `book-list-${b.id}`,
+            backgroundColor: c.backgroundColor,
+            elements: c.elements,
+            slideWidth: c.slideWidth,
+            slideHeight: c.slideHeight,
+          };
+        }),
+    [items],
+  );
+
+  const listCoverThumbnails = useBookPageThumbnails(
+    listThumbPages,
+    DEFAULT_SLIDE_WIDTH,
+    DEFAULT_SLIDE_HEIGHT,
+  );
 
   return (
     <div className="space-y-6">
@@ -46,11 +95,17 @@ export function BookListPage() {
           </p>
         </div>
         {user ? (
-          <Button asChild>
-            <Link to="/books/new">
+          <Button
+            type="button"
+            disabled={createDefaultBook.isPending}
+            onClick={() => createDefaultBook.mutate()}
+          >
+            {createDefaultBook.isPending ? (
+              <Spinner className="mr-1.5 size-4" aria-hidden />
+            ) : (
               <Plus className="mr-1.5 size-4" aria-hidden />
-              새 북
-            </Link>
+            )}
+            새 북
           </Button>
         ) : null}
       </div>
@@ -97,28 +152,18 @@ export function BookListPage() {
         </div>
       ) : error ? (
         <FormErrorAlert message={(error as Error).message} />
-      ) : !(data?.items?.length ?? 0) ? (
+      ) : !items.length ? (
         <p className="rounded-lg border border-dashed border-border py-12 text-center text-sm text-muted-foreground">
           아직 북이 없습니다.
         </p>
       ) : (
-        <ul className="space-y-2">
-          {(data?.items ?? []).map((b) => (
-            <li key={b.id}>
-              <Link
-                to={`/books/${b.id}`}
-                className="flex items-center gap-3 rounded-lg border border-border bg-card/50 px-4 py-3 transition-colors hover:bg-muted/60"
-              >
-                <BookMarked className="size-5 shrink-0 text-primary" aria-hidden />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate font-medium">{b.title}</p>
-                  <p className="text-xs text-muted-foreground">
-                    {b.author.name} · 페이지 {b.pageCount} ·{" "}
-                    {new Date(b.updatedAt).toLocaleDateString()}
-                  </p>
-                </div>
-              </Link>
-            </li>
+        <ul className="space-y-3">
+          {items.map((b) => (
+            <BookListItem
+              key={b.id}
+              book={b}
+              coverThumbDataUrl={listCoverThumbnails[`book-list-${b.id}`]}
+            />
           ))}
         </ul>
       )}

@@ -419,8 +419,18 @@ export function BookEditorPage() {
         </div>
       }
       actions={
-        <Button type="button" size="sm" onClick={() => saveMutation.mutate()} disabled={saveMutation.isPending}>
-          {saveMutation.isPending ? <Spinner className="mr-2 size-4" /> : <Save className="mr-2 size-4" />}
+        <Button
+          type="button"
+          size="sm"
+          className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
+          onClick={() => saveMutation.mutate()}
+          disabled={saveMutation.isPending}
+        >
+          {saveMutation.isPending ? (
+            <Spinner className="mr-2 size-4 text-white" />
+          ) : (
+            <Save className="mr-2 size-4" />
+          )}
           저장
         </Button>
       }

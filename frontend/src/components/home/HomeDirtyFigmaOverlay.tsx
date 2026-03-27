@@ -13,7 +13,7 @@ function Underlay() {
     >
       <div className="flex w-full flex-row items-center justify-center">
         <p
-          className="h-[30px] flex-[1_1_0%] text-[30px] font-bold leading-[30px] tracking-[-2px]"
+          className="h-[30px] flex-[1_1_0%] text-[30px] font-bold leading-[30px] tracking-[1px]"
           style={antonio}
         >
           PARK KEESOON

@@ -458,6 +458,90 @@ export function sanitizePageBackgroundColor(raw: string): string {
   return s;
 }
 
+const BOOK_MEDIA_SRC_MAX = 500;
+
+/**
+ * 서버는 미디어 `src`·`posterSrc`가 `/uploads/...` 형태일 것을 요구합니다.
+ * 다른 오리진에서 연 경우 등 절대 URL이 들어와도 저장 전에 경로만 보냅니다.
+ */
+export function bookMediaSrcForApi(src: string, maxLen = BOOK_MEDIA_SRC_MAX): string {
+  const t = src.trim();
+  if (!t) return t;
+  const noQuery = t.includes("?") ? t.slice(0, t.indexOf("?")) : t;
+  const idx = noQuery.indexOf("/uploads/");
+  if (idx >= 0) {
+    return noQuery.slice(idx, idx + maxLen);
+  }
+  return t.slice(0, maxLen);
+}
+
+function finiteXY(x: unknown, y: unknown): { x: number; y: number } {
+  const nx = Number(x);
+  const ny = Number(y);
+  return {
+    x: Number.isFinite(nx) ? nx : 0,
+    y: Number.isFinite(ny) ? ny : 0,
+  };
+}
+
+function finiteWH(w: unknown, h: unknown, fallbackW: number, fallbackH: number) {
+  const nw = Number(w);
+  const nh = Number(h);
+  return {
+    width: Number.isFinite(nw) ? nw : fallbackW,
+    height: Number.isFinite(nh) ? nh : fallbackH,
+  };
+}
+
+/** POST/PATCH `pages[].elements` 직전: 숫자·경로 정규화로 서버 검증 실패를 줄임 */
+function normalizeBookElementsForSave(elements: BookCanvasElement[]): BookCanvasElement[] {
+  return elements.map((el) => {
+    const xy = finiteXY(el.x, el.y);
+    if (el.type === "image") {
+      const wh = finiteWH(el.width, el.height, 320, 180);
+      return { ...el, ...xy, ...wh, src: bookMediaSrcForApi(el.src) };
+    }
+    if (el.type === "video") {
+      const wh = finiteWH(el.width, el.height, 480, 270);
+      const ps = el.posterSrc;
+      return {
+        ...el,
+        ...xy,
+        ...wh,
+        src: bookMediaSrcForApi(el.src),
+        posterSrc:
+          ps != null && String(ps).trim() !== "" ? bookMediaSrcForApi(String(ps)) : ps,
+      };
+    }
+    if (el.type === "weather") {
+      const wh = finiteWH(
+        el.width,
+        el.height,
+        DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
+        DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
+      );
+      return { ...el, ...xy, ...wh };
+    }
+    if (el.type === "digitalClock") {
+      const wh = finiteWH(
+        el.width,
+        el.height,
+        DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
+        DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
+      );
+      return { ...el, ...xy, ...wh };
+    }
+    const fs = Number(el.fontSize);
+    const fontSize = Number.isFinite(fs) && fs >= 8 && fs <= 200 ? fs : 24;
+    const out: BookCanvasElement = { ...el, ...xy, type: "text", fontSize };
+    const w = el.width != null ? Number(el.width) : undefined;
+    const h = el.height != null ? Number(el.height) : undefined;
+    if (w != null && Number.isFinite(w)) out.width = w;
+    if (h != null && Number.isFinite(h)) out.height = h;
+    return out;
+  });
+}
+
 export function slideDisplayLabel(name: string | undefined | null, indexZero: number): string {
   const t = name?.trim();
   if (t) return t;
@@ -541,7 +625,7 @@ export function toBookPagePayloads(pages: BookEditorPageState[]) {
     backgroundColor: sanitizePageBackgroundColor(
       p.backgroundColor || DEFAULT_PAGE_BACKGROUND,
     ),
-    elements: p.elements,
+    elements: normalizeBookElementsForSave(p.elements),
   }));
 }
 
