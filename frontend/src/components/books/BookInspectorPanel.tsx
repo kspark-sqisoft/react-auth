@@ -3,9 +3,12 @@ import {
   BOOK_MEDIA_OBJECT_FIT_VALUES,
   type BookCanvasElement,
   type BookMediaObjectFit,
+  type BookWeatherDisplay,
+  type BookWeatherDisplayResolved,
   resolveBookElementOpacity,
   resolveBookElementRotation,
   resolveBookMediaObjectFit,
+  resolveBookWeatherDisplay,
 } from "@/lib/book-canvas";
 import {
   defaultTextWidgetBoxHeight,
@@ -15,6 +18,7 @@ import { BookTextRichEditor } from "@/components/books/BookTextRichEditor";
 import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -41,6 +45,35 @@ function num(v: string, fallback: number, min: number, max: number) {
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
+}
+
+const WEATHER_INSPECTOR_FIELDS: { key: keyof BookWeatherDisplayResolved; label: string }[] = [
+  { key: "temp", label: "기온" },
+  { key: "feelsLike", label: "체감 온도" },
+  { key: "description", label: "상태 설명" },
+  { key: "icon", label: "날씨 아이콘" },
+  { key: "humidity", label: "습도" },
+  { key: "wind", label: "바람" },
+  { key: "pm10", label: "미세먼지 (PM10)" },
+  { key: "pm25", label: "초미세먼지 (PM2.5)" },
+  { key: "aqi", label: "대기질 지수" },
+  { key: "clock", label: "시계" },
+  { key: "date", label: "날짜" },
+];
+
+function patchWeatherDisplay(
+  current: BookWeatherDisplay | undefined,
+  key: keyof BookWeatherDisplayResolved,
+  checked: boolean,
+): BookWeatherDisplay | undefined {
+  const next: BookWeatherDisplay = { ...current };
+  if (checked) {
+    delete next[key];
+  } else {
+    next[key] = false;
+  }
+  if (Object.keys(next).length === 0) return undefined;
+  return next;
 }
 
 const MEDIA_FIT_LABELS: Record<BookMediaObjectFit, string> = {
@@ -249,6 +282,66 @@ export function BookInspectorPanel({
                   }
                 />
               </div>
+              <PositionSizeFields el={selected} onChange={onChange} />
+            </>
+          ) : selected.type === "weather" ? (
+            <>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                OpenWeatherMap(지오코딩·날씨·대기질)을 사용합니다. 서버에{" "}
+                <code className="rounded bg-muted px-1 py-0.5 text-[10px]">OPENWEATHERMAP_API_KEY</code>가
+                필요합니다.
+              </p>
+              <div className="space-y-1">
+                <Label htmlFor="insp-weather-city">도시 / 지역</Label>
+                <Input
+                  id="insp-weather-city"
+                  placeholder="비우면 서울 · 예: Seoul,KR, Busan,KR"
+                  value={selected.cityQuery ?? ""}
+                  maxLength={120}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    onChange(selected.id, {
+                      cityQuery: v.trim() === "" ? undefined : v,
+                    });
+                  }}
+                />
+                <p className="text-[11px] text-muted-foreground">
+                  검색어 뒤에 국가 코드를 붙이면 더 정확합니다.
+                </p>
+              </div>
+              <div className="space-y-2">
+                <Label>표시 항목</Label>
+                <p className="text-[11px] text-muted-foreground">
+                  날씨만 남기면 큰 기온 카드, 대기 항목만 켜면 대기질 전용 톤으로 바뀝니다.
+                </p>
+                <div className="flex flex-col gap-2">
+                  {WEATHER_INSPECTOR_FIELDS.map(({ key, label }) => {
+                    const disp = resolveBookWeatherDisplay(selected.weatherDisplay);
+                    return (
+                      <label
+                        key={key}
+                        className="flex cursor-pointer items-center gap-2 text-sm leading-none"
+                      >
+                        <Checkbox
+                          checked={disp[key]}
+                          onCheckedChange={(c) => {
+                            const on = c === true;
+                            onChange(selected.id, {
+                              weatherDisplay: patchWeatherDisplay(selected.weatherDisplay, key, on),
+                            });
+                          }}
+                        />
+                        <span>{label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <ElementOpacitySlider
+                elementId={selected.id}
+                opacity={selected.opacity}
+                onChange={onChange}
+              />
               <PositionSizeFields el={selected} onChange={onChange} />
             </>
           ) : selected.type === "image" ? (

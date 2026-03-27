@@ -69,6 +69,18 @@ export type BookCanvasElementPublic =
       objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
       opacity?: number;
       rotation?: number;
+    }
+  | {
+      id: string;
+      type: 'weather';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      cityQuery?: string;
+      weatherDisplay?: Record<string, boolean>;
+      opacity?: number;
+      rotation?: number;
     };
 
 export type BookPagePublic = {
@@ -176,7 +188,12 @@ export class BooksService {
       if (typeof o.id !== 'string' || o.id.length > 80) {
         throw new BadRequestException('요소 id가 올바르지 않습니다.');
       }
-      if (o.type !== 'text' && o.type !== 'image' && o.type !== 'video') {
+      if (
+        o.type !== 'text' &&
+        o.type !== 'image' &&
+        o.type !== 'video' &&
+        o.type !== 'weather'
+      ) {
         throw new BadRequestException('지원하지 않는 요소 타입입니다.');
       }
       const x = o.x;
@@ -220,6 +237,63 @@ export class BooksService {
             o.height > 4000
           ) {
             throw new BadRequestException('텍스트 height가 올바르지 않습니다.');
+          }
+        }
+      } else if (o.type === 'weather') {
+        const w = o.width;
+        const h = o.height;
+        if (
+          typeof w !== 'number' ||
+          typeof h !== 'number' ||
+          w < 24 ||
+          h < 24 ||
+          w > 4000 ||
+          h > 4000
+        ) {
+          throw new BadRequestException('날씨 위젯 크기가 올바르지 않습니다.');
+        }
+        if (o.cityQuery != null) {
+          if (typeof o.cityQuery !== 'string' || o.cityQuery.length > 120) {
+            throw new BadRequestException(
+              '날씨 도시 검색어가 올바르지 않습니다.',
+            );
+          }
+        }
+        if (o.weatherDisplay != null) {
+          if (
+            typeof o.weatherDisplay !== 'object' ||
+            Array.isArray(o.weatherDisplay)
+          ) {
+            throw new BadRequestException(
+              'weatherDisplay 형식이 올바르지 않습니다.',
+            );
+          }
+          const allowed = new Set([
+            'temp',
+            'feelsLike',
+            'description',
+            'icon',
+            'humidity',
+            'wind',
+            'pm25',
+            'pm10',
+            'aqi',
+            'clock',
+            'date',
+          ]);
+          for (const [k, v] of Object.entries(
+            o.weatherDisplay as Record<string, unknown>,
+          )) {
+            if (!allowed.has(k)) {
+              throw new BadRequestException(
+                'weatherDisplay에 허용되지 않는 키입니다.',
+              );
+            }
+            if (typeof v !== 'boolean') {
+              throw new BadRequestException(
+                'weatherDisplay 값은 true/false만 가능합니다.',
+              );
+            }
           }
         }
       } else {

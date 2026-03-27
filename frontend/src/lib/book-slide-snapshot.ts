@@ -303,7 +303,7 @@ export async function captureBookSlideToDataURL(
             }),
           );
         }
-      } else {
+      } else if (el.type === "video") {
         const thumb = await resolveVideoThumbnailImage(el);
         if (thumb) {
           const L = computeKonvaFittedImageLayout(
@@ -368,6 +368,54 @@ export async function captureBookSlideToDataURL(
             }),
           );
         }
+      } else if (el.type === "weather") {
+        const ww = sx(el.width);
+        const wh = sx(el.height);
+        const wp = bookElementPivotKonva({
+          x: sx(el.x),
+          y: sx(el.y),
+          width: ww,
+          height: wh,
+          rotation: el.rotation,
+        });
+        const thumbLabel =
+          typeof el.cityQuery === "string" && el.cityQuery.trim()
+            ? el.cityQuery.trim().slice(0, 20)
+            : "날씨";
+        layer.add(
+          new Konva.Rect({
+            x: wp.cx,
+            y: wp.cy,
+            offsetX: wp.offsetX,
+            offsetY: wp.offsetY,
+            width: ww,
+            height: wh,
+            rotation: wp.rotation,
+            fill: "#e0f2fe",
+            stroke: "#38bdf8",
+            strokeWidth: Math.max(0.5, scale),
+            cornerRadius: Math.max(2, 4 * scale),
+            opacity: elOp,
+          }),
+        );
+        layer.add(
+          new Konva.Text({
+            x: wp.cx,
+            y: wp.cy,
+            offsetX: wp.offsetX,
+            offsetY: wp.offsetY,
+            width: ww,
+            height: wh,
+            rotation: wp.rotation,
+            text: thumbLabel,
+            fontSize: Math.max(7, 11 * scale),
+            fontFamily: "Geist Variable, ui-sans-serif, system-ui, sans-serif",
+            fill: "#0369a1",
+            align: "center",
+            verticalAlign: "middle",
+            opacity: elOp,
+          }),
+        );
       }
     }
 

@@ -133,7 +133,83 @@ export type BookCanvasElement =
       objectFit?: BookMediaObjectFit;
       opacity?: number;
       rotation?: number;
+    }
+  | {
+      id: string;
+      type: "weather";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      /** OpenWeather Geocoding 쿼리. 비우면 서울. 예: `Seoul,KR` */
+      cityQuery?: string;
+      /** 항목별 표시. `false`만 숨김, 생략·undefined는 표시(기본). */
+      weatherDisplay?: BookWeatherDisplay;
+      opacity?: number;
+      rotation?: number;
     };
+
+/** 날씨 위젯 표시 플래그(저장용). `false` = 숨김. */
+export type BookWeatherDisplay = Partial<{
+  temp: boolean;
+  feelsLike: boolean;
+  description: boolean;
+  icon: boolean;
+  humidity: boolean;
+  wind: boolean;
+  pm25: boolean;
+  pm10: boolean;
+  aqi: boolean;
+  clock: boolean;
+  date: boolean;
+}>;
+
+export type BookWeatherDisplayResolved = {
+  temp: boolean;
+  feelsLike: boolean;
+  description: boolean;
+  icon: boolean;
+  humidity: boolean;
+  wind: boolean;
+  pm25: boolean;
+  pm10: boolean;
+  aqi: boolean;
+  clock: boolean;
+  date: boolean;
+};
+
+/** 모두 끄면 기본(전체 표시)으로 되돌립니다. */
+export function resolveBookWeatherDisplay(raw?: BookWeatherDisplay | null): BookWeatherDisplayResolved {
+  const out: BookWeatherDisplayResolved = {
+    temp: raw?.temp !== false,
+    feelsLike: raw?.feelsLike !== false,
+    description: raw?.description !== false,
+    icon: raw?.icon !== false,
+    humidity: raw?.humidity !== false,
+    wind: raw?.wind !== false,
+    pm25: raw?.pm25 !== false,
+    pm10: raw?.pm10 !== false,
+    aqi: raw?.aqi !== false,
+    clock: raw?.clock !== false,
+    date: raw?.date !== false,
+  };
+  if (!Object.values(out).some(Boolean)) {
+    return {
+      temp: true,
+      feelsLike: true,
+      description: true,
+      icon: true,
+      humidity: true,
+      wind: true,
+      pm25: true,
+      pm10: true,
+      aqi: true,
+      clock: true,
+      date: true,
+    };
+  }
+  return out;
+}
 
 export type BookEditorPageState = {
   /** 목록 key·드래그 식별(서버 페이지는 보통 `srv-{id}`) */
@@ -148,6 +224,10 @@ export type BookEditorPageState = {
 
 export const DEFAULT_SLIDE_WIDTH = 960;
 export const DEFAULT_SLIDE_HEIGHT = 540;
+
+/** 날씨 위젯 기본 프레임(px) — 가로 카드 비율 */
+export const DEFAULT_BOOK_WEATHER_WIDGET_WIDTH = 340;
+export const DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT = 156;
 export const DEFAULT_PAGE_BACKGROUND = "#ffffff";
 
 const PAGE_BG_MAX_LEN = 64;
@@ -198,6 +278,14 @@ export function duplicateBookEditorPage(page: BookEditorPageState): BookEditorPa
     }
     if (el.type === "image") {
       return { ...el, id };
+    }
+    if (el.type === "weather") {
+      return {
+        ...el,
+        id,
+        ...(el.cityQuery !== undefined ? { cityQuery: el.cityQuery } : {}),
+        ...(el.weatherDisplay !== undefined ? { weatherDisplay: { ...el.weatherDisplay } } : {}),
+      };
     }
     return { ...el, id };
   });
@@ -306,6 +394,34 @@ function parseElementRotation(raw: unknown): number | undefined {
   return v === DEFAULT_BOOK_ELEMENT_ROTATION ? undefined : v;
 }
 
+const WEATHER_DISPLAY_KEYS = [
+  "temp",
+  "feelsLike",
+  "description",
+  "icon",
+  "humidity",
+  "wind",
+  "pm25",
+  "pm10",
+  "aqi",
+  "clock",
+  "date",
+] as const;
+
+function parseBookWeatherDisplay(raw: unknown): BookWeatherDisplay | undefined {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const out: BookWeatherDisplay = {};
+  let any = false;
+  for (const k of WEATHER_DISPLAY_KEYS) {
+    if (k in o && typeof o[k] === "boolean") {
+      (out as Record<string, boolean>)[k] = o[k] as boolean;
+      any = true;
+    }
+  }
+  return any ? out : undefined;
+}
+
 export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
   const out: BookCanvasElement[] = [];
   for (const el of raw) {
@@ -362,6 +478,24 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
             ? o.posterSrc
             : null,
         ...(objectFit ? { objectFit } : {}),
+        ...(opacity !== undefined ? { opacity } : {}),
+        ...(rotation !== undefined ? { rotation } : {}),
+      });
+    } else if (o.type === "weather") {
+      const cityQuery =
+        typeof o.cityQuery === "string" && o.cityQuery.trim().length > 0
+          ? o.cityQuery.trim().slice(0, 120)
+          : undefined;
+      const wd = parseBookWeatherDisplay(o.weatherDisplay);
+      out.push({
+        id: o.id,
+        type: "weather",
+        x: Number(o.x) || 0,
+        y: Number(o.y) || 0,
+        width: Number(o.width) || DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
+        height: Number(o.height) || DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
+        ...(cityQuery !== undefined ? { cityQuery } : {}),
+        ...(wd !== undefined ? { weatherDisplay: wd } : {}),
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
       });

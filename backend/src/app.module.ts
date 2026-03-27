@@ -7,6 +7,7 @@ import { AuthModule } from './auth/auth.module';
 import { DATABASE_PATH } from './env.constants';
 import { ChatModule } from './chat/chat.module';
 import { BooksModule } from './books/books.module';
+import { WeatherModule } from './weather/weather.module';
 import { PostsModule } from './posts/posts.module';
 import { UsersModule } from './users/users.module';
 
@@ -24,6 +25,7 @@ import { UsersModule } from './users/users.module';
     PostsModule,
     BooksModule,
     ChatModule,
+    WeatherModule,
   ],
   controllers: [AppController],
   providers: [AppService],

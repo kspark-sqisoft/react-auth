@@ -7,6 +7,8 @@ import { createBook, type BookCanvasElement } from "@/lib/api";
 import {
   applyAutoSlideNamesByIndex,
   createEmptyEditorPage,
+  DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
+  DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
   DEFAULT_PAGE_BACKGROUND,
   DEFAULT_SLIDE_HEIGHT,
   DEFAULT_SLIDE_WIDTH,
@@ -35,6 +37,15 @@ import {
 } from "@/components/books/BookSlideCanvas";
 import { BookWidgetPalette } from "@/components/books/BookWidgetPalette";
 import { BookWorkspaceShell } from "@/components/books/BookWorkspaceShell";
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
@@ -59,6 +70,8 @@ export function BookEditorPage() {
   const canvasWrapRef = useRef<HTMLDivElement>(null);
   const [slideWidth, setSlideWidth] = useState(DEFAULT_SLIDE_WIDTH);
   const [slideHeight, setSlideHeight] = useState(DEFAULT_SLIDE_HEIGHT);
+  const [widgetDeleteOpen, setWidgetDeleteOpen] = useState(false);
+  const [widgetDeleteId, setWidgetDeleteId] = useState<string | null>(null);
 
   const maxPageIdx = Math.max(0, pages.length - 1);
   const activePageIndex = Math.min(pageIndex, maxPageIdx);
@@ -89,6 +102,14 @@ export function BookEditorPage() {
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t.closest("input, textarea, [contenteditable=true]")) return;
+      if (
+        t.closest(
+          '[data-slot="select-content"], [data-slot="combobox-content"], [data-slot="combobox-list"]',
+        )
+      ) {
+        return;
+      }
+      if (widgetDeleteOpen) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         if (canUndo) undo();
@@ -98,11 +119,18 @@ export function BookEditorPage() {
       ) {
         e.preventDefault();
         if (canRedo) redo();
+      } else if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        canvasSelectedId
+      ) {
+        e.preventDefault();
+        setWidgetDeleteId(canvasSelectedId);
+        setWidgetDeleteOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canUndo, canRedo, undo, redo]);
+  }, [canUndo, canRedo, undo, redo, canvasSelectedId, widgetDeleteOpen]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -189,15 +217,39 @@ export function BookEditorPage() {
     [activePageIndex, updatePages],
   );
 
+  const addWeatherAt = useCallback(
+    (x: number, y: number) => {
+      const id = crypto.randomUUID();
+      const el: BookCanvasElement = {
+        id,
+        type: "weather",
+        x,
+        y,
+        width: DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
+        height: DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
+      };
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.elements.push(el);
+      });
+      setSelectedId(id);
+    },
+    [activePageIndex, updatePages],
+  );
+
   const onDropWidget = useCallback(
     (point: { x: number; y: number }, kind: BookDropWidgetKind) => {
       if (kind === "text") {
         addTextAt(point.x, point.y);
         return;
       }
+      if (kind === "weather") {
+        addWeatherAt(point.x, point.y);
+        return;
+      }
       toast.error("저장한 뒤 열린 북 화면에서 이미지·동영상 위젯을 넣을 수 있습니다.");
     },
-    [addTextAt],
+    [addTextAt, addWeatherAt],
   );
 
   const removeElementById = useCallback(
@@ -212,9 +264,20 @@ export function BookEditorPage() {
     [activePageIndex, updatePages],
   );
 
+  const requestRemoveWidget = useCallback((elementId: string) => {
+    setWidgetDeleteId(elementId);
+    setWidgetDeleteOpen(true);
+  }, []);
+
+  const confirmRemoveWidget = useCallback(() => {
+    if (widgetDeleteId) removeElementById(widgetDeleteId);
+    setWidgetDeleteOpen(false);
+    setWidgetDeleteId(null);
+  }, [widgetDeleteId, removeElementById]);
+
   const removeSelected = () => {
     if (!canvasSelectedId) return;
-    removeElementById(canvasSelectedId);
+    requestRemoveWidget(canvasSelectedId);
   };
 
   const addPage = () => {
@@ -273,6 +336,17 @@ export function BookEditorPage() {
     return currentPage.elements.find((e) => e.id === canvasSelectedId) ?? null;
   }, [canvasSelectedId, currentPage]);
 
+  const widgetDeleteKindLabel = useMemo(() => {
+    if (!widgetDeleteId || !currentPage) return "위젯";
+    const el = currentPage.elements.find((e) => e.id === widgetDeleteId);
+    if (!el) return "위젯";
+    if (el.type === "text") return "텍스트 위젯";
+    if (el.type === "image") return "이미지 위젯";
+    if (el.type === "video") return "동영상 위젯";
+    if (el.type === "weather") return "날씨 위젯";
+    return "위젯";
+  }, [widgetDeleteId, currentPage]);
+
   const mediaHint = useMemo(
     () => "저장하면 북이 만들어지고, 그 화면에서 이미지·동영상 위젯을 쓸 수 있습니다.",
     [],
@@ -297,6 +371,7 @@ export function BookEditorPage() {
   );
 
   return (
+    <>
     <BookWorkspaceShell
       titleArea={
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
@@ -382,7 +457,7 @@ export function BookEditorPage() {
                   onElementChange={onElementChange}
                   onDropWidget={onDropWidget}
                   onReorderZ={onReorderZ}
-                  onDeleteElement={removeElementById}
+                  onDeleteElement={requestRemoveWidget}
                 />
               ) : null}
             </div>
@@ -414,5 +489,29 @@ export function BookEditorPage() {
         ) : null
       }
     />
+    <AlertDialog
+      open={widgetDeleteOpen}
+      onOpenChange={(open) => {
+        setWidgetDeleteOpen(open);
+        if (!open) setWidgetDeleteId(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>위젯을 삭제할까요?</AlertDialogTitle>
+          <AlertDialogDescription>
+            이 슬라이드에서 「{widgetDeleteKindLabel}」을(를) 제거합니다. 실행 후에는 되돌리기(Ctrl+Z)로 복구할 수
+            있습니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel type="button">취소</AlertDialogCancel>
+          <Button type="button" variant="destructive" onClick={() => confirmRemoveWidget()}>
+            삭제
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+    </>
   );
 }

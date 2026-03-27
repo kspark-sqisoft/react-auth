@@ -44,6 +44,11 @@ export default defineConfig({
         changeOrigin: true,
         bypass: spaHtmlBypass,
       },
+      "/weather": {
+        target: "http://localhost:3000",
+        changeOrigin: true,
+        bypass: spaHtmlBypass,
+      },
       "/uploads": {
         target: "http://localhost:3000",
         changeOrigin: true,

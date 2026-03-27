@@ -23,6 +23,8 @@ import {
 import {
   applyAutoSlideNamesByIndex,
   createEmptyEditorPage,
+  DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
+  DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
   DEFAULT_PAGE_BACKGROUND,
   DEFAULT_SLIDE_HEIGHT,
   DEFAULT_SLIDE_WIDTH,
@@ -108,6 +110,8 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   const pendingPlacementRef = useRef<{ x: number; y: number } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [widgetDeleteOpen, setWidgetDeleteOpen] = useState(false);
+  const [widgetDeleteId, setWidgetDeleteId] = useState<string | null>(null);
   const [slideWidth, setSlideWidth] = useState(
     () => serverBook.slideWidth ?? DEFAULT_SLIDE_WIDTH,
   );
@@ -144,6 +148,14 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement;
       if (t.closest("input, textarea, [contenteditable=true]")) return;
+      if (
+        t.closest(
+          '[data-slot="select-content"], [data-slot="combobox-content"], [data-slot="combobox-list"]',
+        )
+      ) {
+        return;
+      }
+      if (widgetDeleteOpen) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         if (canUndo) undo();
@@ -153,11 +165,18 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       ) {
         e.preventDefault();
         if (canRedo) redo();
+      } else if (
+        (e.key === "Delete" || e.key === "Backspace") &&
+        canvasSelectedId
+      ) {
+        e.preventDefault();
+        setWidgetDeleteId(canvasSelectedId);
+        setWidgetDeleteOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canUndo, canRedo, undo, redo]);
+  }, [canUndo, canRedo, undo, redo, canvasSelectedId, widgetDeleteOpen]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -282,6 +301,26 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     [activePageIndex, updatePages],
   );
 
+  const addWeatherAt = useCallback(
+    (x: number, y: number) => {
+      const id = crypto.randomUUID();
+      const el: BookCanvasElement = {
+        id,
+        type: "weather",
+        x,
+        y,
+        width: DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
+        height: DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
+      };
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.elements.push(el);
+      });
+      setSelectedId(id);
+    },
+    [activePageIndex, updatePages],
+  );
+
   const handleMediaFile = async (file: File, kind: "image" | "video") => {
     setUploadError(null);
     const pos = pendingPlacementRef.current ?? { x: 100, y: 100 };
@@ -337,6 +376,10 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         addTextAt(point.x, point.y);
         return;
       }
+      if (kind === "weather") {
+        addWeatherAt(point.x, point.y);
+        return;
+      }
       pendingPlacementRef.current = point;
       pendingMediaKindRef.current = kind;
       if (kind === "image") {
@@ -345,7 +388,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         videoInputRef.current?.click();
       }
     },
-    [addTextAt],
+    [addTextAt, addWeatherAt],
   );
 
   const addPage = useCallback(() => {
@@ -397,10 +440,21 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     [activePageIndex, updatePages],
   );
 
+  const requestRemoveWidget = useCallback((elementId: string) => {
+    setWidgetDeleteId(elementId);
+    setWidgetDeleteOpen(true);
+  }, []);
+
+  const confirmRemoveWidget = useCallback(() => {
+    if (widgetDeleteId) removeElementById(widgetDeleteId);
+    setWidgetDeleteOpen(false);
+    setWidgetDeleteId(null);
+  }, [widgetDeleteId, removeElementById]);
+
   const removeSelected = useCallback(() => {
     if (!canvasSelectedId) return;
-    removeElementById(canvasSelectedId);
-  }, [canvasSelectedId, removeElementById]);
+    requestRemoveWidget(canvasSelectedId);
+  }, [canvasSelectedId, requestRemoveWidget]);
 
   const reorderPages = useCallback(
     (from: number, to: number) => {
@@ -421,7 +475,44 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     return activePage.elements.find((e) => e.id === canvasSelectedId) ?? null;
   }, [canvasSelectedId, activePage]);
 
+  const widgetDeleteKindLabel = useMemo(() => {
+    if (!widgetDeleteId || !activePage) return "위젯";
+    const el = activePage.elements.find((e) => e.id === widgetDeleteId);
+    if (!el) return "위젯";
+    if (el.type === "text") return "텍스트 위젯";
+    if (el.type === "image") return "이미지 위젯";
+    if (el.type === "video") return "동영상 위젯";
+    if (el.type === "weather") return "날씨 위젯";
+    return "위젯";
+  }, [widgetDeleteId, activePage]);
+
   const mediaHint = useMemo(() => uploadError, [uploadError]);
+
+  const widgetDeleteDialog = (
+    <AlertDialog
+      open={widgetDeleteOpen}
+      onOpenChange={(open) => {
+        setWidgetDeleteOpen(open);
+        if (!open) setWidgetDeleteId(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>위젯을 삭제할까요?</AlertDialogTitle>
+          <AlertDialogDescription>
+            이 슬라이드에서 「{widgetDeleteKindLabel}」을(를) 제거합니다. 실행 후에는 되돌리기(Ctrl+Z)로 복구할 수
+            있습니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel type="button">취소</AlertDialogCancel>
+          <Button type="button" variant="destructive" onClick={() => confirmRemoveWidget()}>
+            삭제
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
 
   const pageLabels = useMemo(() => localPages.map((p) => p.name), [localPages]);
   const pageKeys = useMemo(() => localPages.map((p) => p.clientKey), [localPages]);
@@ -443,6 +534,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
 
   if (localPages.length === 0) {
     return (
+      <>
       <BookWorkspaceShell
         titleArea={
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
@@ -519,10 +611,13 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
           </aside>
         }
       />
+      {widgetDeleteDialog}
+      </>
     );
   }
 
   return (
+    <>
     <BookWorkspaceShell
       titleArea={
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
@@ -632,7 +727,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 onElementChange={onElementChange}
                 onDropWidget={onDropWidget}
                 onReorderZ={onReorderZ}
-                onDeleteElement={removeElementById}
+                onDeleteElement={requestRemoveWidget}
               />
             </div>
           </div>
@@ -689,6 +784,8 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         )
       }
     />
+    {widgetDeleteDialog}
+    </>
   );
 }
 

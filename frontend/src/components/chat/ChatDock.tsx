@@ -374,7 +374,7 @@ export function ChatDock() {
   const badgeText = unread > 9 ? "9+" : String(unread);
 
   return (
-    <div className="pointer-events-none fixed end-3 top-[max(0.75rem,env(safe-area-inset-top,0px))] bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] z-50 flex min-h-0 flex-col sm:end-6 sm:top-[max(1.5rem,env(safe-area-inset-top,0px))] sm:bottom-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
+    <div className="pointer-events-none fixed end-3 top-[max(0.75rem,env(safe-area-inset-top,0px))] bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] z-[240] flex min-h-0 flex-col sm:end-6 sm:top-[max(1.5rem,env(safe-area-inset-top,0px))] sm:bottom-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
       <div className="pointer-events-auto flex min-h-0 flex-1 flex-col items-end justify-end gap-3">
         {open ? (
           <div

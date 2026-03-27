@@ -7,13 +7,24 @@ import {
   type DragEvent,
   type PointerEvent as ReactPointerEvent,
 } from "react";
-import { Blocks, ChevronDown, ChevronUp, GripVertical, ImagePlus, Type, Video } from "lucide-react";
+import {
+  Blocks,
+  ChevronDown,
+  ChevronUp,
+  CloudSun,
+  GripVertical,
+  ImagePlus,
+  Type,
+  Video,
+  type LucideIcon,
+} from "lucide-react";
 import { BOOK_WIDGET_DRAG_TYPE, type BookDropWidgetKind } from "@/components/books/BookSlideCanvas";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
-const ITEMS: { kind: BookDropWidgetKind; label: string; icon: typeof Type }[] = [
+const ITEMS: { kind: BookDropWidgetKind; label: string; icon: LucideIcon }[] = [
   { kind: "text", label: "텍스트", icon: Type },
+  { kind: "weather", label: "날씨", icon: CloudSun },
   { kind: "image", label: "이미지", icon: ImagePlus },
   { kind: "video", label: "동영상", icon: Video },
 ];
@@ -187,7 +198,7 @@ export function BookWidgetPalette({ className }: { className?: string }) {
       className={cn(
         "pointer-events-auto fixed z-[220] flex flex-col rounded-xl border shadow-lg backdrop-blur-md",
         collapsed
-          ? "w-max max-w-[calc(100vw-2rem)] gap-0 border-red-200/90 bg-red-50/98 px-2 py-1.5 ring-1 ring-red-200/40 dark:border-red-400/50 dark:bg-red-500/20 dark:ring-red-400/25"
+          ? "w-max max-w-[calc(100vw-2rem)] gap-0 border-sky-200/90 bg-sky-50/98 px-2 py-1.5 ring-1 ring-sky-200/45 dark:border-sky-500/40 dark:bg-sky-950/55 dark:ring-sky-400/30"
           : "w-[min(100vw-2rem,22rem)] max-w-[calc(100vw-2rem)] gap-2 border-border bg-card/95 p-2.5 ring-1 ring-border/40",
         className,
       )}

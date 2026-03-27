@@ -444,6 +444,40 @@ export async function deletePost(id: number): Promise<void> {
   }
 }
 
+// --- Weather (OpenWeatherMap, 서울 — API 키는 백엔드) ---
+
+export type SeoulWeatherPayload = {
+  locationLabel: string;
+  tempC: number;
+  feelsLikeC: number;
+  description: string;
+  icon: string;
+  humidity: number;
+  windMps: number;
+  pm25: number | null;
+  pm10: number | null;
+  aqiLevel: number | null;
+  aqiLabel: string | null;
+  updatedAt: string;
+};
+
+/** `q` 비우면 서울. 예: `Seoul,KR`, `Busan,KR` */
+export async function fetchWeatherCurrent(q?: string | null): Promise<SeoulWeatherPayload> {
+  try {
+    const trimmed = q?.trim();
+    const { data } = await api.get<SeoulWeatherPayload>("/weather/current", {
+      params: trimmed ? { q: trimmed } : {},
+    });
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+export async function fetchSeoulWeather(): Promise<SeoulWeatherPayload> {
+  return fetchWeatherCurrent(null);
+}
+
 // --- Books (슬라이드 / Konva) ---
 
 export type { BookCanvasElement } from "@/lib/book-canvas";
