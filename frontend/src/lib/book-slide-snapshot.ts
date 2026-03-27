@@ -3,8 +3,17 @@ import { publicAssetUrl } from "@/lib/api";
 import type { BookCanvasElement } from "@/lib/book-canvas";
 import {
   bookElementPivotKonva,
+  bookWidgetBackdropAlphaFromCss,
+  canvasRoundRectPath,
   DEFAULT_PAGE_BACKGROUND,
+  parseBookClockBackground,
+  parseBookWeatherBackground,
+  parseBookWidgetTextColor,
+  resolveBookDigitalClockDisplay,
+  resolveBookElementBorderRadius,
   resolveBookElementOpacity,
+  resolveBookElementOutlineColor,
+  resolveBookElementOutlineWidth,
 } from "@/lib/book-canvas";
 import { computeKonvaFittedImageLayout } from "@/lib/book-media-layout";
 import { getTextWidgetDisplayHtml, richHtmlToPlainText, textWidgetHitHeight } from "@/lib/book-text-widget";
@@ -230,13 +239,24 @@ export async function captureBookSlideToDataURL(
         });
         const plain =
           richHtmlToPlainText(getTextWidgetDisplayHtml(el)) || el.text || " ";
-        layer.add(
+        const tBr = sx(resolveBookElementBorderRadius(el));
+        const tOw = resolveBookElementOutlineWidth(el);
+        const tOc = resolveBookElementOutlineColor(el);
+        const tg = new Konva.Group({
+          x: tPivot.cx,
+          y: tPivot.cy,
+          offsetX: tPivot.offsetX,
+          offsetY: tPivot.offsetY,
+          rotation: tPivot.rotation,
+          opacity: elOp,
+          clipFunc: (ctx) => {
+            canvasRoundRectPath(ctx as never, 0, 0, tw, th, tBr);
+          },
+        });
+        tg.add(
           new Konva.Text({
-            x: tPivot.cx,
-            y: tPivot.cy,
-            offsetX: tPivot.offsetX,
-            offsetY: tPivot.offsetY,
-            rotation: tPivot.rotation,
+            x: 0,
+            y: 0,
             width: tw,
             height: th,
             text: plain,
@@ -246,9 +266,23 @@ export async function captureBookSlideToDataURL(
             lineHeight: 1.35,
             wrap: "word",
             ellipsis: true,
-            opacity: elOp,
           }),
         );
+        if (tOw > 0) {
+          tg.add(
+            new Konva.Rect({
+              x: 0,
+              y: 0,
+              width: tw,
+              height: th,
+              cornerRadius: tBr,
+              fillEnabled: false,
+              stroke: tOc,
+              strokeWidth: Math.max(0.5, sx(tOw)),
+            }),
+          );
+        }
+        layer.add(tg);
       } else if (el.type === "image") {
         const img = await loadImageForSnapshot(el.src);
         if (img) {
@@ -268,6 +302,9 @@ export async function captureBookSlideToDataURL(
             height: ih,
             rotation: el.rotation,
           });
+          const imgBr = sx(resolveBookElementBorderRadius(el));
+          const imgOw = resolveBookElementOutlineWidth(el);
+          const imgOc = resolveBookElementOutlineColor(el);
           const g = new Konva.Group({
             x: imgPivot.cx,
             y: imgPivot.cy,
@@ -276,7 +313,7 @@ export async function captureBookSlideToDataURL(
             rotation: imgPivot.rotation,
             opacity: elOp,
             clipFunc: (ctx) => {
-              ctx.rect(0, 0, iw, ih);
+              canvasRoundRectPath(ctx as never, 0, 0, iw, ih, imgBr);
             },
           });
           const ki = new Konva.Image({
@@ -288,17 +325,47 @@ export async function captureBookSlideToDataURL(
           });
           if (L.crop) ki.crop(L.crop);
           g.add(ki);
+          if (imgOw > 0) {
+            g.add(
+              new Konva.Rect({
+                x: 0,
+                y: 0,
+                width: iw,
+                height: ih,
+                cornerRadius: imgBr,
+                fillEnabled: false,
+                stroke: imgOc,
+                strokeWidth: Math.max(0.5, sx(imgOw)),
+              }),
+            );
+          }
           layer.add(g);
         } else {
+          const iw = sx(el.width);
+          const ih = sx(el.height);
+          const ip = bookElementPivotKonva({
+            x: sx(el.x),
+            y: sx(el.y),
+            width: iw,
+            height: ih,
+            rotation: el.rotation,
+          });
+          const fbBr = sx(resolveBookElementBorderRadius(el));
+          const fbOw = resolveBookElementOutlineWidth(el);
+          const fbOc = resolveBookElementOutlineColor(el);
           layer.add(
             new Konva.Rect({
-              x: sx(el.x),
-              y: sx(el.y),
-              width: sx(el.width),
-              height: sx(el.height),
+              x: ip.cx,
+              y: ip.cy,
+              offsetX: ip.offsetX,
+              offsetY: ip.offsetY,
+              width: iw,
+              height: ih,
+              rotation: ip.rotation,
+              cornerRadius: fbBr,
               fill: "#e5e7eb",
-              stroke: "#94a3b8",
-              strokeWidth: Math.max(0.5, scale),
+              stroke: fbOw > 0 ? fbOc : "#94a3b8",
+              strokeWidth: fbOw > 0 ? Math.max(0.5, sx(fbOw)) : Math.max(0.5, scale),
               opacity: elOp,
             }),
           );
@@ -322,6 +389,9 @@ export async function captureBookSlideToDataURL(
             height: vh,
             rotation: el.rotation,
           });
+          const vidBr = sx(resolveBookElementBorderRadius(el));
+          const vidOw = resolveBookElementOutlineWidth(el);
+          const vidOc = resolveBookElementOutlineColor(el);
           const g = new Konva.Group({
             x: vidPivot.cx,
             y: vidPivot.cy,
@@ -330,7 +400,7 @@ export async function captureBookSlideToDataURL(
             rotation: vidPivot.rotation,
             opacity: elOp,
             clipFunc: (ctx) => {
-              ctx.rect(0, 0, vw, vh);
+              canvasRoundRectPath(ctx as never, 0, 0, vw, vh, vidBr);
             },
           });
           const ki = new Konva.Image({
@@ -342,6 +412,20 @@ export async function captureBookSlideToDataURL(
           });
           if (L.crop) ki.crop(L.crop);
           g.add(ki);
+          if (vidOw > 0) {
+            g.add(
+              new Konva.Rect({
+                x: 0,
+                y: 0,
+                width: vw,
+                height: vh,
+                cornerRadius: vidBr,
+                fillEnabled: false,
+                stroke: vidOc,
+                strokeWidth: Math.max(0.5, sx(vidOw)),
+              }),
+            );
+          }
           layer.add(g);
         } else {
           const vw = sx(el.width);
@@ -353,6 +437,9 @@ export async function captureBookSlideToDataURL(
             height: vh,
             rotation: el.rotation,
           });
+          const vfBr = sx(resolveBookElementBorderRadius(el));
+          const vfOw = resolveBookElementOutlineWidth(el);
+          const vfOc = resolveBookElementOutlineColor(el);
           layer.add(
             new Konva.Rect({
               x: vp.cx,
@@ -362,8 +449,10 @@ export async function captureBookSlideToDataURL(
               width: vw,
               height: vh,
               rotation: vp.rotation,
+              cornerRadius: vfBr,
               fill: "#1e293b",
-              strokeWidth: 0,
+              stroke: vfOw > 0 ? vfOc : "transparent",
+              strokeWidth: vfOw > 0 ? Math.max(0.5, sx(vfOw)) : 0,
               opacity: elOp,
             }),
           );
@@ -382,6 +471,16 @@ export async function captureBookSlideToDataURL(
           typeof el.cityQuery === "string" && el.cityQuery.trim()
             ? el.cityQuery.trim().slice(0, 20)
             : "날씨";
+        const weatherFill = parseBookWeatherBackground(el.weatherBackground) ?? "#e0f2fe";
+        const weatherStrokeA = bookWidgetBackdropAlphaFromCss(weatherFill);
+        const weatherStrokeW = weatherStrokeA < 0.02 ? 0 : Math.max(0.5, scale);
+        const weatherStroke =
+          weatherStrokeW === 0 ? "transparent" : `rgba(14,165,233,${weatherStrokeA * 0.85})`;
+        const wUserOw = resolveBookElementOutlineWidth(el);
+        const wUserOc = resolveBookElementOutlineColor(el);
+        const wCorner = sx(resolveBookElementBorderRadius(el));
+        const wStroke = wUserOw > 0 ? wUserOc : weatherStroke;
+        const wStrokeW = wUserOw > 0 ? Math.max(0.5, sx(wUserOw)) : weatherStrokeW;
         layer.add(
           new Konva.Rect({
             x: wp.cx,
@@ -391,13 +490,14 @@ export async function captureBookSlideToDataURL(
             width: ww,
             height: wh,
             rotation: wp.rotation,
-            fill: "#e0f2fe",
-            stroke: "#38bdf8",
-            strokeWidth: Math.max(0.5, scale),
-            cornerRadius: Math.max(2, 4 * scale),
+            fill: weatherFill,
+            stroke: wStroke,
+            strokeWidth: wStrokeW,
+            cornerRadius: Math.max(0, wCorner),
             opacity: elOp,
           }),
         );
+        const wTextFill = parseBookWidgetTextColor(el.weatherTextColor) ?? "#0369a1";
         layer.add(
           new Konva.Text({
             x: wp.cx,
@@ -410,7 +510,78 @@ export async function captureBookSlideToDataURL(
             text: thumbLabel,
             fontSize: Math.max(7, 11 * scale),
             fontFamily: "Geist Variable, ui-sans-serif, system-ui, sans-serif",
-            fill: "#0369a1",
+            fill: wTextFill,
+            align: "center",
+            verticalAlign: "middle",
+            opacity: elOp,
+          }),
+        );
+      } else if (el.type === "digitalClock") {
+        const cw = sx(el.width);
+        const ch = sx(el.height);
+        const cp = bookElementPivotKonva({
+          x: sx(el.x),
+          y: sx(el.y),
+          width: cw,
+          height: ch,
+          rotation: el.rotation,
+        });
+        const disp = resolveBookDigitalClockDisplay(el.clockDisplay);
+        const now = new Date();
+        const timeStr = now.toLocaleTimeString("ko-KR", {
+          hour: "2-digit",
+          minute: "2-digit",
+          ...(disp.seconds ? { second: "2-digit" } : {}),
+          hour12: disp.hour12,
+        });
+        const dateStr = disp.date
+          ? now.toLocaleDateString("ko-KR", {
+              month: "numeric",
+              day: "numeric",
+              weekday: "short",
+            })
+          : "";
+        const thumbLabel = dateStr ? `${timeStr}\n${dateStr}` : timeStr;
+        const thumbBg = parseBookClockBackground(el.clockBackground) ?? "#0f172a";
+        const clockStrokeA = bookWidgetBackdropAlphaFromCss(thumbBg);
+        const clockStrokeW = clockStrokeA < 0.02 ? 0 : Math.max(0.5, scale);
+        const clockStroke =
+          clockStrokeW === 0 ? "transparent" : `rgba(148,163,184,${clockStrokeA * 0.62})`;
+        const cUserOw = resolveBookElementOutlineWidth(el);
+        const cUserOc = resolveBookElementOutlineColor(el);
+        const cCorner = sx(resolveBookElementBorderRadius(el));
+        const cStroke = cUserOw > 0 ? cUserOc : clockStroke;
+        const cStrokeW = cUserOw > 0 ? Math.max(0.5, sx(cUserOw)) : clockStrokeW;
+        layer.add(
+          new Konva.Rect({
+            x: cp.cx,
+            y: cp.cy,
+            offsetX: cp.offsetX,
+            offsetY: cp.offsetY,
+            width: cw,
+            height: ch,
+            rotation: cp.rotation,
+            fill: thumbBg,
+            stroke: cStroke,
+            strokeWidth: cStrokeW,
+            cornerRadius: Math.max(0, cCorner),
+            opacity: elOp,
+          }),
+        );
+        const cTextFill = parseBookWidgetTextColor(el.clockTextColor) ?? "#e2e8f0";
+        layer.add(
+          new Konva.Text({
+            x: cp.cx,
+            y: cp.cy,
+            offsetX: cp.offsetX,
+            offsetY: cp.offsetY,
+            width: cw,
+            height: ch,
+            rotation: cp.rotation,
+            text: thumbLabel,
+            fontSize: Math.max(6, 9 * scale),
+            fontFamily: "ui-monospace, monospace",
+            fill: cTextFill,
             align: "center",
             verticalAlign: "middle",
             opacity: elOp,

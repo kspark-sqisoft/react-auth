@@ -3,7 +3,10 @@ import { cn } from "@/lib/utils";
 import {
   bookElementOverlayTopLeftFromPivot,
   bookElementPivotKonva,
+  resolveBookElementBorderRadius,
   resolveBookElementOpacity,
+  resolveBookElementOutlineColor,
+  resolveBookElementOutlineWidth,
   resolveBookElementRotation,
   type BookCanvasElement,
 } from "@/lib/book-canvas";
@@ -51,6 +54,12 @@ export function BookTextWidgetOverlay({
   const fh = liveFrame?.height ?? h;
   const fRot = liveFrame != null ? liveFrame.rotation : rot;
 
+  const tBr = resolveBookElementBorderRadius(el);
+  const tOw = resolveBookElementOutlineWidth(el);
+  const tOc = resolveBookElementOutlineColor(el);
+  const outlineShadow =
+    tOw > 0 ? `0 0 0 ${Math.max(0.5, tOw * scale)}px ${tOc}` : undefined;
+
   useLayoutEffect(() => {
     if (mode !== "edit" || !onReportLogicalHeight) return;
     const node = rootRef.current;
@@ -73,7 +82,7 @@ export function BookTextWidgetOverlay({
     <div
       ref={rootRef}
       className={cn(
-        "pointer-events-none absolute overflow-hidden rounded-sm",
+        "pointer-events-none absolute overflow-hidden",
         isSelected && mode === "edit" && "ring-2 ring-primary ring-offset-0",
       )}
       style={{
@@ -87,6 +96,8 @@ export function BookTextWidgetOverlay({
         opacity: o,
         transform: fRot !== 0 ? `rotate(${fRot}deg)` : undefined,
         transformOrigin: "center center",
+        borderRadius: Math.max(0, tBr * scale),
+        boxShadow: outlineShadow,
       }}
     >
       <div

@@ -1,5 +1,5 @@
 import Placeholder from "@tiptap/extension-placeholder";
-import { Color, TextStyle } from "@tiptap/extension-text-style";
+import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
@@ -22,6 +22,15 @@ import { Button } from "@/components/ui/button";
 import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
 import { richHtmlToPlainText, sanitizeBookRichHtml } from "@/lib/book-text-widget";
 import { cn } from "@/lib/utils";
+
+/** 위젯 기본 글자 크기(`fontSize`) 대비. `em`이라 슬라이드 배율과 맞습니다. */
+const BOOK_RICH_FONT_SIZE_PRESETS: { value: string; label: string; title: string }[] = [
+  { value: "0.7em", label: "70%", title: "선택 영역 글자 크기 70%" },
+  { value: "0.85em", label: "85%", title: "선택 영역 글자 크기 85%" },
+  { value: "1.25em", label: "125%", title: "선택 영역 글자 크기 125%" },
+  { value: "1.5em", label: "150%", title: "선택 영역 글자 크기 150%" },
+  { value: "2em", label: "200%", title: "선택 영역 글자 크기 200%" },
+];
 
 type Props = {
   /** 선택이 바뀔 때마다 바꿔 에디터를 초기화합니다. */
@@ -62,6 +71,7 @@ export function BookTextRichEditor({
         }),
         TextStyle,
         Color,
+        FontSize,
         Placeholder.configure({ placeholder }),
       ],
       content: html?.trim() ? html : "<p></p>",
@@ -93,8 +103,9 @@ export function BookTextRichEditor({
     [widgetKey],
   );
 
-  const currentTextColor =
-    (editor?.getAttributes("textStyle").color as string | undefined) ?? null;
+  const ts = editor?.getAttributes("textStyle") ?? {};
+  const currentTextColor = (ts.color as string | undefined) ?? null;
+  const currentFontSize = (ts.fontSize as string | undefined) ?? null;
 
   useEffect(() => {
     if (!editor) return;
@@ -180,6 +191,27 @@ export function BookTextRichEditor({
             >
               <span className="text-[10px] font-semibold text-muted-foreground">A</span>
             </Btn>
+            <span className="mx-0.5 w-px self-stretch bg-border" aria-hidden />
+            <span className="sr-only">선택 영역 글자 크기</span>
+            <Btn
+              title="위젯 기본 글자 크기로(선택 부분만)"
+              active={!currentFontSize}
+              onClick={() => editor.chain().focus().unsetFontSize().run()}
+            >
+              <span className="text-[10px] font-semibold tabular-nums">기본</span>
+            </Btn>
+            {BOOK_RICH_FONT_SIZE_PRESETS.map(({ value, label, title }) => (
+              <Btn
+                key={value}
+                title={title}
+                active={currentFontSize === value}
+                onClick={() => editor.chain().focus().setFontSize(value).run()}
+              >
+                <span className="min-w-[1.6rem] text-center text-[10px] font-semibold tabular-nums">
+                  {label}
+                </span>
+              </Btn>
+            ))}
             <span className="mx-0.5 w-px self-stretch bg-border" aria-hidden />
             <Btn
               title="소제목 2"

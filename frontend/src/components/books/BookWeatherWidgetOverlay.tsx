@@ -18,7 +18,13 @@ import { cn } from "@/lib/utils";
 import {
   bookElementOverlayTopLeftFromPivot,
   bookElementPivotKonva,
+  bookWidgetBackdropChromeStyle,
+  parseBookWeatherBackground,
+  parseBookWidgetTextColor,
+  resolveBookElementBorderRadius,
   resolveBookElementOpacity,
+  resolveBookElementOutlineColor,
+  resolveBookElementOutlineWidth,
   resolveBookElementRotation,
   resolveBookWeatherDisplay,
   type BookCanvasElement,
@@ -341,16 +347,40 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   const kind = data ? visualKindFromOwmIcon(data.icon || "02d") : "cloudy-day";
   const LineIcon = WEATHER_LINE_ICONS[kind];
   const variant = data ? pickLayoutVariant(disp) : "standard";
-  const snowLike = kind === "snow" && variant !== "air-only";
-  const textMain = snowLike ? "text-slate-800" : "text-white";
-  const textMuted = snowLike ? "text-slate-700/85" : "text-white/85";
-  const textFaint = snowLike ? "text-slate-600/90" : "text-white/75";
+  const customTextColor = parseBookWidgetTextColor(el.weatherTextColor);
+  const useCustomText = Boolean(customTextColor);
+  const snowLike = !useCustomText && kind === "snow" && variant !== "air-only";
+  const textMain = useCustomText ? "" : snowLike ? "text-slate-800" : "text-white";
+  const textMuted = useCustomText ? "opacity-90" : snowLike ? "text-slate-700/85" : "text-white/85";
+  const textFaint = useCustomText ? "opacity-80" : snowLike ? "text-slate-600/90" : "text-white/75";
+  const iconTone = useCustomText ? "text-current" : snowLike ? "text-slate-800" : "text-white";
+  const tempAccent = useCustomText
+    ? ""
+    : snowLike
+      ? "text-slate-900"
+      : "text-white";
 
   const showTimeCol = disp.clock || disp.date;
   const hasAir = disp.pm25 || disp.pm10 || disp.aqi;
 
   const ringAccent =
     variant === "split-air" ? "ring-2 ring-emerald-400/40" : "ring-1 ring-black/10";
+
+  const customBg = parseBookWeatherBackground(el.weatherBackground);
+  const contentTextStyle =
+    useCustomText && customTextColor ? ({ color: customTextColor } as const) : undefined;
+  const backdropChrome = customBg ? bookWidgetBackdropChromeStyle(customBg) : null;
+  const brPx = Math.max(0, resolveBookElementBorderRadius(el) * scale);
+  const ow = resolveBookElementOutlineWidth(el);
+  const oc = resolveBookElementOutlineColor(el);
+  const outlineRing =
+    ow > 0 ? `0 0 0 ${Math.max(0.5, ow * scale)}px ${oc}` : "";
+  const bgShadow = !customBg
+    ? "0 12px 40px -8px rgba(0,0,0,0.35)"
+    : customBg && backdropChrome && backdropChrome.boxShadow !== "none"
+      ? backdropChrome.boxShadow
+      : "";
+  const mergedShadow = [bgShadow, outlineRing].filter(Boolean).join(", ");
 
   const renderAirBlock = (payload: SeoulWeatherPayload, opts: { accent?: boolean; compact?: boolean }) => (
     <div
@@ -392,8 +422,8 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   return (
     <div
       className={cn(
-        "pointer-events-none absolute overflow-hidden rounded-2xl shadow-[0_12px_40px_-8px_rgba(0,0,0,0.35)]",
-        ringAccent,
+        "pointer-events-none absolute overflow-hidden",
+        !customBg && ringAccent,
         isSelected && mode === "edit" && "ring-2 ring-primary ring-offset-0",
       )}
       style={{
@@ -404,11 +434,25 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
         opacity: o,
         transform: fRot !== 0 ? `rotate(${fRot}deg)` : undefined,
         transformOrigin: "center center",
-        borderRadius: Math.max(12, fh * scale * 0.09),
+        borderRadius: brPx,
+        ...(customBg
+          ? {
+              background: customBg,
+              backgroundImage: "none",
+              border: backdropChrome?.border,
+            }
+          : {}),
+        boxShadow: mergedShadow || undefined,
       }}
     >
       {isPending ? (
-        <div className="flex h-full min-h-0 items-center justify-center gap-2 bg-linear-to-br from-slate-700 to-slate-900 px-3 text-white/90">
+        <div
+          className={cn(
+            "flex h-full min-h-0 items-center justify-center gap-2 px-3 text-white/90",
+            !customBg && "bg-linear-to-br from-slate-700 to-slate-900",
+            customBg && "bg-transparent",
+          )}
+        >
           <Loader2
             className="shrink-0 animate-spin opacity-90"
             style={{ width: condSize * 1.1, height: condSize * 1.1 }}
@@ -419,39 +463,67 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
           </span>
         </div>
       ) : isError ? (
-        <div className="flex h-full min-h-0 flex-col items-center justify-center gap-1 bg-linear-to-br from-amber-900/95 to-slate-900 px-2 text-center text-amber-50">
+        <div
+          className={cn(
+            "flex h-full min-h-0 flex-col items-center justify-center gap-1 px-2 text-center text-amber-50",
+            !customBg && "bg-linear-to-br from-amber-900/95 to-slate-900",
+            customBg && "bg-transparent",
+          )}
+        >
           <CloudOff className="size-8 shrink-0 opacity-90" aria-hidden />
           <span className="text-[0.8em] leading-snug">{errMsg}</span>
         </div>
       ) : data ? (
-        <div className="relative h-full min-h-0 w-full text-white">
-          {variant === "air-only" ? (
+        <div
+          className={cn("relative h-full min-h-0 w-full", !useCustomText && "text-white")}
+          style={contentTextStyle}
+        >
+          {!customBg && variant === "air-only" ? (
             <AirQualityBackdrop aqiLevel={data.aqiLevel} />
-          ) : (
+          ) : !customBg ? (
             <CardBackdrop kind={kind} />
-          )}
+          ) : null}
 
           {variant === "air-only" ? (
             <div
               className={cn(
                 "relative z-1 flex h-full min-h-0 flex-col justify-between px-[6%] py-[7%]",
-                "text-white",
+                !useCustomText && "text-white",
               )}
             >
               <div className="min-w-0">
                 <div className={cn("font-semibold opacity-90")} style={{ fontSize: bodySize * 1.05 }}>
                   {data.locationLabel}
                 </div>
-                <div className="mt-1 text-[0.75em] font-medium uppercase tracking-wider text-white/55">
+                <div
+                  className={cn(
+                    "mt-1 text-[0.75em] font-medium uppercase tracking-wider",
+                    useCustomText ? "opacity-55" : "text-white/55",
+                  )}
+                >
                   지역 대기질
                 </div>
               </div>
               <div className="flex flex-1 flex-col justify-center gap-1">
                 {disp.aqi ? (
-                  <div className={cn("font-bold tabular-nums", aqiAccentClass(data.aqiLevel))} style={{ fontSize: aqiHuge }}>
+                  <div
+                    className={cn(
+                      "font-bold tabular-nums",
+                      useCustomText ? "" : aqiAccentClass(data.aqiLevel),
+                    )}
+                    style={{ fontSize: aqiHuge }}
+                  >
                     {data.aqiLabel ?? "—"}
                     {data.aqiLevel != null ? (
-                      <span className="text-[0.45em] font-semibold text-white/70"> · {data.aqiLevel}/5</span>
+                      <span
+                        className={cn(
+                          "text-[0.45em] font-semibold",
+                          useCustomText ? "opacity-70" : "text-white/70",
+                        )}
+                      >
+                        {" "}
+                        · {data.aqiLevel}/5
+                      </span>
                     ) : null}
                   </div>
                 ) : null}
@@ -467,7 +539,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
             >
               {disp.icon ? (
                 <LineIcon
-                  className={cn("shrink-0 stroke-[2.25]", snowLike ? "text-slate-800" : "text-white")}
+                  className={cn("shrink-0 stroke-[2.25]", iconTone)}
                   style={{ width: condSize * 1.5, height: condSize * 1.5 }}
                   aria-hidden
                 />
@@ -480,7 +552,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
               {disp.temp ? (
                 <div className="flex items-end gap-1">
                   <span
-                    className={cn("tabular-nums font-bold tracking-tight drop-shadow-md", snowLike ? "text-slate-900" : "text-white")}
+                    className={cn("tabular-nums font-bold tracking-tight drop-shadow-md", tempAccent)}
                     style={{ fontSize: tempSizeMinimal, lineHeight: 0.95 }}
                   >
                     {Math.round(data.tempC)}
@@ -508,7 +580,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                   <div className="flex min-w-0 items-center gap-2">
                     {disp.icon ? (
                       <LineIcon
-                        className={cn("shrink-0 stroke-[2.25]", snowLike ? "text-slate-800" : "text-white")}
+                        className={cn("shrink-0 stroke-[2.25]", iconTone)}
                         style={{ width: condSize * 1.35, height: condSize * 1.35 }}
                         aria-hidden
                       />
@@ -528,7 +600,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                   {disp.temp ? (
                     <div className="flex items-end gap-1">
                       <span
-                        className={cn("tabular-nums font-bold tracking-tight drop-shadow-md", snowLike ? "text-slate-900" : "text-white")}
+                        className={cn("tabular-nums font-bold tracking-tight drop-shadow-md", tempAccent)}
                         style={{ fontSize: variant === "split-air" ? tempSize * 0.92 : tempSize, lineHeight: 0.95 }}
                       >
                         {Math.round(data.tempC)}
@@ -570,7 +642,12 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                   </div>
                 </div>
               ) : (
-                <div className="col-span-full flex min-h-0 flex-col gap-1 border-t border-white/15 pt-2">
+                <div
+                  className={cn(
+                    "col-span-full flex min-h-0 flex-col gap-1 border-t pt-2",
+                    useCustomText ? "border-current/25" : "border-white/15",
+                  )}
+                >
                   <div className={cn("font-semibold", textMain)} style={{ fontSize: bodySize * 1.02 }}>
                     {data.locationLabel}
                   </div>

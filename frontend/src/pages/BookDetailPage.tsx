@@ -23,6 +23,8 @@ import {
 import {
   applyAutoSlideNamesByIndex,
   createEmptyEditorPage,
+  DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
+  DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
   DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
   DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
   DEFAULT_PAGE_BACKGROUND,
@@ -321,6 +323,26 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     [activePageIndex, updatePages],
   );
 
+  const addDigitalClockAt = useCallback(
+    (x: number, y: number) => {
+      const id = crypto.randomUUID();
+      const el: BookCanvasElement = {
+        id,
+        type: "digitalClock",
+        x,
+        y,
+        width: DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
+        height: DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
+      };
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.elements.push(el);
+      });
+      setSelectedId(id);
+    },
+    [activePageIndex, updatePages],
+  );
+
   const handleMediaFile = async (file: File, kind: "image" | "video") => {
     setUploadError(null);
     const pos = pendingPlacementRef.current ?? { x: 100, y: 100 };
@@ -380,6 +402,10 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         addWeatherAt(point.x, point.y);
         return;
       }
+      if (kind === "digitalClock") {
+        addDigitalClockAt(point.x, point.y);
+        return;
+      }
       pendingPlacementRef.current = point;
       pendingMediaKindRef.current = kind;
       if (kind === "image") {
@@ -388,7 +414,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         videoInputRef.current?.click();
       }
     },
-    [addTextAt, addWeatherAt],
+    [addDigitalClockAt, addTextAt, addWeatherAt],
   );
 
   const addPage = useCallback(() => {
@@ -483,6 +509,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     if (el.type === "image") return "이미지 위젯";
     if (el.type === "video") return "동영상 위젯";
     if (el.type === "weather") return "날씨 위젯";
+    if (el.type === "digitalClock") return "디지털 시계 위젯";
     return "위젯";
   }, [widgetDeleteId, activePage]);
 

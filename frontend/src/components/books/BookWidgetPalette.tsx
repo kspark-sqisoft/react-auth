@@ -11,6 +11,7 @@ import {
   Blocks,
   ChevronDown,
   ChevronUp,
+  Clock,
   CloudSun,
   GripVertical,
   ImagePlus,
@@ -22,11 +23,13 @@ import { BOOK_WIDGET_DRAG_TYPE, type BookDropWidgetKind } from "@/components/boo
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
+/** 텍스트·이미지·동영상은 항상 맨 앞 순서, 그 외 위젯은 뒤에 둡니다. */
 const ITEMS: { kind: BookDropWidgetKind; label: string; icon: LucideIcon }[] = [
   { kind: "text", label: "텍스트", icon: Type },
-  { kind: "weather", label: "날씨", icon: CloudSun },
   { kind: "image", label: "이미지", icon: ImagePlus },
   { kind: "video", label: "동영상", icon: Video },
+  { kind: "weather", label: "날씨", icon: CloudSun },
+  { kind: "digitalClock", label: "디지털 시계", icon: Clock },
 ];
 
 const STORAGE_KEY = "book-widget-palette";

@@ -20,8 +20,12 @@ import { cn } from "@/lib/utils";
 import {
   bookElementOverlayTopLeftFromPivot,
   bookElementPivotKonva,
+  canvasRoundRectPath,
   konvaBookTopLeftFromNode,
+  resolveBookElementBorderRadius,
   resolveBookElementOpacity,
+  resolveBookElementOutlineColor,
+  resolveBookElementOutlineWidth,
   resolveBookElementRotation,
   resolveBookMediaObjectFit,
   type BookCanvasElement,
@@ -32,6 +36,7 @@ import {
   BookTextWidgetOverlay,
   type BookTextOverlayLiveFrame,
 } from "@/components/books/BookTextWidgetOverlay";
+import { BookDigitalClockWidgetOverlay } from "@/components/books/BookDigitalClockWidgetOverlay";
 import { BookWeatherWidgetOverlay } from "@/components/books/BookWeatherWidgetOverlay";
 import { computeKonvaFittedImageLayout, mediaObjectFitToCssClass } from "@/lib/book-media-layout";
 import { defaultTextWidgetBoxHeight, textWidgetHitHeight } from "@/lib/book-text-widget";
@@ -73,7 +78,7 @@ function useBookImage(src: string) {
 /** 위젯 팔레트 HTML5 DnD와 동일한 값 */
 export const BOOK_WIDGET_DRAG_TYPE = "application/x-book-widget";
 
-export type BookDropWidgetKind = "text" | "image" | "video" | "weather";
+export type BookDropWidgetKind = "text" | "image" | "video" | "weather" | "digitalClock";
 
 type BookSlideCanvasProps = {
   pageWidth: number;
@@ -268,9 +273,15 @@ function BookSlideVideoOverlay({
   const fullBleedFit = fit === "cover" || fit === "fill";
   const useLayoutBox = Boolean(layout && !fullBleedFit);
 
+  const vidBr = resolveBookElementBorderRadius(el);
+  const vidOw = resolveBookElementOutlineWidth(el);
+  const vidOc = resolveBookElementOutlineColor(el);
+  const vidOutlineShadow =
+    vidOw > 0 ? `0 0 0 ${Math.max(0.5, vidOw * scale)}px ${vidOc}` : undefined;
+
   return (
     <div
-      className="absolute pointer-events-none"
+      className="absolute pointer-events-none overflow-hidden"
       style={{
         left: vx * scale,
         top: vy * scale,
@@ -279,6 +290,8 @@ function BookSlideVideoOverlay({
         opacity: vOpacity,
         transform: vDeg !== 0 ? `rotate(${vDeg}deg)` : undefined,
         transformOrigin: "center center",
+        borderRadius: Math.max(0, vidBr * scale),
+        boxShadow: vidOutlineShadow,
       }}
     >
       <video
@@ -661,7 +674,14 @@ export function BookSlideCanvas({
     const raw =
       e.dataTransfer.getData(BOOK_WIDGET_DRAG_TYPE) ||
       e.dataTransfer.getData("text/plain");
-    if (raw === "text" || raw === "image" || raw === "video" || raw === "weather") return raw;
+    if (
+      raw === "text" ||
+      raw === "image" ||
+      raw === "video" ||
+      raw === "weather" ||
+      raw === "digitalClock"
+    )
+      return raw;
     return null;
   };
 
@@ -769,6 +789,22 @@ export function BookSlideCanvas({
                 />
               );
             }
+            if (el.type === "digitalClock") {
+              return (
+                <BookDigitalClockHitShape
+                  key={el.id}
+                  el={el}
+                  liveSync={shapeLiveSync}
+                  attachRef={attachRef}
+                  selectedRef={selectedNodeRef}
+                  mode={mode}
+                  onSelect={onSelect}
+                  onElementChange={onElementChange}
+                  zMenuEnabled={elementContextMenuEnabled}
+                  onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                />
+              );
+            }
             if (el.type === "image") {
               return (
                 <BookImageShape
@@ -824,8 +860,8 @@ export function BookSlideCanvas({
       <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden">
         {elements
           .filter(
-            (e): e is Extract<BookCanvasElement, { type: "text" | "weather" }> =>
-              e.type === "text" || e.type === "weather",
+            (e): e is Extract<BookCanvasElement, { type: "text" | "weather" | "digitalClock" }> =>
+              e.type === "text" || e.type === "weather" || e.type === "digitalClock",
           )
           .map((el) => {
             if (el.type === "text") {
@@ -860,19 +896,31 @@ export function BookSlideCanvas({
                 />
               );
             }
-            const weatherLive = overlayLiveFrame(el.id, dragLive, transformLive, {
+            const frameLive = overlayLiveFrame(el.id, dragLive, transformLive, {
               w: el.width,
               h: el.height,
               rotation: resolveBookElementRotation(el.rotation),
             });
+            if (el.type === "weather") {
+              return (
+                <BookWeatherWidgetOverlay
+                  key={el.id}
+                  el={el}
+                  scale={scale}
+                  mode={mode}
+                  isSelected={el.id === selectedId}
+                  liveFrame={frameLive}
+                />
+              );
+            }
             return (
-              <BookWeatherWidgetOverlay
+              <BookDigitalClockWidgetOverlay
                 key={el.id}
                 el={el}
                 scale={scale}
                 mode={mode}
                 isSelected={el.id === selectedId}
-                liveFrame={weatherLive}
+                liveFrame={frameLive}
               />
             );
           })}
@@ -1006,6 +1054,9 @@ function BookTextHitShape({
   } else if (dg) {
     pivot = { ...basePivot, cx: dg.cx, cy: dg.cy };
   }
+  const tBr = resolveBookElementBorderRadius(el);
+  const tOw = resolveBookElementOutlineWidth(el);
+  const tOc = resolveBookElementOutlineColor(el);
   return (
     <Rect
       ref={(node) => {
@@ -1023,6 +1074,9 @@ function BookTextHitShape({
       scaleY={tf ? 1 : undefined}
       opacity={tOpacity}
       fill="transparent"
+      cornerRadius={tBr}
+      stroke={tOw > 0 ? tOc : "transparent"}
+      strokeWidth={tOw > 0 ? tOw : 0}
       draggable={mode === "edit"}
       onMouseDown={(e) => {
         if (mode !== "edit") return;
@@ -1077,6 +1131,126 @@ function BookTextHitShape({
 const WEATHER_WIDGET_MIN_W = 160;
 const WEATHER_WIDGET_MIN_H = 100;
 
+const DIGITAL_CLOCK_MIN_W = 120;
+const DIGITAL_CLOCK_MIN_H = 52;
+
+function BookDigitalClockHitShape({
+  el,
+  liveSync,
+  attachRef,
+  selectedRef,
+  mode,
+  onSelect,
+  onElementChange,
+  zMenuEnabled,
+  onZMenu,
+}: {
+  el: Extract<BookCanvasElement, { type: "digitalClock" }>;
+  liveSync: BookShapeLiveSync;
+  attachRef: boolean;
+  selectedRef: MutableRefObject<Konva.Node | null>;
+  mode: "edit" | "view";
+  onSelect: (id: string | null) => void;
+  onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
+  zMenuEnabled: boolean;
+  onZMenu: (clientX: number, clientY: number) => void;
+}) {
+  const w = el.width;
+  const h = el.height;
+  const tOpacity = resolveBookElementOpacity(el.opacity);
+  const basePivot = bookElementPivotKonva({ x: el.x, y: el.y, width: w, height: h, rotation: el.rotation });
+  const tf = liveSync.transformLive?.id === el.id ? liveSync.transformLive : null;
+  const dg = liveSync.dragLive?.id === el.id ? liveSync.dragLive : null;
+  let fw = w;
+  let fh = h;
+  let pivot = basePivot;
+  if (tf) {
+    fw = tf.width;
+    fh = tf.height;
+    pivot = {
+      cx: tf.cx,
+      cy: tf.cy,
+      offsetX: fw / 2,
+      offsetY: fh / 2,
+      rotation: tf.rotation,
+    };
+  } else if (dg) {
+    pivot = { ...basePivot, cx: dg.cx, cy: dg.cy };
+  }
+  const dcBr = resolveBookElementBorderRadius(el);
+  const dcOw = resolveBookElementOutlineWidth(el);
+  const dcOc = resolveBookElementOutlineColor(el);
+  return (
+    <Rect
+      ref={(node) => {
+        if (attachRef) selectedRef.current = node;
+        else if (selectedRef.current === node) selectedRef.current = null;
+      }}
+      x={pivot.cx}
+      y={pivot.cy}
+      offsetX={pivot.offsetX}
+      offsetY={pivot.offsetY}
+      width={fw}
+      height={fh}
+      rotation={pivot.rotation}
+      scaleX={tf ? 1 : undefined}
+      scaleY={tf ? 1 : undefined}
+      opacity={tOpacity}
+      fill="transparent"
+      cornerRadius={dcBr}
+      stroke={dcOw > 0 ? dcOc : "transparent"}
+      strokeWidth={dcOw > 0 ? dcOw : 0}
+      draggable={mode === "edit"}
+      onMouseDown={(e) => {
+        if (mode !== "edit") return;
+        e.cancelBubble = true;
+        onSelect(el.id);
+      }}
+      onContextMenu={
+        zMenuEnabled
+          ? (e) => {
+              e.cancelBubble = true;
+              e.evt.preventDefault();
+              onZMenu(e.evt.clientX, e.evt.clientY);
+            }
+          : undefined
+      }
+      onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
+      onDragMove={(e) => liveSync.onDragLiveMove(el.id, e.target)}
+      onDragEnd={(e) => {
+        const n = e.target;
+        const tl = konvaBookTopLeftFromNode(n);
+        onElementChange(el.id, { x: tl.x, y: tl.y });
+        liveSync.clearDragLive();
+      }}
+      onTransformStart={(e) => liveSync.onTransformLiveStart(el.id, e.target)}
+      onTransform={(e) => liveSync.onTransformLiveMove(el.id, e.target)}
+      onTransformEnd={(e) => {
+        liveSync.clearTransformLive();
+        const node = e.target;
+        const sx = Math.abs(node.scaleX());
+        const sy = Math.abs(node.scaleY());
+        node.scaleX(1);
+        node.scaleY(1);
+        const nw = Math.max(DIGITAL_CLOCK_MIN_W, node.width() * sx);
+        const nh = Math.max(DIGITAL_CLOCK_MIN_H, node.height() * sy);
+        node.width(nw);
+        node.height(nh);
+        node.offsetX(nw / 2);
+        node.offsetY(nh / 2);
+        const tl = konvaBookTopLeftFromNode(node);
+        onElementChange(el.id, {
+          x: tl.x,
+          y: tl.y,
+          width: nw,
+          height: nh,
+          rotation: node.rotation(),
+        });
+      }}
+    />
+  );
+}
+
 function BookWeatherHitShape({
   el,
   liveSync,
@@ -1120,6 +1294,9 @@ function BookWeatherHitShape({
   } else if (dg) {
     pivot = { ...basePivot, cx: dg.cx, cy: dg.cy };
   }
+  const wBr = resolveBookElementBorderRadius(el);
+  const wOw = resolveBookElementOutlineWidth(el);
+  const wOc = resolveBookElementOutlineColor(el);
   return (
     <Rect
       ref={(node) => {
@@ -1137,6 +1314,9 @@ function BookWeatherHitShape({
       scaleY={tf ? 1 : undefined}
       opacity={tOpacity}
       fill="transparent"
+      cornerRadius={wBr}
+      stroke={wOw > 0 ? wOc : "transparent"}
+      strokeWidth={wOw > 0 ? wOw : 0}
       draggable={mode === "edit"}
       onMouseDown={(e) => {
         if (mode !== "edit") return;
@@ -1235,6 +1415,9 @@ function BookImageShape({
     [img, el.objectFit, fw, fh],
   );
   const imgOpacity = resolveBookElementOpacity(el.opacity);
+  const imgBr = resolveBookElementBorderRadius(el);
+  const imgOw = resolveBookElementOutlineWidth(el);
+  const imgOc = resolveBookElementOutlineColor(el);
 
   return (
     <Group
@@ -1253,7 +1436,7 @@ function BookImageShape({
       scaleY={tf ? 1 : undefined}
       opacity={imgOpacity}
       clipFunc={(ctx) => {
-        ctx.rect(0, 0, fw, fh);
+        canvasRoundRectPath(ctx as never, 0, 0, fw, fh, imgBr);
       }}
       draggable={mode === "edit"}
       onMouseDown={(e) => {
@@ -1318,17 +1501,32 @@ function BookImageShape({
           y={0}
           width={fw}
           height={fh}
+          cornerRadius={imgBr}
           fill="#e5e7eb"
           stroke="#94a3b8"
           strokeWidth={1}
           listening={false}
         />
       )}
+      {imgOw > 0 ? (
+        <Rect
+          x={0}
+          y={0}
+          width={fw}
+          height={fh}
+          cornerRadius={imgBr}
+          fillEnabled={false}
+          stroke={imgOc}
+          strokeWidth={imgOw}
+          listening={false}
+        />
+      ) : null}
       <Rect
         x={0}
         y={0}
         width={fw}
         height={fh}
+        cornerRadius={imgBr}
         fill="rgba(0,0,0,0.01)"
         listening
       />
@@ -1379,6 +1577,10 @@ function BookVideoBox({
   } else if (dg) {
     pivot = { ...basePivot, cx: dg.cx, cy: dg.cy };
   }
+  const vBr = resolveBookElementBorderRadius(el);
+  const vOw = resolveBookElementOutlineWidth(el);
+  const vOc = resolveBookElementOutlineColor(el);
+  const videoEditGuide = mode === "edit" && vOw <= 0;
   return (
     <Rect
       ref={(node) => {
@@ -1396,8 +1598,9 @@ function BookVideoBox({
       scaleY={tf ? 1 : undefined}
       opacity={vidOpacity}
       fill="transparent"
-      stroke={mode === "edit" ? "#cbd5e1" : "transparent"}
-      strokeWidth={mode === "edit" ? 1 : 0}
+      cornerRadius={vBr}
+      stroke={vOw > 0 ? vOc : videoEditGuide ? "#cbd5e1" : "transparent"}
+      strokeWidth={vOw > 0 ? vOw : videoEditGuide ? 1 : 0}
       draggable={mode === "edit"}
       onMouseEnter={onVideoHoverEnter}
       onMouseLeave={onVideoHoverLeave}

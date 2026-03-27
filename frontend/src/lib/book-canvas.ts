@@ -107,6 +107,12 @@ export type BookCanvasElement =
       opacity?: number;
       /** 시계 방향 도(°), 생략 시 0 */
       rotation?: number;
+      /** 모서리 둥글기(논리 px). 생략 시 0(각진 기본). */
+      borderRadius?: number;
+      /** 외곽선 두께(논리 px). 0이면 없음. */
+      outlineWidth?: number;
+      /** 외곽선 색(CSS). outlineWidth가 0보다 클 때. */
+      outlineColor?: string;
     }
   | {
       id: string;
@@ -120,6 +126,9 @@ export type BookCanvasElement =
       objectFit?: BookMediaObjectFit;
       opacity?: number;
       rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
     }
   | {
       id: string;
@@ -133,6 +142,9 @@ export type BookCanvasElement =
       objectFit?: BookMediaObjectFit;
       opacity?: number;
       rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
     }
   | {
       id: string;
@@ -145,8 +157,34 @@ export type BookCanvasElement =
       cityQuery?: string;
       /** 항목별 표시. `false`만 숨김, 생략·undefined는 표시(기본). */
       weatherDisplay?: BookWeatherDisplay;
+      /** 카드 배경 CSS 색. 없으면 기본 일러스트 배경. */
+      weatherBackground?: string;
+      /** 본문·아이콘 색(CSS). 없으면 배경 테마에 맞는 기본 톤. */
+      weatherTextColor?: string;
       opacity?: number;
       rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
+    }
+  | {
+      id: string;
+      type: "digitalClock";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      /** 초·날짜는 `false`면 숨김. `hour12: true`면 12시간(AM/PM). */
+      clockDisplay?: BookDigitalClockDisplay;
+      /** 배경 CSS 색(`rgba`, `#rrggbb` 등). 없으면 기본 그라데이션. */
+      clockBackground?: string;
+      /** 시간·날짜 글자 색(CSS). 없으면 밝은 기본색. */
+      clockTextColor?: string;
+      opacity?: number;
+      rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
     };
 
 /** 날씨 위젯 표시 플래그(저장용). `false` = 숨김. */
@@ -211,6 +249,183 @@ export function resolveBookWeatherDisplay(raw?: BookWeatherDisplay | null): Book
   return out;
 }
 
+/** 디지털 시계 표시 플래그(저장용). 초·날짜는 `false` = 숨김, `hour12`만 `true` 저장 시 12시간제. */
+export type BookDigitalClockDisplay = Partial<{
+  seconds: boolean;
+  date: boolean;
+  hour12: boolean;
+}>;
+
+export type BookDigitalClockDisplayResolved = {
+  seconds: boolean;
+  date: boolean;
+  hour12: boolean;
+};
+
+export function resolveBookDigitalClockDisplay(
+  raw?: BookDigitalClockDisplay | null,
+): BookDigitalClockDisplayResolved {
+  return {
+    seconds: raw?.seconds !== false,
+    date: raw?.date !== false,
+    hour12: raw?.hour12 === true,
+  };
+}
+
+const CLOCK_BACKGROUND_MAX_LEN = 80;
+
+/** 저장/로드용: 위험한 값·길이 초과는 제거(undefined). */
+export function parseBookClockBackground(raw: unknown): string | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw !== "string") return undefined;
+  const s = raw.trim().slice(0, CLOCK_BACKGROUND_MAX_LEN);
+  if (!s) return undefined;
+  if (/[<>]/.test(s) || /url\s*\(/i.test(s)) return undefined;
+  return s;
+}
+
+/** 시계·날씨 공통: `parseBookClockBackground`와 동일. */
+export function parseBookWeatherBackground(raw: unknown): string | undefined {
+  return parseBookClockBackground(raw);
+}
+
+/** 위젯 글자색(저장값 검증). 배경과 동일 규칙(길이·금지 문자). */
+export function parseBookWidgetTextColor(raw: unknown): string | undefined {
+  return parseBookClockBackground(raw);
+}
+
+/**
+ * 배경 CSS에서 알파 추출. `rgb`·`#rrggbb`는 1, `rgba`·`#rrggbbaa`는 해당 알파.
+ * 썸네일·테두리 강도에 사용.
+ */
+export function bookWidgetBackdropAlphaFromCss(css: string): number {
+  const s = css.trim();
+  const rgba = /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)$/i.exec(s);
+  if (rgba) return Math.min(1, Math.max(0, parseFloat(rgba[1])));
+  if (/^rgb\(/i.test(s)) return 1;
+  if (/^#[0-9a-fA-F]{8}$/.test(s)) {
+    const byte = parseInt(s.slice(7, 9), 16);
+    return Number.isFinite(byte) ? Math.min(1, Math.max(0, byte / 255)) : 1;
+  }
+  return 1;
+}
+
+/** 사용자 지정 배경일 때 테두리·그림자. 배경 알파와 비례(알파 0이면 윤곽·그림자 없음). */
+export function bookWidgetBackdropChromeStyle(css: string): {
+  border: string;
+  boxShadow: string;
+} {
+  const t = bookWidgetBackdropAlphaFromCss(css);
+  if (t < 0.02) {
+    return { border: "none", boxShadow: "none" };
+  }
+  const borderA = t * 0.28;
+  const shadowA = t * 0.48;
+  return {
+    border: `1px solid rgba(255,255,255,${borderA})`,
+    boxShadow: `0 12px 40px -8px rgba(0,0,0,${shadowA})`,
+  };
+}
+
+/** 날씨·시계 등에서 필드 생략 시 쓰는 기본 둥근 정도(논리 px). 텍스트·이미지·비디오 생략 시 0. */
+export const BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS = 16;
+
+const BOOK_WIDGET_BORDER_RADIUS_MAX = 2000;
+const BOOK_WIDGET_OUTLINE_WIDTH_MAX = 32;
+const BOOK_OUTLINE_COLOR_MAX_LEN = 80;
+
+export function parseBookOutlineColor(raw: unknown): string | undefined {
+  if (raw == null) return undefined;
+  if (typeof raw !== "string") return undefined;
+  const s = raw.trim().slice(0, BOOK_OUTLINE_COLOR_MAX_LEN);
+  if (!s) return undefined;
+  if (/[<>]/.test(s) || /url\s*\(/i.test(s)) return undefined;
+  return s;
+}
+
+function parseStoredBorderRadius(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+  return Math.min(BOOK_WIDGET_BORDER_RADIUS_MAX, Math.max(0, raw));
+}
+
+function parseStoredOutlineWidth(raw: unknown): number | undefined {
+  if (typeof raw !== "number" || !Number.isFinite(raw)) return undefined;
+  const v = Math.min(BOOK_WIDGET_OUTLINE_WIDTH_MAX, Math.max(0, raw));
+  return v > 0 ? v : undefined;
+}
+
+/** 저장된 값 + 타입별 기본(텍스트·미디어 0, 날씨·시계 16). */
+export function resolveBookElementBorderRadius(el: BookCanvasElement): number {
+  if (typeof el.borderRadius === "number" && Number.isFinite(el.borderRadius)) {
+    return Math.min(BOOK_WIDGET_BORDER_RADIUS_MAX, Math.max(0, el.borderRadius));
+  }
+  if (el.type === "weather" || el.type === "digitalClock") {
+    return BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS;
+  }
+  return 0;
+}
+
+export function resolveBookElementOutlineWidth(el: BookCanvasElement): number {
+  if (typeof el.outlineWidth !== "number" || !Number.isFinite(el.outlineWidth)) return 0;
+  return Math.min(BOOK_WIDGET_OUTLINE_WIDTH_MAX, Math.max(0, el.outlineWidth));
+}
+
+/** outlineWidth가 0이면 의미 없음. */
+export function resolveBookElementOutlineColor(el: BookCanvasElement): string {
+  if (resolveBookElementOutlineWidth(el) <= 0) return "transparent";
+  const c = parseBookOutlineColor(el.outlineColor);
+  return c ?? "rgba(148,163,184,0.95)";
+}
+
+/** Konva clip·스냅샷용 둥근 사각 경로. */
+export function canvasRoundRectPath(
+  ctx: {
+    beginPath: () => void;
+    moveTo: (x: number, y: number) => void;
+    lineTo: (x: number, y: number) => void;
+    quadraticCurveTo: (cpx: number, cpy: number, x: number, y: number) => void;
+    closePath: () => void;
+    rect: (x: number, y: number, w: number, h: number) => void;
+  },
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  r: number,
+): void {
+  const rad = Math.min(Math.max(0, r), w / 2, h / 2);
+  if (rad <= 0) {
+    ctx.rect(x, y, w, h);
+    return;
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + rad, y);
+  ctx.lineTo(x + w - rad, y);
+  ctx.quadraticCurveTo(x + w, y, x + w, y + rad);
+  ctx.lineTo(x + w, y + h - rad);
+  ctx.quadraticCurveTo(x + w, y + h, x + w - rad, y + h);
+  ctx.lineTo(x + rad, y + h);
+  ctx.quadraticCurveTo(x, y + h, x, y + h - rad);
+  ctx.lineTo(x, y + rad);
+  ctx.quadraticCurveTo(x, y, x + rad, y);
+  ctx.closePath();
+}
+
+function widgetChromePatch(o: Record<string, unknown>): {
+  borderRadius?: number;
+  outlineWidth?: number;
+  outlineColor?: string;
+} {
+  const br = parseStoredBorderRadius(o.borderRadius);
+  const ow = parseStoredOutlineWidth(o.outlineWidth);
+  const oc = parseBookOutlineColor(o.outlineColor);
+  return {
+    ...(br !== undefined ? { borderRadius: br } : {}),
+    ...(ow !== undefined ? { outlineWidth: ow } : {}),
+    ...(oc !== undefined ? { outlineColor: oc } : {}),
+  };
+}
+
 export type BookEditorPageState = {
   /** 목록 key·드래그 식별(서버 페이지는 보통 `srv-{id}`) */
   clientKey: string;
@@ -228,6 +443,9 @@ export const DEFAULT_SLIDE_HEIGHT = 540;
 /** 날씨 위젯 기본 프레임(px) — 가로 카드 비율 */
 export const DEFAULT_BOOK_WEATHER_WIDGET_WIDTH = 340;
 export const DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT = 156;
+/** 디지털 시계 위젯 기본 프레임(px) */
+export const DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH = 280;
+export const DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT = 96;
 export const DEFAULT_PAGE_BACKGROUND = "#ffffff";
 
 const PAGE_BG_MAX_LEN = 64;
@@ -285,6 +503,23 @@ export function duplicateBookEditorPage(page: BookEditorPageState): BookEditorPa
         id,
         ...(el.cityQuery !== undefined ? { cityQuery: el.cityQuery } : {}),
         ...(el.weatherDisplay !== undefined ? { weatherDisplay: { ...el.weatherDisplay } } : {}),
+        ...(el.weatherBackground !== undefined ? { weatherBackground: el.weatherBackground } : {}),
+        ...(el.weatherTextColor !== undefined ? { weatherTextColor: el.weatherTextColor } : {}),
+        ...(el.borderRadius !== undefined ? { borderRadius: el.borderRadius } : {}),
+        ...(el.outlineWidth !== undefined ? { outlineWidth: el.outlineWidth } : {}),
+        ...(el.outlineColor !== undefined ? { outlineColor: el.outlineColor } : {}),
+      };
+    }
+    if (el.type === "digitalClock") {
+      return {
+        ...el,
+        id,
+        ...(el.clockDisplay !== undefined ? { clockDisplay: { ...el.clockDisplay } } : {}),
+        ...(el.clockBackground !== undefined ? { clockBackground: el.clockBackground } : {}),
+        ...(el.clockTextColor !== undefined ? { clockTextColor: el.clockTextColor } : {}),
+        ...(el.borderRadius !== undefined ? { borderRadius: el.borderRadius } : {}),
+        ...(el.outlineWidth !== undefined ? { outlineWidth: el.outlineWidth } : {}),
+        ...(el.outlineColor !== undefined ? { outlineColor: el.outlineColor } : {}),
       };
     }
     return { ...el, id };
@@ -408,6 +643,22 @@ const WEATHER_DISPLAY_KEYS = [
   "date",
 ] as const;
 
+const DIGITAL_CLOCK_DISPLAY_KEYS = ["seconds", "date", "hour12"] as const;
+
+function parseBookDigitalClockDisplay(raw: unknown): BookDigitalClockDisplay | undefined {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const o = raw as Record<string, unknown>;
+  const out: BookDigitalClockDisplay = {};
+  let any = false;
+  for (const k of DIGITAL_CLOCK_DISPLAY_KEYS) {
+    if (k in o && typeof o[k] === "boolean") {
+      (out as Record<string, boolean>)[k] = o[k] as boolean;
+      any = true;
+    }
+  }
+  return any ? out : undefined;
+}
+
 function parseBookWeatherDisplay(raw: unknown): BookWeatherDisplay | undefined {
   if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
   const o = raw as Record<string, unknown>;
@@ -430,6 +681,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
     if (typeof o.id !== "string" || typeof o.type !== "string") continue;
     const opacity = parseElementOpacity(o.opacity);
     const rotation = parseElementRotation(o.rotation);
+    const chrome = widgetChromePatch(o);
     if (o.type === "text") {
       const width = typeof o.width === "number" ? o.width : undefined;
       const height = typeof o.height === "number" ? o.height : undefined;
@@ -446,6 +698,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         fill: typeof o.fill === "string" ? o.fill : "#111827",
         ...(width !== undefined ? { width } : {}),
         ...(height !== undefined ? { height } : {}),
+        ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
       });
@@ -460,6 +713,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         height: Number(o.height) || 180,
         src: typeof o.src === "string" ? o.src : "",
         ...(objectFit ? { objectFit } : {}),
+        ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
       });
@@ -478,6 +732,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
             ? o.posterSrc
             : null,
         ...(objectFit ? { objectFit } : {}),
+        ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
       });
@@ -487,6 +742,8 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
           ? o.cityQuery.trim().slice(0, 120)
           : undefined;
       const wd = parseBookWeatherDisplay(o.weatherDisplay);
+      const wb = parseBookWeatherBackground(o.weatherBackground);
+      const wtc = parseBookWidgetTextColor(o.weatherTextColor);
       out.push({
         id: o.id,
         type: "weather",
@@ -496,6 +753,27 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         height: Number(o.height) || DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
         ...(cityQuery !== undefined ? { cityQuery } : {}),
         ...(wd !== undefined ? { weatherDisplay: wd } : {}),
+        ...(wb !== undefined ? { weatherBackground: wb } : {}),
+        ...(wtc !== undefined ? { weatherTextColor: wtc } : {}),
+        ...chrome,
+        ...(opacity !== undefined ? { opacity } : {}),
+        ...(rotation !== undefined ? { rotation } : {}),
+      });
+    } else if (o.type === "digitalClock") {
+      const cd = parseBookDigitalClockDisplay(o.clockDisplay);
+      const cb = parseBookClockBackground(o.clockBackground);
+      const ctc = parseBookWidgetTextColor(o.clockTextColor);
+      out.push({
+        id: o.id,
+        type: "digitalClock",
+        x: Number(o.x) || 0,
+        y: Number(o.y) || 0,
+        width: Number(o.width) || DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
+        height: Number(o.height) || DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
+        ...(cd !== undefined ? { clockDisplay: cd } : {}),
+        ...(cb !== undefined ? { clockBackground: cb } : {}),
+        ...(ctc !== undefined ? { clockTextColor: ctc } : {}),
+        ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
       });

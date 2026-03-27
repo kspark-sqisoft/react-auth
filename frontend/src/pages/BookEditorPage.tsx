@@ -7,6 +7,8 @@ import { createBook, type BookCanvasElement } from "@/lib/api";
 import {
   applyAutoSlideNamesByIndex,
   createEmptyEditorPage,
+  DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
+  DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
   DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
   DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
   DEFAULT_PAGE_BACKGROUND,
@@ -237,6 +239,26 @@ export function BookEditorPage() {
     [activePageIndex, updatePages],
   );
 
+  const addDigitalClockAt = useCallback(
+    (x: number, y: number) => {
+      const id = crypto.randomUUID();
+      const el: BookCanvasElement = {
+        id,
+        type: "digitalClock",
+        x,
+        y,
+        width: DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
+        height: DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
+      };
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.elements.push(el);
+      });
+      setSelectedId(id);
+    },
+    [activePageIndex, updatePages],
+  );
+
   const onDropWidget = useCallback(
     (point: { x: number; y: number }, kind: BookDropWidgetKind) => {
       if (kind === "text") {
@@ -247,9 +269,13 @@ export function BookEditorPage() {
         addWeatherAt(point.x, point.y);
         return;
       }
+      if (kind === "digitalClock") {
+        addDigitalClockAt(point.x, point.y);
+        return;
+      }
       toast.error("저장한 뒤 열린 북 화면에서 이미지·동영상 위젯을 넣을 수 있습니다.");
     },
-    [addTextAt, addWeatherAt],
+    [addDigitalClockAt, addTextAt, addWeatherAt],
   );
 
   const removeElementById = useCallback(
@@ -344,6 +370,7 @@ export function BookEditorPage() {
     if (el.type === "image") return "이미지 위젯";
     if (el.type === "video") return "동영상 위젯";
     if (el.type === "weather") return "날씨 위젯";
+    if (el.type === "digitalClock") return "디지털 시계 위젯";
     return "위젯";
   }, [widgetDeleteId, currentPage]);
 

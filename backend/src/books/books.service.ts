@@ -44,6 +44,9 @@ export type BookCanvasElementPublic =
       opacity?: number;
       /** 시계 방향 도(°), 생략 시 0 */
       rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
     }
   | {
       id: string;
@@ -56,6 +59,9 @@ export type BookCanvasElementPublic =
       objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
       opacity?: number;
       rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
     }
   | {
       id: string;
@@ -69,6 +75,9 @@ export type BookCanvasElementPublic =
       objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
       opacity?: number;
       rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
     }
   | {
       id: string;
@@ -79,8 +88,30 @@ export type BookCanvasElementPublic =
       height: number;
       cityQuery?: string;
       weatherDisplay?: Record<string, boolean>;
+      weatherBackground?: string;
+      weatherTextColor?: string;
       opacity?: number;
       rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
+    }
+  | {
+      id: string;
+      type: 'digitalClock';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      clockDisplay?: Record<string, boolean>;
+      /** CSS 배경색(rgba 등). */
+      clockBackground?: string;
+      clockTextColor?: string;
+      opacity?: number;
+      rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
     };
 
 export type BookPagePublic = {
@@ -192,7 +223,8 @@ export class BooksService {
         o.type !== 'text' &&
         o.type !== 'image' &&
         o.type !== 'video' &&
-        o.type !== 'weather'
+        o.type !== 'weather' &&
+        o.type !== 'digitalClock'
       ) {
         throw new BadRequestException('지원하지 않는 요소 타입입니다.');
       }
@@ -296,6 +328,100 @@ export class BooksService {
             }
           }
         }
+        if (o.weatherBackground != null) {
+          if (
+            typeof o.weatherBackground !== 'string' ||
+            o.weatherBackground.length > 80
+          ) {
+            throw new BadRequestException(
+              '날씨 카드 배경색이 올바르지 않습니다.',
+            );
+          }
+          if (
+            /[<>]/.test(o.weatherBackground) ||
+            /url\s*\(/i.test(o.weatherBackground)
+          ) {
+            throw new BadRequestException(
+              '날씨 카드 배경색에 허용되지 않는 문자가 있습니다.',
+            );
+          }
+        }
+      } else if (o.type === 'digitalClock') {
+        const w = o.width;
+        const h = o.height;
+        if (
+          typeof w !== 'number' ||
+          typeof h !== 'number' ||
+          w < 24 ||
+          h < 24 ||
+          w > 4000 ||
+          h > 4000
+        ) {
+          throw new BadRequestException(
+            '디지털 시계 위젯 크기가 올바르지 않습니다.',
+          );
+        }
+        if (o.clockDisplay != null) {
+          if (
+            typeof o.clockDisplay !== 'object' ||
+            Array.isArray(o.clockDisplay)
+          ) {
+            throw new BadRequestException(
+              'clockDisplay 형식이 올바르지 않습니다.',
+            );
+          }
+          const allowed = new Set(['seconds', 'date', 'hour12']);
+          for (const [k, v] of Object.entries(
+            o.clockDisplay as Record<string, unknown>,
+          )) {
+            if (!allowed.has(k)) {
+              throw new BadRequestException(
+                'clockDisplay에 허용되지 않는 키입니다.',
+              );
+            }
+            if (typeof v !== 'boolean') {
+              throw new BadRequestException(
+                'clockDisplay 값은 true/false만 가능합니다.',
+              );
+            }
+          }
+        }
+        if (o.clockBackground != null) {
+          if (
+            typeof o.clockBackground !== 'string' ||
+            o.clockBackground.length > 80
+          ) {
+            throw new BadRequestException(
+              '디지털 시계 배경색이 올바르지 않습니다.',
+            );
+          }
+          if (
+            /[<>]/.test(o.clockBackground) ||
+            /url\s*\(/i.test(o.clockBackground)
+          ) {
+            throw new BadRequestException(
+              '디지털 시계 배경색에 허용되지 않는 문자가 있습니다.',
+            );
+          }
+        }
+        if (o.clockTextColor != null) {
+          if (
+            typeof o.clockTextColor !== 'string' ||
+            o.clockTextColor.length > 80
+          ) {
+            throw new BadRequestException(
+              '디지털 시계 글자색이 올바르지 않습니다.',
+            );
+          }
+          if (
+            /[<>]/.test(o.clockTextColor) ||
+            /url\s*\(/i.test(o.clockTextColor)
+          ) {
+            throw new BadRequestException(
+              '디지털 시계 글자색에 허용되지 않는 문자가 있습니다.',
+            );
+          }
+        }
       } else {
         const w = o.width;
         const h = o.height;
@@ -341,6 +467,42 @@ export class BooksService {
           if (typeof o.objectFit !== 'string' || !allowed.has(o.objectFit)) {
             throw new BadRequestException('objectFit 값이 올바르지 않습니다.');
           }
+        }
+      }
+      if (o.borderRadius != null) {
+        if (
+          typeof o.borderRadius !== 'number' ||
+          !Number.isFinite(o.borderRadius) ||
+          o.borderRadius < 0 ||
+          o.borderRadius > 2000
+        ) {
+          throw new BadRequestException(
+            '요소 borderRadius가 올바르지 않습니다.',
+          );
+        }
+      }
+      if (o.outlineWidth != null) {
+        if (
+          typeof o.outlineWidth !== 'number' ||
+          !Number.isFinite(o.outlineWidth) ||
+          o.outlineWidth < 0 ||
+          o.outlineWidth > 32
+        ) {
+          throw new BadRequestException(
+            '요소 outlineWidth가 올바르지 않습니다.',
+          );
+        }
+      }
+      if (o.outlineColor != null) {
+        if (
+          typeof o.outlineColor !== 'string' ||
+          o.outlineColor.length > 80 ||
+          /[<>]/.test(o.outlineColor) ||
+          /url\s*\(/i.test(o.outlineColor)
+        ) {
+          throw new BadRequestException(
+            '요소 outlineColor가 올바르지 않습니다.',
+          );
         }
       }
       if (o.opacity != null) {

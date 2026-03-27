@@ -31,18 +31,47 @@ const BOOK_TEXT_RICH_ALLOWED_TAGS = [
 ] as const;
 
 /**
- * `span`의 style에서 `color`만 허용합니다. (다른 CSS·XSS 벡터 차단)
+ * `span`의 style에서 `color`·`font-size`만 허용합니다. (다른 CSS·XSS 벡터 차단)
+ * 글자 크기는 위젯 루트 `fontSize`에 대한 `em`을 권장합니다.
  */
-function sanitizeSpanStyleToColorOnly(raw: string): string | null {
+function isSafeFontSizeValue(val: string): boolean {
+  const v = val.trim();
+  if (!v || v.length > 24) return false;
+  if (/[;{}]|url\s*\(|expression\s*\(|@import/i.test(v)) return false;
+  const em = /^(\d+(\.\d+)?)em$/i.exec(v);
+  if (em) {
+    const n = parseFloat(em[1]!);
+    return Number.isFinite(n) && n >= 0.5 && n <= 4;
+  }
+  const px = /^(\d+)px$/i.exec(v);
+  if (px) {
+    const n = parseInt(px[1]!, 10);
+    return Number.isFinite(n) && n >= 8 && n <= 128;
+  }
+  return false;
+}
+
+function sanitizeSpanStyle(raw: string): string | null {
   const s = raw.trim();
   if (!s) return null;
   const parts = s.split(";").map((x) => x.trim()).filter(Boolean);
-  if (parts.length !== 1) return null;
-  const m = /^color\s*:\s*(.+)$/i.exec(parts[0]!);
-  if (!m) return null;
-  const val = m[1].trim();
-  if (!isSafeCssColorValue(val)) return null;
-  return `color: ${val}`;
+  const kept: string[] = [];
+  for (const part of parts) {
+    const colorM = /^color\s*:\s*(.+)$/i.exec(part);
+    if (colorM) {
+      const val = colorM[1]!.trim();
+      if (isSafeCssColorValue(val)) kept.push(`color: ${val}`);
+      continue;
+    }
+    const fsM = /^font-size\s*:\s*(.+)$/i.exec(part);
+    if (fsM) {
+      const val = fsM[1]!.trim();
+      if (isSafeFontSizeValue(val)) kept.push(`font-size: ${val}`);
+      continue;
+    }
+  }
+  if (kept.length === 0) return null;
+  return kept.join("; ");
 }
 
 function isSafeCssColorValue(val: string): boolean {
@@ -68,7 +97,7 @@ function bookRichHtmlPostProcessStyle(html: string): string {
         return;
       }
       const raw = el.getAttribute("style") || "";
-      const next = sanitizeSpanStyleToColorOnly(raw);
+      const next = sanitizeSpanStyle(raw);
       if (next) el.setAttribute("style", next);
       else el.removeAttribute("style");
     });

@@ -1,11 +1,20 @@
 import { Expand, SlidersHorizontal, Trash2 } from "lucide-react";
 import {
   BOOK_MEDIA_OBJECT_FIT_VALUES,
+  BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS,
   type BookCanvasElement,
+  type BookDigitalClockDisplay,
+  type BookDigitalClockDisplayResolved,
   type BookMediaObjectFit,
   type BookWeatherDisplay,
   type BookWeatherDisplayResolved,
+  parseBookClockBackground,
+  parseBookWidgetTextColor,
+  resolveBookDigitalClockDisplay,
+  resolveBookElementBorderRadius,
   resolveBookElementOpacity,
+  resolveBookElementOutlineColor,
+  resolveBookElementOutlineWidth,
   resolveBookElementRotation,
   resolveBookMediaObjectFit,
   resolveBookWeatherDisplay,
@@ -76,6 +85,226 @@ function patchWeatherDisplay(
   return next;
 }
 
+const DIGITAL_CLOCK_INSPECTOR_FIELDS: { key: keyof BookDigitalClockDisplayResolved; label: string }[] = [
+  { key: "seconds", label: "초 표시" },
+  { key: "date", label: "날짜 표시" },
+  { key: "hour12", label: "12시간(AM/PM)" },
+];
+
+function patchDigitalClockDisplay(
+  current: BookDigitalClockDisplay | undefined,
+  key: keyof BookDigitalClockDisplayResolved,
+  checked: boolean,
+): BookDigitalClockDisplay | undefined {
+  const next: BookDigitalClockDisplay = { ...current };
+  if (key === "hour12") {
+    if (checked) next.hour12 = true;
+    else delete next.hour12;
+  } else {
+    if (checked) delete next[key];
+    else next[key] = false;
+  }
+  if (Object.keys(next).length === 0) return undefined;
+  return next;
+}
+
+function digitalClockHexToRgba(hex: string, alpha: number): string {
+  let h = hex.replace("#", "").trim();
+  if (h.length === 3) {
+    h = h
+      .split("")
+      .map((c) => c + c)
+      .join("");
+  }
+  if (h.length !== 6) {
+    return `rgba(15,23,42,${Math.min(1, Math.max(0, alpha))})`;
+  }
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  if (![r, g, b].every((n) => Number.isFinite(n))) {
+    return `rgba(15,23,42,${Math.min(1, Math.max(0, alpha))})`;
+  }
+  const a = Math.min(1, Math.max(0, alpha));
+  return `rgba(${r},${g},${b},${a})`;
+}
+
+function parseDigitalClockBgForInspector(raw: string | undefined): { hex: string; alpha: number } {
+  const fallback = { hex: "#0f172a", alpha: 0.92 };
+  if (!raw?.trim()) return fallback;
+  const s = raw.trim();
+  const m = s.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+))?\s*\)$/i);
+  if (m) {
+    const r = Math.min(255, Math.max(0, parseInt(m[1], 10)));
+    const g = Math.min(255, Math.max(0, parseInt(m[2], 10)));
+    const b = Math.min(255, Math.max(0, parseInt(m[3], 10)));
+    const a = m[4] != null ? Math.min(1, Math.max(0, parseFloat(m[4]))) : 1;
+    const toHex = (n: number) => n.toString(16).padStart(2, "0");
+    return { hex: `#${toHex(r)}${toHex(g)}${toHex(b)}`, alpha: a };
+  }
+  if (/^#[0-9a-fA-F]{6}$/.test(s)) return { hex: s, alpha: 1 };
+  if (/^#[0-9a-fA-F]{3}$/.test(s)) {
+    const r = s[1] + s[1];
+    const g = s[2] + s[2];
+    const b = s[3] + s[3];
+    return { hex: `#${r}${g}${b}`, alpha: 1 };
+  }
+  if (/^#[0-9a-fA-F]{8}$/.test(s)) {
+    const r = parseInt(s.slice(1, 3), 16);
+    const g = parseInt(s.slice(3, 5), 16);
+    const b = parseInt(s.slice(5, 7), 16);
+    const aByte = parseInt(s.slice(7, 9), 16);
+    const toHex = (n: number) => n.toString(16).padStart(2, "0");
+    return {
+      hex: `#${toHex(r)}${toHex(g)}${toHex(b)}`,
+      alpha: Number.isFinite(aByte) ? Math.min(1, Math.max(0, aByte / 255)) : 1,
+    };
+  }
+  return fallback;
+}
+
+type WidgetBackdropFieldKey = "clockBackground" | "weatherBackground";
+type WidgetTextColorFieldKey = "weatherTextColor" | "clockTextColor";
+
+function OptionalWidgetTextColorFields({
+  elementId,
+  value,
+  field,
+  defaultHex,
+  colorAriaLabel,
+  defaultHint,
+  onChange,
+}: {
+  elementId: string;
+  value: string | undefined;
+  field: WidgetTextColorFieldKey;
+  defaultHex: string;
+  colorAriaLabel: string;
+  defaultHint: string;
+  onChange: BookInspectorPanelProps["onChange"];
+}) {
+  const sanitized = parseBookWidgetTextColor(value);
+  const usesCustom = Boolean(sanitized);
+  const { hex } = parseDigitalClockBgForInspector(sanitized);
+  const colorInputValue =
+    sanitized && /^#[0-9a-fA-F]{6}$/i.test(hex) ? hex : defaultHex;
+
+  const patch = (next: string | undefined) =>
+    onChange(elementId, { [field]: next } as Partial<BookCanvasElement>);
+
+  return (
+    <div className="space-y-2">
+      <Label>텍스트 색</Label>
+      <label className="flex cursor-pointer items-center gap-2 text-sm leading-none">
+        <Checkbox
+          checked={usesCustom}
+          onCheckedChange={(c) => {
+            if (c === true) {
+              patch(digitalClockHexToRgba(defaultHex, 1));
+            } else {
+              patch(undefined);
+            }
+          }}
+        />
+        <span>사용자 지정</span>
+      </label>
+      {usesCustom ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            type="color"
+            className="h-9 w-14 shrink-0 cursor-pointer px-1"
+            value={colorInputValue}
+            onChange={(e) => patch(digitalClockHexToRgba(e.target.value, 1))}
+            aria-label={colorAriaLabel}
+          />
+          <span className="text-[11px] text-muted-foreground">
+            본문·아이콘(선)에 적용됩니다.
+          </span>
+        </div>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">{defaultHint}</p>
+      )}
+    </div>
+  );
+}
+
+function OptionalWidgetBackdropFields({
+  elementId,
+  value,
+  field,
+  defaultRgba,
+  colorAriaLabel,
+  defaultHint,
+  onChange,
+}: {
+  elementId: string;
+  value: string | undefined;
+  field: WidgetBackdropFieldKey;
+  defaultRgba: string;
+  colorAriaLabel: string;
+  defaultHint: string;
+  onChange: BookInspectorPanelProps["onChange"];
+}) {
+  const sanitized = parseBookClockBackground(value);
+  const usesCustom = Boolean(sanitized);
+  const { hex, alpha } = parseDigitalClockBgForInspector(sanitized);
+  const alphaPct = Math.round(alpha * 100);
+  const colorInputValue = /^#[0-9a-fA-F]{6}$/.test(hex) ? hex : "#0f172a";
+
+  const patch = (next: string | undefined) =>
+    onChange(elementId, { [field]: next } as Partial<BookCanvasElement>);
+
+  return (
+    <div className="space-y-2">
+      <Label>배경</Label>
+      <label className="flex cursor-pointer items-center gap-2 text-sm leading-none">
+        <Checkbox
+          checked={usesCustom}
+          onCheckedChange={(c) => {
+            if (c === true) {
+              patch(defaultRgba);
+            } else {
+              patch(undefined);
+            }
+          }}
+        />
+        <span>사용자 배경색</span>
+      </label>
+      {usesCustom ? (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <Input
+              type="color"
+              className="h-9 w-14 shrink-0 cursor-pointer px-1"
+              value={colorInputValue}
+              onChange={(e) => patch(digitalClockHexToRgba(e.target.value, alpha))}
+              aria-label={colorAriaLabel}
+            />
+            <span className="text-[11px] text-muted-foreground">
+              색상 · 슬라이더는 배경 투명도(테두리·그림자도 같이 줄어듭니다)
+            </span>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
+              <span>배경 투명도</span>
+              <span className="tabular-nums">{alphaPct}%</span>
+            </div>
+            <Slider
+              value={[alphaPct]}
+              min={0}
+              max={100}
+              step={1}
+              onValueChange={([v]) => patch(digitalClockHexToRgba(colorInputValue, v / 100))}
+            />
+          </div>
+        </>
+      ) : (
+        <p className="text-[11px] text-muted-foreground">{defaultHint}</p>
+      )}
+    </div>
+  );
+}
+
 const MEDIA_FIT_LABELS: Record<BookMediaObjectFit, string> = {
   cover: "꽉 채움 (비율 유지, 잘림)",
   contain: "전체 보임 (여백)",
@@ -83,6 +312,91 @@ const MEDIA_FIT_LABELS: Record<BookMediaObjectFit, string> = {
   none: "원본 크기 (왼쪽 위)",
   "scale-down": "줄여 맞춤 (확대 없음)",
 };
+
+function outlineInspectorHex(resolvedColor: string): string {
+  const t = resolvedColor.trim();
+  if (/^#[0-9a-fA-F]{6}$/i.test(t)) return t;
+  const m = t.match(/^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/i);
+  if (m) {
+    const toHex = (n: number) => Math.min(255, Math.max(0, n)).toString(16).padStart(2, "0");
+    return `#${toHex(+m[1])}${toHex(+m[2])}${toHex(+m[3])}`;
+  }
+  return "#94a3b8";
+}
+
+function ElementShapeChromeFields({
+  el,
+  onChange,
+}: {
+  el: BookCanvasElement;
+  onChange: BookInspectorPanelProps["onChange"];
+}) {
+  const br = resolveBookElementBorderRadius(el);
+  const ow = resolveBookElementOutlineWidth(el);
+  const ocResolved = resolveBookElementOutlineColor(el);
+  const colorPick = outlineInspectorHex(ocResolved);
+
+  const typeHint =
+    el.type === "weather" || el.type === "digitalClock"
+      ? `저장하지 않으면 기본 ${BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS}px(둥근 카드)입니다.`
+      : "텍스트·이미지·동영상은 기본 0(각진 모서리)입니다.";
+
+  return (
+    <div className="space-y-2 border-t border-border pt-3">
+      <Label className="text-xs font-medium">모양</Label>
+      <p className="text-[11px] text-muted-foreground">{typeHint}</p>
+      <div className="space-y-1">
+        <Label htmlFor={`insp-br-${el.id}`}>모서리 반지름 (px)</Label>
+        <Input
+          id={`insp-br-${el.id}`}
+          type="number"
+          min={0}
+          max={2000}
+          value={br}
+          onChange={(e) =>
+            onChange(el.id, {
+              borderRadius: num(e.target.value, br, 0, 2000),
+            })
+          }
+        />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`insp-ow-${el.id}`}>외곽선 두께 (px)</Label>
+        <Input
+          id={`insp-ow-${el.id}`}
+          type="number"
+          min={0}
+          max={32}
+          value={ow}
+          onChange={(e) => {
+            const v = num(e.target.value, ow, 0, 32);
+            onChange(el.id, {
+              outlineWidth: v > 0 ? v : undefined,
+              ...(v <= 0 ? { outlineColor: undefined } : {}),
+            });
+          }}
+        />
+      </div>
+      {ow > 0 ? (
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            id={`insp-oc-${el.id}`}
+            type="color"
+            className="h-9 w-14 shrink-0 cursor-pointer px-1"
+            value={/^#[0-9a-fA-F]{6}$/i.test(colorPick) ? colorPick : "#94a3b8"}
+            onChange={(e) =>
+              onChange(el.id, {
+                outlineColor: e.target.value,
+              })
+            }
+            aria-label="외곽선 색"
+          />
+          <span className="text-[11px] text-muted-foreground">외곽선 색</span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function ElementOpacitySlider({
   elementId,
@@ -282,6 +596,7 @@ export function BookInspectorPanel({
                   }
                 />
               </div>
+              <ElementShapeChromeFields el={selected} onChange={onChange} />
               <PositionSizeFields el={selected} onChange={onChange} />
             </>
           ) : selected.type === "weather" ? (
@@ -337,11 +652,87 @@ export function BookInspectorPanel({
                   })}
                 </div>
               </div>
+              <OptionalWidgetBackdropFields
+                elementId={selected.id}
+                value={selected.weatherBackground}
+                field="weatherBackground"
+                defaultRgba="rgba(14,165,233,0.88)"
+                colorAriaLabel="날씨 카드 배경색"
+                defaultHint="끄면 날씨/대기 테마 일러스트 배경을 씁니다."
+                onChange={onChange}
+              />
+              <OptionalWidgetTextColorFields
+                elementId={selected.id}
+                value={selected.weatherTextColor}
+                field="weatherTextColor"
+                defaultHex="#ffffff"
+                colorAriaLabel="날씨 위젯 글자색"
+                defaultHint="끄면 배경 테마에 맞는 기본 글자색을 씁니다."
+                onChange={onChange}
+              />
               <ElementOpacitySlider
                 elementId={selected.id}
                 opacity={selected.opacity}
                 onChange={onChange}
               />
+              <ElementShapeChromeFields el={selected} onChange={onChange} />
+              <PositionSizeFields el={selected} onChange={onChange} />
+            </>
+          ) : selected.type === "digitalClock" ? (
+            <>
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                브라우저 로컬 시간 기준입니다. 초 표시를 끄면 분이 바뀔 때만 갱신됩니다.
+              </p>
+              <div className="space-y-2">
+                <Label>표시</Label>
+                <div className="flex flex-col gap-2">
+                  {DIGITAL_CLOCK_INSPECTOR_FIELDS.map(({ key, label }) => {
+                    const disp = resolveBookDigitalClockDisplay(selected.clockDisplay);
+                    const checked = disp[key];
+                    return (
+                      <label
+                        key={key}
+                        className="flex cursor-pointer items-center gap-2 text-sm leading-none"
+                      >
+                        <Checkbox
+                          checked={checked}
+                          onCheckedChange={(c) => {
+                            const on = c === true;
+                            onChange(selected.id, {
+                              clockDisplay: patchDigitalClockDisplay(selected.clockDisplay, key, on),
+                            });
+                          }}
+                        />
+                        <span>{label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+              <OptionalWidgetBackdropFields
+                elementId={selected.id}
+                value={selected.clockBackground}
+                field="clockBackground"
+                defaultRgba="rgba(15,23,42,0.92)"
+                colorAriaLabel="시계 배경색"
+                defaultHint="끄면 기본 그라데이션 배경을 씁니다."
+                onChange={onChange}
+              />
+              <OptionalWidgetTextColorFields
+                elementId={selected.id}
+                value={selected.clockTextColor}
+                field="clockTextColor"
+                defaultHex="#ffffff"
+                colorAriaLabel="디지털 시계 글자색"
+                defaultHint="끄면 밝은 기본 글자색을 씁니다."
+                onChange={onChange}
+              />
+              <ElementOpacitySlider
+                elementId={selected.id}
+                opacity={selected.opacity}
+                onChange={onChange}
+              />
+              <ElementShapeChromeFields el={selected} onChange={onChange} />
               <PositionSizeFields el={selected} onChange={onChange} />
             </>
           ) : selected.type === "image" ? (
@@ -357,6 +748,7 @@ export function BookInspectorPanel({
                 opacity={selected.opacity}
                 onChange={onChange}
               />
+              <ElementShapeChromeFields el={selected} onChange={onChange} />
               <PositionSizeFields el={selected} onChange={onChange} />
             </>
           ) : (
@@ -375,6 +767,7 @@ export function BookInspectorPanel({
                 opacity={selected.opacity}
                 onChange={onChange}
               />
+              <ElementShapeChromeFields el={selected} onChange={onChange} />
               <PositionSizeFields el={selected} onChange={onChange} />
             </>
           )}
