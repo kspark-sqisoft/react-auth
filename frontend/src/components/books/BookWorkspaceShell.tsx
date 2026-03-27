@@ -97,7 +97,8 @@ function PanelEdgeToggle({
 }
 
 /**
- * 앱 헤더 위를 덮는 전체 화면 북 워크스페이스(파워포인트 스타일).
+ * 북 편집/보기 워크스페이스. `AppLayout`의 `<main>` 안에서 `flex-1 min-h-0`로 두어
+ * 사이트 헤더·푸터 사이 높이를 채웁니다(전역 `fixed`로 헤더를 가리지 않음).
  * 좌·우 패널은 접어 편집 영역을 넓게 쓸 수 있습니다.
  */
 export function BookWorkspaceShell({
@@ -116,7 +117,7 @@ export function BookWorkspaceShell({
   return (
     <div
       className={cn(
-        "fixed inset-0 z-[200] flex flex-col bg-background text-foreground",
+        "flex min-h-0 w-full flex-1 flex-col bg-background text-foreground",
         className,
       )}
     >
@@ -139,8 +140,8 @@ export function BookWorkspaceShell({
       {/* overflow-x: 패널 밖으로 삐져나온 토글 히트 영역이 잘리지 않게 */}
       <div className="flex min-h-0 min-w-0 flex-1 overflow-x-visible overflow-y-hidden">
         {leftOpen ? (
-          <div className="relative z-20 flex h-full min-h-0 shrink-0 overflow-visible">
-            <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-e border-border/60 bg-card/30">
+          <div className="relative z-20 flex min-h-0 shrink-0 self-stretch overflow-visible">
+            <div className="flex h-full min-h-0 min-w-0 max-h-full flex-col overflow-hidden border-e border-border/60 bg-card/30">
               {left}
             </div>
             <PanelEdgeToggle
@@ -190,7 +191,7 @@ export function BookWorkspaceShell({
         </div>
 
         {hasRight && rightOpen ? (
-          <div className="relative z-20 flex h-full min-h-0 shrink-0 overflow-visible">
+          <div className="relative z-20 flex min-h-0 shrink-0 self-stretch overflow-visible">
             <PanelEdgeToggle
               className={cn(
                 floatingToggleClass,
@@ -202,7 +203,7 @@ export function BookWorkspaceShell({
             >
               <PanelRightClose className="size-4" aria-hidden />
             </PanelEdgeToggle>
-            <div className="flex h-full min-h-0 min-w-0 flex-col overflow-hidden border-s border-border/60 bg-card/30">
+            <div className="flex h-full min-h-0 min-w-0 max-h-full flex-col overflow-hidden border-s border-border/60 bg-card/30">
               {right}
             </div>
           </div>

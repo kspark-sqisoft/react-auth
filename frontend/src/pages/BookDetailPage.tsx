@@ -631,7 +631,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
           </div>
         }
         right={
-          <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card/50 p-3">
+          <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card/50 p-3">
             <p className="text-sm text-muted-foreground">
               페이지를 추가한 뒤 여기서 슬라이드 이름을 바꿀 수 있습니다. 크기는 헤더 캔버스 W·H를 사용하세요.
             </p>

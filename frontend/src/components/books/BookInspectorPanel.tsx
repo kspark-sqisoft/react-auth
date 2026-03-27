@@ -30,7 +30,6 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { Slider } from "@/components/ui/slider";
 import {
   Select,
@@ -477,12 +476,12 @@ export function BookInspectorPanel({
   mediaHint,
 }: BookInspectorPanelProps) {
   return (
-    <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
+    <aside className="flex h-full min-h-0 max-h-full w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <SlidersHorizontal className="size-4 text-muted-foreground" aria-hidden />
         <span className="text-xs font-medium text-muted-foreground">위젯 속성</span>
       </div>
-      <ScrollArea className="min-h-0 flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
         <div className="space-y-4 p-3">
           {!selected ? (
             <p className="text-sm text-muted-foreground">
@@ -800,7 +799,7 @@ export function BookInspectorPanel({
 
           {mediaHint ? <p className="text-xs text-amber-600 dark:text-amber-400">{mediaHint}</p> : null}
         </div>
-      </ScrollArea>
+      </div>
     </aside>
   );
 }

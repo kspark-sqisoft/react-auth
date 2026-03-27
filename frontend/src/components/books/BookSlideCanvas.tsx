@@ -279,100 +279,111 @@ function BookSlideVideoOverlay({
   const vidOutlineShadow =
     vidOw > 0 ? `0 0 0 ${Math.max(0.5, vidOw * scale)}px ${vidOc}` : undefined;
 
+  const boxStyle = {
+    left: vx * scale,
+    top: vy * scale,
+    width: vw * scale,
+    height: vh * scale,
+    opacity: vOpacity,
+    transform: vDeg !== 0 ? `rotate(${vDeg}deg)` : undefined,
+    transformOrigin: "center center" as const,
+    borderRadius: Math.max(0, vidBr * scale),
+  };
+
   return (
-    <div
-      className="absolute pointer-events-none overflow-hidden"
-      style={{
-        left: vx * scale,
-        top: vy * scale,
-        width: vw * scale,
-        height: vh * scale,
-        opacity: vOpacity,
-        transform: vDeg !== 0 ? `rotate(${vDeg}deg)` : undefined,
-        transformOrigin: "center center",
-        borderRadius: Math.max(0, vidBr * scale),
-        boxShadow: vidOutlineShadow,
-      }}
-    >
-      <video
-        ref={videoRef}
-        className={cn(
-          "pointer-events-none absolute outline-none",
-          useLayoutBox ? undefined : "inset-0 size-full",
-          !useLayoutBox && mediaObjectFitToCssClass(el.objectFit),
-        )}
-        style={
-          useLayoutBox && layout
-            ? {
-                left: layout.x * scale,
-                top: layout.y * scale,
-                width: layout.width * scale,
-                height: layout.height * scale,
-                objectFit: "fill",
-                backgroundColor: "transparent",
-              }
-            : { backgroundColor: "transparent" }
-        }
-        src={src}
-        poster={poster || undefined}
-        muted
-        playsInline
-        preload="metadata"
-        controls={false}
-        onLoadedMetadata={(e) => {
-          const v = e.currentTarget;
-          const w = v.videoWidth;
-          const h = v.videoHeight;
-          if (w > 0 && h > 0) setIntrinsic({ src, w, h });
-        }}
-      />
+    <>
+      {/* Konva(z-1) 아래: 화면 + 외곽선 — 선택/트랜스포머가 위에 보이게 */}
       <div
-        className={cn(
-          "absolute bottom-0 left-0 right-0 flex h-9 min-h-9 items-center gap-1 border-t border-white/15 bg-black/75 px-1 py-0.5 transition-opacity duration-200",
-          barVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
-        )}
-        onMouseDown={(e) => e.stopPropagation()}
-        onPointerDown={(e) => e.stopPropagation()}
-        onPointerEnter={onBarPointerEnter}
-        onPointerLeave={onBarPointerLeave}
+        className="absolute z-0 overflow-hidden pointer-events-none"
+        style={{
+          ...boxStyle,
+          boxShadow: vidOutlineShadow,
+        }}
       >
-        <button
-          type="button"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-white hover:bg-white/15"
-          onClick={togglePlay}
-          aria-label={playing ? "일시정지" : "재생"}
-        >
-          {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5 pl-0.5" />}
-        </button>
-        <button
-          type="button"
-          className="flex size-7 shrink-0 items-center justify-center rounded-md text-white hover:bg-white/15"
-          onClick={stop}
-          aria-label="정지"
-        >
-          <Square className="size-3 fill-current" />
-        </button>
-        <input
-          type="range"
-          min={0}
-          max={1}
-          step={0.001}
-          value={progress}
-          disabled={duration <= 0}
-          onChange={(e) => {
-            const v = videoRef.current;
-            if (!v || duration <= 0) return;
-            v.currentTime = Number(e.target.value) * duration;
-            syncFromVideo();
+        <video
+          ref={videoRef}
+          className={cn(
+            "pointer-events-none absolute outline-none",
+            useLayoutBox ? undefined : "inset-0 size-full",
+            !useLayoutBox && mediaObjectFitToCssClass(el.objectFit),
+          )}
+          style={
+            useLayoutBox && layout
+              ? {
+                  left: layout.x * scale,
+                  top: layout.y * scale,
+                  width: layout.width * scale,
+                  height: layout.height * scale,
+                  objectFit: "fill",
+                  backgroundColor: "transparent",
+                }
+              : { backgroundColor: "transparent" }
+          }
+          src={src}
+          poster={poster || undefined}
+          muted
+          playsInline
+          preload="metadata"
+          controls={false}
+          onLoadedMetadata={(e) => {
+            const v = e.currentTarget;
+            const w = v.videoWidth;
+            const h = v.videoHeight;
+            if (w > 0 && h > 0) setIntrinsic({ src, w, h });
           }}
-          className="h-1 min-w-0 flex-1 cursor-pointer accent-primary disabled:opacity-40"
-          aria-label="재생 위치"
         />
-        <span className="shrink-0 text-[10px] tabular-nums leading-none text-white/90">
-          {formatMediaClock(currentTime)} / {formatMediaClock(duration)}
-        </span>
       </div>
-    </div>
+      {/* Konva보다 위: 하단 바만 클릭 가능. 나머지 영역은 pointer-events-none으로 Konva로 통과 */}
+      <div className="absolute z-2 overflow-hidden pointer-events-none" style={boxStyle}>
+        <div
+          className={cn(
+            "absolute bottom-0 left-0 right-0 z-10 flex h-9 min-h-9 items-center gap-1 border-t border-white/15 bg-black/75 px-1 py-0.5 transition-opacity duration-200",
+            barVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
+          )}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerDownCapture={(e) => e.stopPropagation()}
+          onPointerEnter={onBarPointerEnter}
+          onPointerLeave={onBarPointerLeave}
+        >
+          <button
+            type="button"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-white hover:bg-white/15"
+            onClick={togglePlay}
+            aria-label={playing ? "일시정지" : "재생"}
+          >
+            {playing ? <Pause className="size-3.5" /> : <Play className="size-3.5 pl-0.5" />}
+          </button>
+          <button
+            type="button"
+            className="flex size-7 shrink-0 items-center justify-center rounded-md text-white hover:bg-white/15"
+            onClick={stop}
+            aria-label="정지"
+          >
+            <Square className="size-3 fill-current" />
+          </button>
+          <input
+            type="range"
+            min={0}
+            max={1}
+            step={0.001}
+            value={progress}
+            disabled={duration <= 0}
+            onChange={(e) => {
+              const v = videoRef.current;
+              if (!v || duration <= 0) return;
+              v.currentTime = Number(e.target.value) * duration;
+              syncFromVideo();
+            }}
+            className="h-1 min-w-0 flex-1 cursor-pointer accent-primary disabled:opacity-40"
+            aria-label="재생 위치"
+          />
+          <span className="shrink-0 text-[10px] tabular-nums leading-none text-white/90">
+            {formatMediaClock(currentTime)} / {formatMediaClock(duration)}
+          </span>
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -715,31 +726,29 @@ export function BookSlideCanvas({
       }
       onDrop={dropEnabled ? handleDrop : undefined}
     >
-      {/* 슬라이드 배경은 HTML — Konva Stage를 비디오(z-0)보다 위에 두면 트랜스포머 앵커가 비디오에 가리지 않음 */}
+      {/* 슬라이드 배경은 HTML — 비디오 화면은 z-0, 하단 컨트롤만 z-2로 Stage(z-1) 위에 올려 클릭이 Konva로만 가지 않게 함 */}
       <div
         className="pointer-events-none absolute inset-0 z-0"
         style={{ backgroundColor: pageBackgroundColor }}
         aria-hidden
       />
-      <div className="pointer-events-none absolute inset-0 z-0 overflow-hidden">
-        {elements
-          .filter((e): e is Extract<BookCanvasElement, { type: "video" }> => e.type === "video")
-          .map((el) => (
-            <BookSlideVideoOverlay
-              key={el.id}
-              el={el}
-              scale={scale}
-              barVisible={Boolean(videoBarVisible[el.id])}
-              liveFrame={overlayLiveFrame(el.id, dragLive, transformLive, {
-                w: el.width,
-                h: el.height,
-                rotation: resolveBookElementRotation(el.rotation),
-              })}
-              onBarPointerEnter={() => showVideoBar(el.id)}
-              onBarPointerLeave={() => scheduleHideVideoBar(el.id)}
-            />
-          ))}
-      </div>
+      {elements
+        .filter((e): e is Extract<BookCanvasElement, { type: "video" }> => e.type === "video")
+        .map((el) => (
+          <BookSlideVideoOverlay
+            key={el.id}
+            el={el}
+            scale={scale}
+            barVisible={Boolean(videoBarVisible[el.id])}
+            liveFrame={overlayLiveFrame(el.id, dragLive, transformLive, {
+              w: el.width,
+              h: el.height,
+              rotation: resolveBookElementRotation(el.rotation),
+            })}
+            onBarPointerEnter={() => showVideoBar(el.id)}
+            onBarPointerLeave={() => scheduleHideVideoBar(el.id)}
+          />
+        ))}
       <div className="relative z-[1]">
         <Stage width={sw} height={sh} style={{ background: "transparent" }}>
         <Layer scaleX={scale} scaleY={scale}>

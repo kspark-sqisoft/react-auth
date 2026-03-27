@@ -2,7 +2,6 @@ import { LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { DEFAULT_PAGE_BACKGROUND, slideDisplayLabel } from "@/lib/book-canvas";
 import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
 import { cn } from "@/lib/utils";
@@ -32,12 +31,12 @@ export function BookPagePropertiesPanel({
   const pickerValue = hexForColorInput(backgroundColor.trim());
 
   return (
-    <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
+    <aside className="flex h-full min-h-0 max-h-full w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <LayoutTemplate className="size-4 text-muted-foreground" aria-hidden />
         <span className="text-xs font-medium text-muted-foreground">페이지 속성</span>
       </div>
-      <ScrollArea className="min-h-0 flex-1 overflow-hidden">
+      <div className="min-h-0 flex-1 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
         <div className="space-y-4 p-3">
           <p className="text-xs text-muted-foreground">
             슬라이드 크기는 위쪽 헤더의 캔버스 W·H에서 바꿀 수 있습니다.
@@ -115,7 +114,7 @@ export function BookPagePropertiesPanel({
             </p>
           </div>
         </div>
-      </ScrollArea>
+      </div>
     </aside>
   );
 }

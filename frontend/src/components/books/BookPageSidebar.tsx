@@ -24,7 +24,6 @@ import {
   ContextMenuFloatingItem,
   ContextMenuFloatingPanel,
 } from "@/components/ui/context-menu";
-import { ScrollArea } from "@/components/ui/scroll-area";
 import { slideDisplayLabel } from "@/lib/book-canvas";
 import { cn } from "@/lib/utils";
 
@@ -411,23 +410,20 @@ export function BookPageSidebar({
     );
 
   return (
-    <aside className="flex h-full min-h-0 w-[13.75rem] shrink-0 flex-col border-r border-border bg-card/50 sm:w-[15.5rem]">
+    <aside className="flex h-full min-h-0 w-[13.75rem] max-h-full shrink-0 flex-col overflow-hidden border-r border-border bg-card/50 sm:w-[15.5rem]">
       <div
-        className="flex items-center gap-2 border-b border-border px-2 py-2"
+        className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-2"
         title={reorder ? "슬라이드 줄 전체를 드래그해 순서를 바꿀 수 있습니다." : undefined}
       >
         <FileStack className="size-4 shrink-0 text-muted-foreground" aria-hidden />
         <span className="text-xs font-medium text-muted-foreground">페이지</span>
       </div>
-      {reorder ? (
-        <div className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
-          {listBody}
-        </div>
-      ) : (
-        <ScrollArea className="min-h-0 flex-1">{listBody}</ScrollArea>
-      )}
+      {/* basis-0: flex 자식이 콘텐츠 높이만큼 밀고 늘어나지 않게 — 목록만 스크롤, 하단 버튼 고정 */}
+      <div className="min-h-0 flex-1 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
+        {listBody}
+      </div>
       {edit ? (
-        <div className="flex shrink-0 flex-col gap-1 border-t border-border p-2">
+        <div className="flex shrink-0 flex-col gap-1 border-t border-border bg-card/50 p-2">
           <Button type="button" variant="secondary" size="sm" className="w-full" onClick={onAddPage}>
             <Plus className="mr-1 size-3.5" aria-hidden />
             페이지 추가

@@ -32,14 +32,26 @@ export function AppLayout() {
   /** 북 워크스페이스(상세·새 북 편집)만 넓게; `/books` 목록은 글 목록과 동일 `max-w-3xl` */
   const wideMain =
     location.pathname === "/books/new" || /^\/books\/\d+/.test(location.pathname);
+  /** `BookWorkspaceShell` 사용 라우트 — 사이트 헤더 아래에 맞추려 main 패딩 제거·flex 높이 체인 */
+  const bookShellRoute =
+    location.pathname === "/books/new" || /^\/books\/\d+$/.test(location.pathname);
 
   return (
-    <div className="flex min-h-screen flex-col bg-background text-foreground">
+    <div
+      className={cn(
+        "flex flex-col bg-background text-foreground",
+        /* 북 워크스페이스: 문서 높이가 늘어나지 않게 뷰포트에 고정(푸터·헤더 항상 보임) */
+        bookShellRoute
+          ? "h-[100dvh] max-h-[100dvh] min-h-0 overflow-hidden"
+          : "min-h-screen",
+      )}
+    >
       <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm">
         <div
           className={cn(
-            "mx-auto flex h-12 items-center justify-between gap-4 px-4",
-            wideMain ? "max-w-6xl" : "max-w-3xl",
+            "mx-auto flex h-12 w-full items-center justify-between gap-4 px-4",
+            /* 북 풀블리드여도 내비는 홈·글·북 목록과 동일 `max-w-3xl` 컬럼에 맞춤 */
+            bookShellRoute ? "max-w-3xl" : wideMain ? "max-w-6xl" : "max-w-3xl",
           )}
         >
           <nav className="flex items-center gap-2 text-sm font-medium sm:gap-3">
@@ -99,8 +111,13 @@ export function AppLayout() {
       </header>
       <main
         className={cn(
-          "mx-auto w-full flex-1 px-4 py-8",
-          wideMain ? "max-w-6xl" : "max-w-3xl",
+          "w-full flex-1",
+          bookShellRoute
+            ? "flex min-h-0 max-w-none flex-col overflow-hidden p-0"
+            : cn(
+                "mx-auto px-4 py-8",
+                wideMain ? "max-w-6xl" : "max-w-3xl",
+              ),
         )}
       >
         <Outlet />
@@ -108,8 +125,8 @@ export function AppLayout() {
       <footer className="mt-auto shrink-0 border-t border-border bg-card/40 backdrop-blur-sm">
         <div
           className={cn(
-            "mx-auto flex flex-col gap-6 px-4 py-8 sm:flex-row sm:items-start sm:justify-between",
-            wideMain ? "max-w-6xl" : "max-w-3xl",
+            "mx-auto flex w-full flex-col gap-6 px-4 py-8 sm:flex-row sm:items-start sm:justify-between",
+            bookShellRoute ? "max-w-3xl" : wideMain ? "max-w-6xl" : "max-w-3xl",
           )}
         >
           <div className="space-y-1">

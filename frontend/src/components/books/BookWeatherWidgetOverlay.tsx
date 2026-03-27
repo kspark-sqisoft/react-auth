@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   CloudFog,
@@ -102,6 +102,17 @@ function pickLayoutVariant(d: BookWeatherDisplayResolved): LayoutVariant {
   return "standard";
 }
 
+/** 공통: 메시 그라데이션 + 가장자리 비네트 */
+function BackdropMesh({ className }: { className?: string }) {
+  return (
+    <div className={cn("pointer-events-none absolute inset-0", className)} aria-hidden>
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_90%_70%_at_10%_0%,rgba(255,255,255,0.22),transparent_52%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_60%_at_100%_100%,rgba(255,255,255,0.12),transparent_50%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.18)_100%)]" />
+    </div>
+  );
+}
+
 function CardBackdrop({ kind }: { kind: VisualKind }) {
   switch (kind) {
     case "clear-day":
@@ -111,15 +122,12 @@ function CardBackdrop({ kind }: { kind: VisualKind }) {
             className="absolute inset-0"
             style={{
               background:
-                "linear-gradient(135deg, #f26d5c 0%, #f59e0b 42%, #fbbf24 88%)",
+                "linear-gradient(128deg, #ff8a5c 0%, #ffb347 28%, #ffd89b 52%, #ff9a76 100%)",
             }}
           />
+          <BackdropMesh />
           <div
-            className="absolute -right-[12%] -top-[18%] size-[65%] rounded-full bg-yellow-200/35 blur-2xl"
-            aria-hidden
-          />
-          <div
-            className="absolute -left-[8%] bottom-[-20%] size-[50%] rounded-full bg-orange-300/25 blur-3xl"
+            className="absolute -right-[18%] -top-[22%] size-[72%] rounded-full bg-amber-100/40 blur-3xl"
             aria-hidden
           />
         </>
@@ -130,9 +138,10 @@ function CardBackdrop({ kind }: { kind: VisualKind }) {
           <div
             className="absolute inset-0"
             style={{
-              background: "linear-gradient(165deg, #0f172a 0%, #1e1b4b 45%, #172554 100%)",
+              background: "linear-gradient(168deg, #0c1222 0%, #1a1f4a 38%, #251d47 72%, #0f172a 100%)",
             }}
           />
+          <BackdropMesh className="opacity-80" />
           {[
             [12, 8],
             [28, 18],
@@ -145,14 +154,14 @@ function CardBackdrop({ kind }: { kind: VisualKind }) {
           ].map(([l, t], i) => (
             <span
               key={i}
-              className="absolute size-0.5 rounded-full bg-white/90 shadow-[0_0_4px_rgba(255,255,255,0.8)]"
-              style={{ left: `${l}%`, top: `${t}%` }}
+              className="absolute size-[3px] rounded-full bg-white shadow-[0_0_6px_rgba(255,255,255,0.95)]"
+              style={{ left: `${l}%`, top: `${t}%`, opacity: 0.55 + (i % 3) * 0.12 }}
               aria-hidden
             />
           ))}
           <div
-            className="absolute -right-[6%] top-[8%] size-[38%] rounded-full border-[0.18em] border-amber-200/90 border-r-transparent border-b-transparent border-l-transparent rotate-[-25deg]"
-            style={{ boxShadow: "0 0 0 0.08em rgba(253,230,138,0.15)" }}
+            className="absolute -right-[4%] top-[6%] size-[36%] rounded-full border-[0.14em] border-amber-100/55 border-r-transparent border-b-transparent border-l-transparent rotate-[-22deg]"
+            style={{ boxShadow: "inset 0 0 1.2em rgba(254,243,199,0.12)" }}
             aria-hidden
           />
         </>
@@ -163,15 +172,12 @@ function CardBackdrop({ kind }: { kind: VisualKind }) {
           <div
             className="absolute inset-0"
             style={{
-              background: "linear-gradient(145deg, #64748b 0%, #3b82f6 55%, #1d4ed8 100%)",
+              background: "linear-gradient(152deg, #5b7c9a 0%, #4f8ad6 45%, #2563eb 78%, #1e40af 100%)",
             }}
           />
+          <BackdropMesh />
           <div
-            className="absolute inset-x-0 bottom-0 h-[45%] bg-linear-to-t from-slate-900/35 to-transparent"
-            aria-hidden
-          />
-          <div
-            className="absolute -bottom-[8%] left-[-5%] right-[-5%] h-[38%] rounded-[100%] bg-slate-800/25 blur-sm"
+            className="absolute -bottom-[12%] inset-x-[-8%] h-[42%] rounded-[100%] bg-slate-950/20 blur-xl"
             aria-hidden
           />
         </>
@@ -182,10 +188,11 @@ function CardBackdrop({ kind }: { kind: VisualKind }) {
           <div
             className="absolute inset-0"
             style={{
-              background: "linear-gradient(155deg, #1e293b 0%, #312e81 50%, #1e3a5f 100%)",
+              background: "linear-gradient(158deg, #1a2332 0%, #2d325a 48%, #1e3a5f 100%)",
             }}
           />
-          <div className="absolute inset-x-0 bottom-0 h-[40%] bg-linear-to-t from-black/40 to-transparent" aria-hidden />
+          <BackdropMesh className="opacity-90" />
+          <div className="absolute inset-x-0 bottom-0 h-[42%] bg-linear-to-t from-black/45 to-transparent" aria-hidden />
         </>
       );
     case "rain":
@@ -194,10 +201,19 @@ function CardBackdrop({ kind }: { kind: VisualKind }) {
           <div
             className="absolute inset-0"
             style={{
-              background: "linear-gradient(160deg, #475569 0%, #1e40af 40%, #0f172a 100%)",
+              background: "linear-gradient(162deg, #3d4f63 0%, #1d4e89 38%, #0c4a6e 72%, #082f49 100%)",
             }}
           />
-          <div className="absolute inset-x-0 bottom-0 h-[35%] bg-linear-to-t from-slate-950/50 to-transparent" aria-hidden />
+          <BackdropMesh className="opacity-75" />
+          <div
+            className="absolute inset-0 opacity-40"
+            style={{
+              backgroundImage:
+                "repeating-linear-gradient(-18deg, transparent, transparent 6px, rgba(255,255,255,0.04) 6px, rgba(255,255,255,0.04) 7px)",
+            }}
+            aria-hidden
+          />
+          <div className="absolute inset-x-0 bottom-0 h-[38%] bg-linear-to-t from-slate-950/55 to-transparent" aria-hidden />
         </>
       );
     case "storm":
@@ -206,10 +222,14 @@ function CardBackdrop({ kind }: { kind: VisualKind }) {
           <div
             className="absolute inset-0"
             style={{
-              background: "linear-gradient(165deg, #334155 0%, #3730a3 35%, #0f172a 100%)",
+              background: "linear-gradient(168deg, #2c3544 0%, #3730a3 32%, #1e1b4b 68%, #0f172a 100%)",
             }}
           />
-          <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_30%_0%,rgba(250,204,21,0.12),transparent_50%)]" aria-hidden />
+          <BackdropMesh />
+          <div
+            className="absolute inset-0 bg-[radial-gradient(ellipse_70%_45%_at_25%_5%,rgba(250,204,21,0.18),transparent_55%)]"
+            aria-hidden
+          />
         </>
       );
     case "snow":
@@ -218,16 +238,17 @@ function CardBackdrop({ kind }: { kind: VisualKind }) {
           <div
             className="absolute inset-0"
             style={{
-              background: "linear-gradient(145deg, #bae6fd 0%, #e0f2fe 50%, #7dd3fc 100%)",
+              background: "linear-gradient(148deg, #dbeafe 0%, #f0f9ff 40%, #93c5fd 88%, #bfdbfe 100%)",
             }}
           />
+          <BackdropMesh className="opacity-50 mix-blend-overlay" />
           {[
-            [10, 15, 0.45],
-            [78, 22, 0.35],
-            [45, 8, 0.5],
-            [88, 55, 0.3],
-            [22, 62, 0.4],
-            [65, 70, 0.35],
+            [10, 15, 0.5],
+            [78, 22, 0.4],
+            [45, 8, 0.55],
+            [88, 55, 0.35],
+            [22, 62, 0.45],
+            [65, 70, 0.4],
           ].map(([l, t, op], i) => (
             <span
               key={i}
@@ -236,8 +257,8 @@ function CardBackdrop({ kind }: { kind: VisualKind }) {
                 left: `${l}%`,
                 top: `${t}%`,
                 opacity: op,
-                fontSize: "0.7em",
-                textShadow: "0 0 6px rgba(255,255,255,0.9)",
+                fontSize: "0.65em",
+                textShadow: "0 0 8px rgba(255,255,255,1)",
               }}
               aria-hidden
             >
@@ -248,15 +269,23 @@ function CardBackdrop({ kind }: { kind: VisualKind }) {
       );
     case "mist":
       return (
-        <div
-          className="absolute inset-0"
-          style={{
-            background: "linear-gradient(180deg, #94a3b8 0%, #64748b 55%, #475569 100%)",
-          }}
-        />
+        <>
+          <div
+            className="absolute inset-0"
+            style={{
+              background: "linear-gradient(188deg, #a8b8c8 0%, #7c8c9c 45%, #5a6570 100%)",
+            }}
+          />
+          <BackdropMesh className="opacity-40" />
+        </>
       );
     default:
-      return <div className="absolute inset-0 bg-linear-to-br from-sky-500 to-indigo-700" aria-hidden />;
+      return (
+        <>
+          <div className="absolute inset-0 bg-linear-to-br from-sky-500 via-indigo-600 to-violet-900" aria-hidden />
+          <BackdropMesh />
+        </>
+      );
   }
 }
 
@@ -265,16 +294,17 @@ function AirQualityBackdrop({ aqiLevel }: { aqiLevel: number | null }) {
   const tier = aqiLevel == null ? 0 : Math.min(5, Math.max(1, aqiLevel));
   const hue =
     tier <= 1
-      ? "from-emerald-900 via-teal-900 to-slate-900"
+      ? "from-emerald-950 via-teal-950 to-slate-950"
       : tier === 2
-        ? "from-slate-800 via-cyan-950 to-slate-950"
+        ? "from-slate-900 via-cyan-950 to-slate-950"
         : tier === 3
-          ? "from-amber-950 via-slate-900 to-slate-950"
-          : "from-rose-950 via-slate-900 to-slate-950";
+          ? "from-amber-950 via-stone-900 to-slate-950"
+          : "from-rose-950 via-purple-950 to-slate-950";
   return (
     <div className={cn("absolute inset-0 bg-linear-to-br", hue)} aria-hidden>
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_100%_0%,rgba(52,211,153,0.15),transparent_55%)]" />
-      <div className="absolute inset-x-0 bottom-0 h-1/2 bg-linear-to-t from-black/35 to-transparent" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_85%_60%_at_0%_0%,rgba(52,211,153,0.2),transparent_58%)]" />
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_70%_50%_at_100%_100%,rgba(255,255,255,0.08),transparent_50%)]" />
+      <div className="absolute inset-x-0 bottom-0 h-[55%] bg-linear-to-t from-black/40 to-transparent" />
     </div>
   );
 }
@@ -340,7 +370,9 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   const tempSizeMinimal = Math.max(34, Math.min(64, boxH * 0.48));
   const clockSize = Math.max(16, Math.min(30, boxH * 0.2));
   const bodySize = Math.max(9, Math.min(13, boxH * 0.085));
-  const aqiHuge = Math.max(28, Math.min(48, boxH * 0.34));
+  /** 대기(PM·AQI) 전용 — 본문보다 한 단계 크게 */
+  const airTextSize = Math.max(11, Math.min(16, bodySize * 1.22));
+  const aqiHuge = Math.max(34, Math.min(58, boxH * 0.42));
 
   const errMsg = error instanceof Error ? error.message : "불러오지 못했습니다.";
 
@@ -364,7 +396,9 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   const hasAir = disp.pm25 || disp.pm10 || disp.aqi;
 
   const ringAccent =
-    variant === "split-air" ? "ring-2 ring-emerald-400/40" : "ring-1 ring-black/10";
+    variant === "split-air"
+      ? "ring-[1.5px] ring-emerald-300/35 shadow-[inset_0_1px_0_rgba(255,255,255,0.12)]"
+      : "ring-1 ring-white/20 shadow-[inset_0_1px_0_rgba(255,255,255,0.15)]";
 
   const customBg = parseBookWeatherBackground(el.weatherBackground);
   const contentTextStyle =
@@ -376,29 +410,41 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   const outlineRing =
     ow > 0 ? `0 0 0 ${Math.max(0.5, ow * scale)}px ${oc}` : "";
   const bgShadow = !customBg
-    ? "0 12px 40px -8px rgba(0,0,0,0.35)"
+    ? "0 20px 50px -12px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.25)"
     : customBg && backdropChrome && backdropChrome.boxShadow !== "none"
       ? backdropChrome.boxShadow
       : "";
   const mergedShadow = [bgShadow, outlineRing].filter(Boolean).join(", ");
 
-  const renderAirBlock = (payload: SeoulWeatherPayload, opts: { accent?: boolean; compact?: boolean }) => (
-    <div
-      className={cn(
-        "w-full min-w-0 space-y-0.5",
-        opts.accent && "rounded-md border-l-[3px] border-emerald-400/85 pl-2",
-        opts.compact && "space-y-0",
-      )}
-    >
+  const pillClass = cn(
+    "inline-flex max-w-full items-center rounded-full border px-3 py-1.5 font-medium leading-tight",
+    useCustomText
+      ? "border-current/20 bg-current/5"
+      : snowLike
+        ? "border-slate-600/25 bg-slate-900/6"
+        : "border-white/25 bg-white/12 backdrop-blur-[2px]",
+  );
+
+  const renderAirBlock = (payload: SeoulWeatherPayload, opts: { compact?: boolean }) => (
+    <div className={cn("flex w-full min-w-0 flex-col", opts.compact ? "gap-1.5" : "gap-2")}>
       {disp.pm10 || disp.pm25 ? (
-        <div className={cn("leading-snug", textFaint)} style={{ fontSize: bodySize * 0.88 }}>
-          {disp.pm10 ? <>미세 PM10 {formatPmShort(payload.pm10)}</> : null}
-          {disp.pm10 && disp.pm25 ? " · " : null}
-          {disp.pm25 ? <>초미세 PM2.5 {formatPmShort(payload.pm25)}</> : null}
+        <div className="flex flex-wrap gap-2" style={{ fontSize: airTextSize * 0.98 }}>
+          {disp.pm10 ? (
+            <span className={cn(pillClass, "px-3.5 py-2 font-semibold")}>
+              <span className={cn(textFaint, "opacity-85")}>PM10</span>
+              <span className={cn("ms-1.5 tabular-nums", textMuted)}>{formatPmShort(payload.pm10)}</span>
+            </span>
+          ) : null}
+          {disp.pm25 ? (
+            <span className={cn(pillClass, "px-3.5 py-2 font-semibold")}>
+              <span className={cn(textFaint, "opacity-85")}>PM2.5</span>
+              <span className={cn("ms-1.5 tabular-nums", textMuted)}>{formatPmShort(payload.pm25)}</span>
+            </span>
+          ) : null}
         </div>
       ) : null}
       {disp.aqi ? (
-        <div className={cn("font-medium", textMuted)} style={{ fontSize: bodySize * 0.88 }}>
+        <div className={cn("font-semibold leading-snug", textMuted)} style={{ fontSize: airTextSize * 1.05 }}>
           대기 {payload.aqiLabel ?? "—"}
           {payload.aqiLevel != null ? ` (${payload.aqiLevel}/5)` : ""}
         </div>
@@ -407,14 +453,48 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   );
 
   const renderSecondaryWeather = (payload: SeoulWeatherPayload) => {
-    const parts: string[] = [];
-    if (disp.feelsLike) parts.push(`체감 ${Math.round(payload.feelsLikeC)}°`);
-    if (disp.humidity) parts.push(`습도 ${Math.round(payload.humidity)}%`);
-    if (disp.wind) parts.push(`바람 ${payload.windMps.toFixed(1)}m/s`);
-    if (parts.length === 0) return null;
+    const chips: { key: string; node: ReactNode }[] = [];
+    if (disp.feelsLike) {
+      chips.push({
+        key: "feel",
+        node: (
+          <>
+            <span className={cn(textFaint, "opacity-75")}>체감</span>
+            <span className={cn("ms-0.5 tabular-nums", textMuted)}>{Math.round(payload.feelsLikeC)}°</span>
+          </>
+        ),
+      });
+    }
+    if (disp.humidity) {
+      chips.push({
+        key: "hum",
+        node: (
+          <>
+            <span className={cn(textFaint, "opacity-75")}>습도</span>
+            <span className={cn("ms-0.5 tabular-nums", textMuted)}>{Math.round(payload.humidity)}%</span>
+          </>
+        ),
+      });
+    }
+    if (disp.wind) {
+      chips.push({
+        key: "wind",
+        node: (
+          <>
+            <span className={cn(textFaint, "opacity-75")}>바람</span>
+            <span className={cn("ms-0.5 tabular-nums", textMuted)}>{payload.windMps.toFixed(1)}m/s</span>
+          </>
+        ),
+      });
+    }
+    if (chips.length === 0) return null;
     return (
-      <div className={cn("opacity-80", textFaint)} style={{ fontSize: bodySize * 0.82 }}>
-        {parts.join(" · ")}
+      <div className="flex flex-wrap gap-2" style={{ fontSize: Math.max(airTextSize * 0.92, bodySize * 0.95) }}>
+        {chips.map(({ key, node }) => (
+          <span key={key} className={pillClass}>
+            {node}
+          </span>
+        ))}
       </div>
     );
   };
@@ -448,30 +528,39 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
       {isPending ? (
         <div
           className={cn(
-            "flex h-full min-h-0 items-center justify-center gap-2 px-3 text-white/90",
-            !customBg && "bg-linear-to-br from-slate-700 to-slate-900",
+            "flex h-full min-h-0 items-center justify-center gap-2.5 px-3 text-white/95",
+            !customBg && "bg-linear-to-br from-slate-600 via-slate-800 to-slate-950",
             customBg && "bg-transparent",
           )}
         >
-          <Loader2
-            className="shrink-0 animate-spin opacity-90"
-            style={{ width: condSize * 1.1, height: condSize * 1.1 }}
-            aria-hidden
-          />
-          <span className="font-medium" style={{ fontSize: bodySize }}>
+          <div
+            className={cn(
+              "flex shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm",
+            )}
+          >
+            <Loader2
+              className="animate-spin opacity-95"
+              style={{ width: condSize * 1.05, height: condSize * 1.05 }}
+              aria-hidden
+            />
+          </div>
+          <span className="font-medium tracking-tight" style={{ fontSize: bodySize }}>
             불러오는 중…
           </span>
         </div>
       ) : isError ? (
         <div
           className={cn(
-            "flex h-full min-h-0 flex-col items-center justify-center gap-1 px-2 text-center text-amber-50",
-            !customBg && "bg-linear-to-br from-amber-900/95 to-slate-900",
-            customBg && "bg-transparent",
+            "flex h-full min-h-0 flex-col items-center justify-center gap-2 px-3 text-center",
+            !customBg &&
+              "bg-linear-to-br from-amber-950/98 via-orange-950/95 to-slate-950 text-amber-50",
+            customBg && "bg-transparent text-amber-100",
           )}
         >
-          <CloudOff className="size-8 shrink-0 opacity-90" aria-hidden />
-          <span className="text-[0.8em] leading-snug">{errMsg}</span>
+          <div className="flex min-h-14 min-w-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-black/20 p-3 backdrop-blur-sm">
+            <CloudOff className="size-6 opacity-95" aria-hidden />
+          </div>
+          <span className="max-w-[95%] text-[0.8em] font-medium leading-snug opacity-95">{errMsg}</span>
         </div>
       ) : data ? (
         <div
@@ -492,40 +581,56 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
               )}
             >
               <div className="min-w-0">
-                <div className={cn("font-semibold opacity-90")} style={{ fontSize: bodySize * 1.05 }}>
+                <div
+                  className={cn(
+                    "font-semibold tracking-tight",
+                    useCustomText ? "opacity-95" : "text-white/95 drop-shadow-sm",
+                  )}
+                  style={{ fontSize: airTextSize * 1.08 }}
+                >
                   {data.locationLabel}
                 </div>
                 <div
                   className={cn(
-                    "mt-1 text-[0.75em] font-medium uppercase tracking-wider",
+                    "mt-1 font-semibold uppercase tracking-[0.16em]",
                     useCustomText ? "opacity-55" : "text-white/55",
                   )}
+                  style={{ fontSize: airTextSize * 0.78 }}
                 >
-                  지역 대기질
+                  대기질
                 </div>
               </div>
-              <div className="flex flex-1 flex-col justify-center gap-1">
+              <div className="relative flex min-h-0 flex-1 flex-col justify-center gap-1.5 overflow-hidden">
                 {disp.aqi ? (
-                  <div
-                    className={cn(
-                      "font-bold tabular-nums",
-                      useCustomText ? "" : aqiAccentClass(data.aqiLevel),
-                    )}
-                    style={{ fontSize: aqiHuge }}
-                  >
-                    {data.aqiLabel ?? "—"}
-                    {data.aqiLevel != null ? (
-                      <span
-                        className={cn(
-                          "text-[0.45em] font-semibold",
-                          useCustomText ? "opacity-70" : "text-white/70",
-                        )}
-                      >
-                        {" "}
-                        · {data.aqiLevel}/5
-                      </span>
-                    ) : null}
-                  </div>
+                  <>
+                    <div
+                      className={cn(
+                        "pointer-events-none absolute left-1/2 top-[42%] size-[min(92%,8rem)] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-30 blur-2xl",
+                        useCustomText ? "bg-current" : "bg-emerald-300",
+                      )}
+                      aria-hidden
+                    />
+                    <div
+                      className={cn(
+                        "relative font-bold tabular-nums leading-none",
+                        useCustomText ? "" : aqiAccentClass(data.aqiLevel),
+                      )}
+                      style={{ fontSize: aqiHuge }}
+                    >
+                      {data.aqiLabel ?? "—"}
+                      {data.aqiLevel != null ? (
+                        <span
+                          className={cn(
+                            "text-[0.44em] font-semibold tracking-normal",
+                            useCustomText ? "opacity-70" : "text-white/70",
+                          )}
+                        >
+                          {" "}
+                          · {data.aqiLevel}/5
+                        </span>
+                      ) : null}
+                    </div>
+                  </>
                 ) : null}
                 {renderAirBlock(data, { compact: true })}
               </div>
@@ -533,44 +638,71 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
           ) : variant === "minimal" ? (
             <div
               className={cn(
-                "relative z-1 flex h-full min-h-0 flex-col items-center justify-center gap-1 px-[6%] py-[6%]",
+                "relative z-1 flex h-full min-h-0 flex-col items-center justify-center gap-1.5 px-[6%] py-[6%]",
                 textMain,
               )}
             >
               {disp.icon ? (
-                <LineIcon
-                  className={cn("shrink-0 stroke-[2.25]", iconTone)}
-                  style={{ width: condSize * 1.5, height: condSize * 1.5 }}
-                  aria-hidden
-                />
+                <div
+                  className={cn(
+                    "flex shrink-0 items-center justify-center rounded-2xl border p-3 backdrop-blur-md",
+                    useCustomText
+                      ? "border-current/20 bg-current/8"
+                      : snowLike
+                        ? "border-slate-700/20 bg-white/55"
+                        : "border-white/25 bg-white/15",
+                  )}
+                >
+                  <LineIcon
+                    className={cn("shrink-0 stroke-[2.1]", iconTone)}
+                    style={{ width: condSize * 1.45, height: condSize * 1.45 }}
+                    aria-hidden
+                  />
+                </div>
               ) : null}
               {disp.description ? (
-                <span className={cn("text-center font-medium capitalize", textMuted)} style={{ fontSize: bodySize }}>
+                <span
+                  className={cn("text-center font-medium capitalize leading-snug", textMuted)}
+                  style={{ fontSize: bodySize }}
+                >
                   {data.description || "—"}
                 </span>
               ) : null}
               {disp.temp ? (
-                <div className="flex items-end gap-1">
+                <div className="flex items-end gap-0.5">
                   <span
-                    className={cn("tabular-nums font-bold tracking-tight drop-shadow-md", tempAccent)}
-                    style={{ fontSize: tempSizeMinimal, lineHeight: 0.95 }}
+                    className={cn(
+                      "tabular-nums font-bold tracking-tighter",
+                      tempAccent,
+                      !useCustomText && !snowLike && "drop-shadow-[0_2px_12px_rgba(0,0,0,0.2)]",
+                    )}
+                    style={{ fontSize: tempSizeMinimal, lineHeight: 0.92 }}
                   >
                     {Math.round(data.tempC)}
                   </span>
-                  <span className={cn("pb-[0.12em] font-semibold opacity-90", textMuted)} style={{ fontSize: tempSizeMinimal * 0.32 }}>
+                  <span
+                    className={cn("pb-[0.1em] font-semibold opacity-90", textMuted)}
+                    style={{ fontSize: tempSizeMinimal * 0.3 }}
+                  >
                     °C
                   </span>
                 </div>
               ) : null}
               {renderSecondaryWeather(data)}
-              <div className={cn("mt-auto font-semibold", textFaint)} style={{ fontSize: bodySize * 0.92 }}>
+              <div
+                className={cn(
+                  "mt-auto text-center text-[0.72em] font-semibold uppercase tracking-[0.12em]",
+                  textFaint,
+                )}
+                style={{ fontSize: bodySize * 0.85 }}
+              >
                 {data.locationLabel}
               </div>
             </div>
           ) : (
             <div
               className={cn(
-                "relative z-1 grid h-full min-h-0 min-w-0 gap-x-2 px-[5%] py-[6%]",
+                "relative z-1 grid h-full min-h-0 min-w-0 gap-x-3 px-[5%] py-[6%]",
                 showTimeCol ? "grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)]" : "grid-cols-1",
                 textMain,
               )}
@@ -579,16 +711,31 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                 {disp.description || disp.icon ? (
                   <div className="flex min-w-0 items-center gap-2">
                     {disp.icon ? (
-                      <LineIcon
-                        className={cn("shrink-0 stroke-[2.25]", iconTone)}
-                        style={{ width: condSize * 1.35, height: condSize * 1.35 }}
-                        aria-hidden
-                      />
+                      <div
+                        className={cn(
+                          "flex shrink-0 items-center justify-center rounded-xl border p-2.5 backdrop-blur-md",
+                          useCustomText
+                            ? "border-current/20 bg-current/8"
+                            : snowLike
+                              ? "border-slate-600/25 bg-white/50"
+                              : "border-white/25 bg-white/12",
+                        )}
+                      >
+                        <LineIcon
+                          className={cn("shrink-0 stroke-[2.1]", iconTone)}
+                          style={{ width: condSize * 1.25, height: condSize * 1.25 }}
+                          aria-hidden
+                        />
+                      </div>
                     ) : null}
                     {disp.description ? (
                       <span
-                        className={cn("min-w-0 truncate font-medium capitalize leading-tight drop-shadow-sm", textMuted)}
-                        style={{ fontSize: bodySize * 1.05 }}
+                        className={cn(
+                          "min-w-0 truncate font-medium capitalize leading-tight",
+                          textMuted,
+                          !useCustomText && !snowLike && "drop-shadow-sm",
+                        )}
+                        style={{ fontSize: bodySize * 1.02 }}
                         title={data.description}
                       >
                         {data.description || "—"}
@@ -596,59 +743,90 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                     ) : null}
                   </div>
                 ) : null}
-                <div className="mt-auto space-y-0.5">
+                <div className="mt-auto space-y-1">
                   {disp.temp ? (
-                    <div className="flex items-end gap-1">
+                    <div className="flex items-end gap-0.5">
                       <span
-                        className={cn("tabular-nums font-bold tracking-tight drop-shadow-md", tempAccent)}
-                        style={{ fontSize: variant === "split-air" ? tempSize * 0.92 : tempSize, lineHeight: 0.95 }}
+                        className={cn(
+                          "tabular-nums font-bold tracking-tighter",
+                          tempAccent,
+                          !useCustomText && !snowLike && "drop-shadow-[0_2px_14px_rgba(0,0,0,0.22)]",
+                        )}
+                        style={{
+                          fontSize: variant === "split-air" ? tempSize * 0.9 : tempSize,
+                          lineHeight: 0.92,
+                        }}
                       >
                         {Math.round(data.tempC)}
                       </span>
-                      <span className={cn("pb-[0.15em] font-semibold opacity-90", textMuted)} style={{ fontSize: tempSize * 0.38 }}>
+                      <span
+                        className={cn("pb-[0.1em] font-semibold opacity-90", textMuted)}
+                        style={{ fontSize: tempSize * 0.36 }}
+                      >
                         °C
                       </span>
                     </div>
                   ) : null}
                   {variant === "split-air" && hasAir ? (
-                    <div className="pt-1">{renderAirBlock(data, { accent: true })}</div>
+                    <div className="pt-1">{renderAirBlock(data, { compact: true })}</div>
                   ) : null}
                 </div>
               </div>
 
               {showTimeCol ? (
-                <div className="flex min-h-0 min-w-0 flex-col items-end justify-between text-end">
-                  <div>
-                    {disp.clock ? (
-                      <div
-                        className={cn("font-bold tabular-nums tracking-tight drop-shadow-md", textMain)}
-                        style={{ fontSize: clockSize, lineHeight: 1 }}
-                      >
-                        {timeStr}
-                      </div>
-                    ) : null}
-                    {disp.date ? (
-                      <div className={cn("mt-0.5 font-medium opacity-90", textFaint)} style={{ fontSize: bodySize * 0.92 }}>
-                        {dateStr}
-                      </div>
-                    ) : null}
-                  </div>
-                  <div className="w-full min-w-0 space-y-0.5">
-                    <div className={cn("font-semibold drop-shadow-sm", textMain)} style={{ fontSize: bodySize * 1.05 }}>
-                      {data.locationLabel}
+                <div
+                  className={cn(
+                    "flex min-h-0 min-w-0 flex-col items-end justify-between border-l ps-3 text-end",
+                    useCustomText ? "border-current/18" : snowLike ? "border-slate-600/30" : "border-white/22",
+                  )}
+                >
+                    <div>
+                      {disp.clock ? (
+                        <div
+                          className={cn(
+                            "font-bold tabular-nums tracking-tight",
+                            textMain,
+                            !useCustomText && !snowLike && "drop-shadow-md",
+                          )}
+                          style={{ fontSize: clockSize, lineHeight: 1 }}
+                        >
+                          {timeStr}
+                        </div>
+                      ) : null}
+                      {disp.date ? (
+                        <div
+                          className={cn("mt-1 font-medium leading-snug opacity-90", textFaint)}
+                          style={{ fontSize: bodySize * 0.88 }}
+                        >
+                          {dateStr}
+                        </div>
+                      ) : null}
                     </div>
-                    {variant === "standard" && hasAir ? renderAirBlock(data, {}) : null}
-                    {variant === "standard" || variant === "split-air" ? renderSecondaryWeather(data) : null}
+                    <div className="w-full min-w-0 space-y-1">
+                      <div
+                        className={cn(
+                          "text-[0.72em] font-semibold uppercase tracking-[0.14em] opacity-90",
+                          textMain,
+                        )}
+                        style={{ fontSize: bodySize }}
+                      >
+                        {data.locationLabel}
+                      </div>
+                      {variant === "standard" && hasAir ? renderAirBlock(data, {}) : null}
+                      {variant === "standard" || variant === "split-air" ? renderSecondaryWeather(data) : null}
+                    </div>
                   </div>
-                </div>
               ) : (
                 <div
                   className={cn(
-                    "col-span-full flex min-h-0 flex-col gap-1 border-t pt-2",
-                    useCustomText ? "border-current/25" : "border-white/15",
+                    "col-span-full flex min-h-0 flex-col gap-1.5 border-t pt-2.5",
+                    useCustomText ? "border-current/20" : "border-white/18",
                   )}
                 >
-                  <div className={cn("font-semibold", textMain)} style={{ fontSize: bodySize * 1.02 }}>
+                  <div
+                    className={cn("text-[0.72em] font-semibold uppercase tracking-[0.12em]", textMain)}
+                    style={{ fontSize: bodySize }}
+                  >
                     {data.locationLabel}
                   </div>
                   {hasAir && variant !== "split-air" ? renderAirBlock(data, {}) : null}
