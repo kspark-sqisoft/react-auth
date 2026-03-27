@@ -868,7 +868,9 @@ export class BooksService {
     if (Number(book.author.id) !== Number(userId)) {
       throw new ForbiddenException('삭제 권한이 없습니다.');
     }
-    await this.bookRepo.remove(book);
+    /* DB에 ON DELETE CASCADE가 없으면 페이지 행 때문에 삭제가 실패할 수 있어 명시적으로 먼저 제거 */
+    await this.pageRepo.delete({ book: { id: bookId } });
+    await this.bookRepo.delete(bookId);
   }
 
   async assertBookOwner(bookId: number, userId: number): Promise<Book> {

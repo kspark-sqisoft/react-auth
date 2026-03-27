@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { createBook, type BookCanvasElement } from "@/lib/api";
 import {
   applyAutoSlideNamesByIndex,
+  BOOK_CANVAS_DRAG_GRID_PX,
   createEmptyEditorPage,
   DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
   DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
@@ -35,6 +36,7 @@ import { BookPagePropertiesPanel } from "@/components/books/BookPagePropertiesPa
 import { BookPageSidebar } from "@/components/books/BookPageSidebar";
 import {
   BookSlideCanvas,
+  DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
   type BookDropWidgetKind,
 } from "@/components/books/BookSlideCanvas";
 import { BookWidgetPalette } from "@/components/books/BookWidgetPalette";
@@ -74,6 +76,10 @@ export function BookEditorPage() {
   const [slideHeight, setSlideHeight] = useState(DEFAULT_SLIDE_HEIGHT);
   const [widgetDeleteOpen, setWidgetDeleteOpen] = useState(false);
   const [widgetDeleteId, setWidgetDeleteId] = useState<string | null>(null);
+  const [centerGuideThresholdPx, setCenterGuideThresholdPx] = useState(
+    DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
+  );
+  const [dragGridPx, setDragGridPx] = useState(BOOK_CANVAS_DRAG_GRID_PX);
 
   const maxPageIdx = Math.max(0, pages.length - 1);
   const activePageIndex = Math.min(pageIndex, maxPageIdx);
@@ -467,6 +473,10 @@ export function BookEditorPage() {
                 canRedo={canRedo}
                 onUndo={undo}
                 onRedo={redo}
+                centerGuideThresholdPx={centerGuideThresholdPx}
+                onCenterGuideThresholdPxChange={setCenterGuideThresholdPx}
+                dragGridPx={dragGridPx}
+                onDragGridPxChange={setDragGridPx}
               />
             </div>
             <div
@@ -495,6 +505,8 @@ export function BookEditorPage() {
                   onDropWidget={onDropWidget}
                   onReorderZ={onReorderZ}
                   onDeleteElement={requestRemoveWidget}
+                  centerGuideThresholdPx={centerGuideThresholdPx}
+                  dragGridPx={dragGridPx}
                 />
               ) : null}
             </div>

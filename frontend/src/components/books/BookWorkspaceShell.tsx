@@ -121,7 +121,7 @@ export function BookWorkspaceShell({
         className,
       )}
     >
-      <header className="flex min-h-12 shrink-0 items-center gap-2 border-b border-border bg-card/80 px-2 py-1.5 backdrop-blur-sm sm:gap-3 sm:px-3">
+      <header className="relative z-[250] flex min-h-12 shrink-0 items-center gap-2 border-b border-border bg-card/80 px-2 py-1.5 backdrop-blur-sm sm:gap-3 sm:px-3">
         <Button
           type="button"
           variant="ghost"
@@ -133,7 +133,7 @@ export function BookWorkspaceShell({
           <ArrowLeft className="size-5" />
         </Button>
         <div className="min-w-0 flex-1">{titleArea}</div>
-        <div className="flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
+        <div className="relative z-20 flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">
           {actions}
         </div>
       </header>

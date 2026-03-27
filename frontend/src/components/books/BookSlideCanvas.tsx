@@ -18,6 +18,7 @@ import {
 } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
 import {
+  BOOK_CANVAS_DRAG_GRID_PX,
   bookElementOverlayTopLeftFromPivot,
   bookElementPivotKonva,
   canvasRoundRectPath,
@@ -28,6 +29,7 @@ import {
   resolveBookElementOutlineWidth,
   resolveBookElementRotation,
   resolveBookMediaObjectFit,
+  snapKonvaBookNodePositionToGrid,
   type BookCanvasElement,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
@@ -78,6 +80,9 @@ function useBookImage(src: string) {
 /** 위젯 팔레트 HTML5 DnD와 동일한 값 */
 export const BOOK_WIDGET_DRAG_TYPE = "application/x-book-widget";
 
+/** 위젯 **중심**이 슬라이드 가로·세로 가운데에서 이 거리(논리 px) 안이면 기준선 표시 */
+export const DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX = 10;
+
 export type BookDropWidgetKind = "text" | "image" | "video" | "weather" | "digitalClock";
 
 type BookSlideCanvasProps = {
@@ -98,6 +103,10 @@ type BookSlideCanvasProps = {
   onReorderZ?: (elementId: string, op: ElementZOrderOp) => void;
   /** 편집 모드: 요소 우클릭 메뉴에서 삭제 */
   onDeleteElement?: (elementId: string) => void;
+  /** 드래그 중 가운데 기준선이 뜨는 거리(논리 px). 미지정 시 `DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX` */
+  centerGuideThresholdPx?: number;
+  /** 드래그 스냅 그리드 간격(논리 px). 미지정 시 `BOOK_CANVAS_DRAG_GRID_PX` */
+  dragGridPx?: number;
 };
 
 function clampSize(w: number, h: number, min = 24) {
@@ -132,8 +141,12 @@ type BookTransformLive = {
 type BookShapeLiveSync = {
   dragLive: BookDragLive | null;
   transformLive: BookTransformLive | null;
+  /** 드래그 스냅·드래그 중 격자 오버레이에 쓰는 논리 px 간격 */
+  dragGridPx: number;
   onDragLiveStart: (elementId: string, node: Konva.Node) => void;
   onDragLiveMove: (elementId: string, node: Konva.Node) => void;
+  /** 드래그 중 논리 좌표 그리드 스냅 후 `dragLive` 갱신 */
+  onDragMoveSnapGrid: (elementId: string, node: Konva.Node, logicalW: number, logicalH: number) => void;
   clearDragLive: () => void;
   onTransformLiveStart: (elementId: string, node: Konva.Node) => void;
   onTransformLiveMove: (elementId: string, node: Konva.Node) => void;
@@ -400,6 +413,8 @@ export function BookSlideCanvas({
   onDropWidget,
   onReorderZ,
   onDeleteElement,
+  centerGuideThresholdPx = DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
+  dragGridPx = BOOK_CANVAS_DRAG_GRID_PX,
 }: BookSlideCanvasProps) {
   const trRef = useRef<Konva.Transformer>(null);
   const selectedNodeRef = useRef<Konva.Node>(null);
@@ -503,16 +518,42 @@ export function BookSlideCanvas({
     };
   }, []);
 
-  const shapeLiveSync: BookShapeLiveSync = {
-    dragLive,
-    transformLive,
-    onDragLiveStart,
-    onDragLiveMove,
-    clearDragLive,
-    onTransformLiveStart,
-    onTransformLiveMove,
-    clearTransformLive,
-  };
+  const shapeLiveSync: BookShapeLiveSync = useMemo(
+    () => ({
+      dragLive,
+      transformLive,
+      dragGridPx,
+      onDragLiveStart,
+      onDragLiveMove,
+      onDragMoveSnapGrid: (elementId, node, logicalW, logicalH) => {
+        snapKonvaBookNodePositionToGrid(
+          node,
+          {
+            width: logicalW,
+            height: logicalH,
+            rotation: node.rotation(),
+          },
+          dragGridPx,
+        );
+        onDragLiveMove(elementId, node);
+      },
+      clearDragLive,
+      onTransformLiveStart,
+      onTransformLiveMove,
+      clearTransformLive,
+    }),
+    [
+      dragLive,
+      transformLive,
+      dragGridPx,
+      onDragLiveStart,
+      onDragLiveMove,
+      clearDragLive,
+      onTransformLiveStart,
+      onTransformLiveMove,
+      clearTransformLive,
+    ],
+  );
 
   const showVideoBar = useCallback((id: string) => {
     const t = videoBarHideTimers.current.get(id);
@@ -679,6 +720,22 @@ export function BookSlideCanvas({
   const sw = pageWidth * scale;
   const sh = pageHeight * scale;
 
+  const slideCenterGuides = useMemo(() => {
+    if (mode !== "edit" || dragLive === null) return null;
+    const midX = pageWidth / 2;
+    const midY = pageHeight / 2;
+    const th = centerGuideThresholdPx;
+    const showV = Math.abs(dragLive.cx - midX) <= th;
+    const showH = Math.abs(dragLive.cy - midY) <= th;
+    if (!showV && !showH) return null;
+    return {
+      showV,
+      showH,
+      midXpx: midX * scale,
+      midYpx: midY * scale,
+    };
+  }, [mode, dragLive, pageWidth, pageHeight, scale, centerGuideThresholdPx]);
+
   const dropEnabled = mode === "edit" && Boolean(onDropWidget);
 
   const parseDropKind = (e: DragEvent): BookDropWidgetKind | null => {
@@ -732,6 +789,35 @@ export function BookSlideCanvas({
         style={{ backgroundColor: pageBackgroundColor }}
         aria-hidden
       />
+      {mode === "edit" && dragLive !== null ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-[0.5]"
+          style={{
+            backgroundImage: `linear-gradient(to right, hsl(var(--foreground) / 0.07) 1px, transparent 1px), linear-gradient(to bottom, hsl(var(--foreground) / 0.07) 1px, transparent 1px)`,
+            backgroundSize: `${dragGridPx * scale}px ${dragGridPx * scale}px`,
+          }}
+          aria-hidden
+        />
+      ) : null}
+      {slideCenterGuides ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-[50]"
+          aria-hidden
+        >
+          {slideCenterGuides.showV ? (
+            <div
+              className="absolute top-0 bottom-0 w-px bg-pink-500/90 shadow-[0_0_0_1px_rgba(255,255,255,0.4)] dark:bg-fuchsia-400/85"
+              style={{ left: slideCenterGuides.midXpx, marginLeft: -0.5 }}
+            />
+          ) : null}
+          {slideCenterGuides.showH ? (
+            <div
+              className="absolute left-0 right-0 h-px bg-pink-500/90 shadow-[0_0_0_1px_rgba(255,255,255,0.4)] dark:bg-fuchsia-400/85"
+              style={{ top: slideCenterGuides.midYpx, marginTop: -0.5 }}
+            />
+          ) : null}
+        </div>
+      ) : null}
       {elements
         .filter((e): e is Extract<BookCanvasElement, { type: "video" }> => e.type === "video")
         .map((el) => (
@@ -1112,9 +1198,18 @@ function BookTextHitShape({
           : undefined
       }
       onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
-      onDragMove={(e) => liveSync.onDragLiveMove(el.id, e.target)}
+      onDragMove={(e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)}
       onDragEnd={(e) => {
         const n = e.target;
+        snapKonvaBookNodePositionToGrid(
+          n,
+          {
+            width: fw,
+            height: fh,
+            rotation: n.rotation(),
+          },
+          liveSync.dragGridPx,
+        );
         const tl = konvaBookTopLeftFromNode(n);
         onElementChange(el.id, { x: tl.x, y: tl.y });
         liveSync.clearDragLive();
@@ -1235,9 +1330,18 @@ function BookDigitalClockHitShape({
           : undefined
       }
       onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
-      onDragMove={(e) => liveSync.onDragLiveMove(el.id, e.target)}
+      onDragMove={(e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)}
       onDragEnd={(e) => {
         const n = e.target;
+        snapKonvaBookNodePositionToGrid(
+          n,
+          {
+            width: fw,
+            height: fh,
+            rotation: n.rotation(),
+          },
+          liveSync.dragGridPx,
+        );
         const tl = konvaBookTopLeftFromNode(n);
         onElementChange(el.id, { x: tl.x, y: tl.y });
         liveSync.clearDragLive();
@@ -1352,9 +1456,18 @@ function BookWeatherHitShape({
           : undefined
       }
       onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
-      onDragMove={(e) => liveSync.onDragLiveMove(el.id, e.target)}
+      onDragMove={(e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)}
       onDragEnd={(e) => {
         const n = e.target;
+        snapKonvaBookNodePositionToGrid(
+          n,
+          {
+            width: fw,
+            height: fh,
+            rotation: n.rotation(),
+          },
+          liveSync.dragGridPx,
+        );
         const tl = konvaBookTopLeftFromNode(n);
         onElementChange(el.id, { x: tl.x, y: tl.y });
         liveSync.clearDragLive();
@@ -1473,9 +1586,18 @@ function BookImageShape({
           : undefined
       }
       onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
-      onDragMove={(e) => liveSync.onDragLiveMove(el.id, e.target)}
+      onDragMove={(e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)}
       onDragEnd={(e) => {
         const n = e.target as Konva.Group;
+        snapKonvaBookNodePositionToGrid(
+          n,
+          {
+            width: fw,
+            height: fh,
+            rotation: n.rotation(),
+          },
+          liveSync.dragGridPx,
+        );
         const tl = konvaBookTopLeftFromNode(n);
         onElementChange(el.id, { x: tl.x, y: tl.y });
         liveSync.clearDragLive();
@@ -1638,9 +1760,18 @@ function BookVideoBox({
           : undefined
       }
       onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
-      onDragMove={(e) => liveSync.onDragLiveMove(el.id, e.target)}
+      onDragMove={(e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)}
       onDragEnd={(e) => {
         const n = e.target;
+        snapKonvaBookNodePositionToGrid(
+          n,
+          {
+            width: fw,
+            height: fh,
+            rotation: n.rotation(),
+          },
+          liveSync.dragGridPx,
+        );
         const tl = konvaBookTopLeftFromNode(n);
         onElementChange(el.id, { x: tl.x, y: tl.y });
         liveSync.clearDragLive();

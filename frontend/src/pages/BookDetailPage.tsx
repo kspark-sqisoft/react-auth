@@ -22,6 +22,7 @@ import {
 } from "@/lib/api";
 import {
   applyAutoSlideNamesByIndex,
+  BOOK_CANVAS_DRAG_GRID_PX,
   createEmptyEditorPage,
   DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
   DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
@@ -53,12 +54,14 @@ import { BookPagePropertiesPanel } from "@/components/books/BookPagePropertiesPa
 import { BookPageSidebar } from "@/components/books/BookPageSidebar";
 import {
   BookSlideCanvas,
+  DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
   type BookDropWidgetKind,
 } from "@/components/books/BookSlideCanvas";
 import { BookWidgetPalette } from "@/components/books/BookWidgetPalette";
 import { BookWorkspaceShell } from "@/components/books/BookWorkspaceShell";
 import {
   AlertDialog,
+  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -88,7 +91,9 @@ function mapServerPagesToLocal(pages: BookPageDto[]): BookEditorPageState[] {
 }
 
 /**
- * 북 진입 시 곧바로 편집 UI(위젯·저장). 서버 스냅샷이 바뀌면 `key`로 마운트 초기화.
+ * 북 진입 시 곧바로 편집 UI(위젯·저장).
+ * 부모 `key`는 `book.id`만 씁니다. `updatedAt`까지 넣으면 저장·refetch 때마다 remount 되어
+ * 삭제 확인 창·로컬 편집 상태가 날아갈 수 있습니다.
  */
 function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBook: BookDetail }) {
   const navigate = useNavigate();
@@ -120,6 +125,10 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   const [slideHeight, setSlideHeight] = useState(
     () => serverBook.slideHeight ?? DEFAULT_SLIDE_HEIGHT,
   );
+  const [centerGuideThresholdPx, setCenterGuideThresholdPx] = useState(
+    DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
+  );
+  const [dragGridPx, setDragGridPx] = useState(BOOK_CANVAS_DRAG_GRID_PX);
 
   const maxPageIdx = Math.max(0, localPages.length - 1);
   const activePageIndex = Math.min(pageIndex, maxPageIdx);
@@ -157,7 +166,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       ) {
         return;
       }
-      if (widgetDeleteOpen) return;
+      if (widgetDeleteOpen || deleteConfirmOpen) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         if (canUndo) undo();
@@ -167,6 +176,9 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       ) {
         e.preventDefault();
         if (canRedo) redo();
+      } else if (e.key === "Delete" && !canvasSelectedId) {
+        e.preventDefault();
+        setDeleteConfirmOpen(true);
       } else if (
         (e.key === "Delete" || e.key === "Backspace") &&
         canvasSelectedId
@@ -178,7 +190,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canUndo, canRedo, undo, redo, canvasSelectedId, widgetDeleteOpen]);
+  }, [canUndo, canRedo, undo, redo, canvasSelectedId, widgetDeleteOpen, deleteConfirmOpen]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -197,10 +209,10 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   });
 
   const deleteMutation = useMutation({
-    mutationFn: () => deleteBook(bookId),
-    onSuccess: () => {
+    mutationFn: (bid: number) => deleteBook(bid),
+    onSuccess: (_data, deletedId) => {
       setDeleteConfirmOpen(false);
-      void queryClient.removeQueries({ queryKey: bookKeys.detail(bookId) });
+      void queryClient.removeQueries({ queryKey: bookKeys.detail(deletedId) });
       void queryClient.invalidateQueries({ queryKey: bookKeys.lists() });
       toast.success("북을 삭제했습니다.");
       void navigate("/books", { replace: true });
@@ -221,15 +233,15 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
           <AlertDialogCancel type="button" disabled={deleteMutation.isPending}>
             취소
           </AlertDialogCancel>
-          <Button
+          <AlertDialogAction
             type="button"
             variant="destructive"
             disabled={deleteMutation.isPending}
-            onClick={() => deleteMutation.mutate()}
+            onClick={() => deleteMutation.mutate(bookId)}
           >
             {deleteMutation.isPending ? <Spinner className="mr-2 size-4" /> : null}
             삭제
-          </Button>
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -609,7 +621,6 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 삭제
               </Button>
             </div>
-            {deleteBookDialog}
           </>
         }
         left={
@@ -638,6 +649,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
           </aside>
         }
       />
+      {deleteBookDialog}
       {widgetDeleteDialog}
       </>
     );
@@ -692,7 +704,6 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
               삭제
             </Button>
           </div>
-          {deleteBookDialog}
         </>
       }
       left={
@@ -728,6 +739,10 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 canRedo={canRedo}
                 onUndo={undo}
                 onRedo={redo}
+                centerGuideThresholdPx={centerGuideThresholdPx}
+                onCenterGuideThresholdPxChange={setCenterGuideThresholdPx}
+                dragGridPx={dragGridPx}
+                onDragGridPxChange={setDragGridPx}
               />
             </div>
             <div
@@ -755,6 +770,8 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 onDropWidget={onDropWidget}
                 onReorderZ={onReorderZ}
                 onDeleteElement={requestRemoveWidget}
+                centerGuideThresholdPx={centerGuideThresholdPx}
+                dragGridPx={dragGridPx}
               />
             </div>
           </div>
@@ -811,6 +828,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         )
       }
     />
+    {deleteBookDialog}
     {widgetDeleteDialog}
     </>
   );
@@ -995,7 +1013,7 @@ export function BookDetailPage() {
   }
 
   if (canEdit) {
-    return <BookDetailOwnerView key={`${data.id}-${data.updatedAt}`} bookId={id} serverBook={data} />;
+    return <BookDetailOwnerView key={data.id} bookId={id} serverBook={data} />;
   }
 
   if (!sortedPagesView.length) {

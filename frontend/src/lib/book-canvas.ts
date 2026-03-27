@@ -88,6 +88,43 @@ export function konvaBookTopLeftFromNode(node: Konva.Node): { x: number; y: numb
   return { x: p.x, y: p.y };
 }
 
+/** 드래그 시 저장 좌표(박스 왼쪽 위)를 이 간격(px)에 맞춥니다. */
+export const BOOK_CANVAS_DRAG_GRID_PX = 4;
+
+export function snapBookElementTopLeftToGrid(
+  topLeftX: number,
+  topLeftY: number,
+  gridPx: number = BOOK_CANVAS_DRAG_GRID_PX,
+): { x: number; y: number } {
+  return {
+    x: Math.round(topLeftX / gridPx) * gridPx,
+    y: Math.round(topLeftY / gridPx) * gridPx,
+  };
+}
+
+/**
+ * Konva 노드(중심 피벗)를 유지한 채 논리 좌표 왼쪽 위만 그리드에 스냅합니다.
+ * react-konva `Rect`/`Group` 드래그 중·종료 시 호출.
+ */
+export function snapKonvaBookNodePositionToGrid(
+  node: Konva.Node,
+  logical: { width: number; height: number; rotation?: number },
+  gridPx: number = BOOK_CANVAS_DRAG_GRID_PX,
+): void {
+  const tl = konvaBookTopLeftFromNode(node);
+  const snapped = snapBookElementTopLeftToGrid(tl.x, tl.y, gridPx);
+  if (snapped.x === tl.x && snapped.y === tl.y) return;
+  const p = bookElementPivotKonva({
+    x: snapped.x,
+    y: snapped.y,
+    width: logical.width,
+    height: logical.height,
+    rotation: logical.rotation ?? node.rotation(),
+  });
+  node.x(p.cx);
+  node.y(p.cy);
+}
+
 export type BookCanvasElement =
   | {
       id: string;
