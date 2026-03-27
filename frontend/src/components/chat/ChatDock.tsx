@@ -182,6 +182,7 @@ export function ChatDock() {
 
   const socketRef = useRef<Socket | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const messageInputRef = useRef<HTMLInputElement>(null);
   const openRef = useRef(false);
   const activeRoomRef = useRef("lobby");
   const userSubRef = useRef<number | undefined>(undefined);
@@ -191,6 +192,16 @@ export function ChatDock() {
     activeRoomRef.current = activeRoom;
     userSubRef.current = user?.sub;
   }, [open, activeRoom, user?.sub]);
+
+  /** 패널이 열리고 소켓이 연결된 뒤 하단 메시지 입력으로 포커스 */
+  useLayoutEffect(() => {
+    if (!open || !connected) return;
+    const t = window.setTimeout(() => {
+      const el = messageInputRef.current;
+      if (el && !el.disabled) el.focus({ preventScroll: true });
+    }, 0);
+    return () => window.clearTimeout(t);
+  }, [open, connected]);
 
   const appendFeed = useCallback((item: FeedItem) => {
     setFeed((prev) => [...prev, item]);
@@ -563,6 +574,7 @@ export function ChatDock() {
             <footer className="shrink-0 border-t border-border p-2">
               <div className="flex gap-1.5">
                 <Input
+                  ref={messageInputRef}
                   value={draft}
                   onChange={(e) => setDraft(e.target.value)}
                   placeholder="메시지 입력…"
