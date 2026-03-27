@@ -69,7 +69,7 @@ function SlideCardPreview({
   label: string;
 }) {
   return (
-    <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-border/80 dark:ring-border">
+    <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-border/80 dark:bg-black dark:ring-border">
       {thumbUrl ? (
         <img
           src={thumbUrl}
