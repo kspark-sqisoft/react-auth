@@ -58,6 +58,9 @@ function visualKindFromOwmIcon(icon: string): VisualKind {
   return "cloudy-day";
 }
 
+/** 슬라이드에 표시되는 동안 주기 갱신(같은 도시 쿼리 키는 하나로 합쳐짐). 탭이 백그라운드면 갱신 안 함. */
+const WEATHER_REFETCH_INTERVAL_MS = 5 * 60_000;
+
 const WEATHER_LINE_ICONS: Record<VisualKind, LucideIcon> = {
   "clear-day": Sun,
   "clear-night": Moon,
@@ -288,6 +291,8 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
     staleTime: 5 * 60_000,
     gcTime: 30 * 60_000,
     retry: 1,
+    refetchInterval: WEATHER_REFETCH_INTERVAL_MS,
+    refetchIntervalInBackground: false,
   });
 
   const now = useTickNow();
