@@ -866,6 +866,16 @@ export function BookSlideCanvas({
         </Layer>
         </Stage>
       </div>
+      {mode === "edit" && elements.length === 0 ? (
+        <div
+          className="pointer-events-none absolute inset-0 z-[6] flex items-center justify-center px-4"
+          aria-hidden
+        >
+          <p className="max-w-[min(100%,22rem)] text-center text-base font-medium tracking-tight text-muted-foreground/75">
+            위젯을 끌어다 이 슬라이드에 놓으면 시작할 수 있어요.
+          </p>
+        </div>
+      ) : null}
       <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden">
         {elements
           .filter(

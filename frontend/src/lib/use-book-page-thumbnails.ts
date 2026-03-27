@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  bookSlideThumbnailCacheKey,
+  getBookSlideThumbnailCached,
+  setBookSlideThumbnailCache,
+} from "@/lib/book-slide-thumbnail-cache";
+import {
   captureBookSlideToDataURL,
   pageSnapshotSignature,
   type BookSlideSnapshotPage,
@@ -53,6 +58,14 @@ export function useBookPageThumbnails(
           const fullSig = `${w}x${h}:${pageSnapshotSignature(p)}`;
           if (sigRef.current[p.clientKey] === fullSig) continue;
 
+          const cacheKey = bookSlideThumbnailCacheKey(p, w, h);
+          const fromCache = getBookSlideThumbnailCached(cacheKey);
+          if (fromCache) {
+            sigRef.current[p.clientKey] = fullSig;
+            updates[p.clientKey] = fromCache;
+            continue;
+          }
+
           let url: string | null = null;
           try {
             url = await captureBookSlideToDataURL(p, w, h);
@@ -60,6 +73,7 @@ export function useBookPageThumbnails(
             url = null;
           }
           if (cancelled || !url) continue;
+          setBookSlideThumbnailCache(cacheKey, url);
           sigRef.current[p.clientKey] = fullSig;
           updates[p.clientKey] = url;
         }

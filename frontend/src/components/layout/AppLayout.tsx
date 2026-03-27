@@ -133,7 +133,7 @@ export function AppLayout() {
           )}
         >
           <div className="space-y-1">
-            <p className="font-heading text-sm font-medium text-foreground">react-auth</p>
+            <p className="font-heading text-sm font-medium text-foreground">react-interactive</p>
             <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
               NestJS와 React로 만든 로그인·게시판 학습 예제입니다.
             </p>
