@@ -1,4 +1,5 @@
 import axios, { isAxiosError, type InternalAxiosRequestConfig } from "axios";
+import type { BookCanvasElement } from "@/lib/book-canvas";
 import { appLog } from "@/lib/app-log";
 
 type RetryableRequest = InternalAxiosRequestConfig & { _retry?: boolean };
@@ -438,6 +439,150 @@ export async function updatePost(
 export async function deletePost(id: number): Promise<void> {
   try {
     await api.delete(`/posts/${id}`);
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+// --- Books (슬라이드 / Konva) ---
+
+export type { BookCanvasElement } from "@/lib/book-canvas";
+
+export type BookPageDto = {
+  id: number;
+  sortOrder: number;
+  /** 표시용 슬라이드 이름(빈 문자열이면 UI에서 "슬라이드 n") */
+  name: string;
+  /** 슬라이드 배경색(CSS) */
+  backgroundColor?: string;
+  elements: BookCanvasElement[];
+};
+
+export type BookListItem = {
+  id: number;
+  title: string;
+  createdAt: string;
+  updatedAt: string;
+  author: PostAuthor;
+  pageCount: number;
+};
+
+export type BookDetail = {
+  id: number;
+  title: string;
+  /** 모든 슬라이드 공통 캔버스 크기(px) */
+  slideWidth: number;
+  slideHeight: number;
+  createdAt: string;
+  updatedAt: string;
+  author: PostAuthor;
+  pages: BookPageDto[];
+};
+
+export type BookPageInput = {
+  sortOrder: number;
+  name?: string;
+  backgroundColor?: string;
+  elements: BookCanvasElement[];
+};
+
+const BOOK_PAGE_DEFAULT = 12;
+
+export type BooksPageResponse = {
+  items: BookListItem[];
+  total: number;
+};
+
+export async function fetchBooksPage(params?: {
+  skip?: number;
+  take?: number;
+  search?: string;
+}): Promise<BooksPageResponse> {
+  try {
+    const search = params?.search?.trim();
+    const { data } = await api.get<BooksPageResponse>("/books", {
+      params: {
+        skip: params?.skip ?? 0,
+        take: params?.take ?? BOOK_PAGE_DEFAULT,
+        ...(search ? { search } : {}),
+      },
+    });
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+export { BOOK_PAGE_DEFAULT };
+
+export async function fetchBook(id: number): Promise<BookDetail> {
+  try {
+    const { data } = await api.get<BookDetail>(`/books/${id}`);
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+export async function createBook(input: {
+  title: string;
+  pages?: BookPageInput[];
+  slideWidth?: number;
+  slideHeight?: number;
+}): Promise<BookDetail> {
+  try {
+    const { data } = await api.post<BookDetail>("/books", input);
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+export async function updateBook(
+  id: number,
+  input: {
+    title?: string;
+    pages?: BookPageInput[];
+    slideWidth?: number;
+    slideHeight?: number;
+  },
+): Promise<BookDetail> {
+  try {
+    const { data } = await api.patch<BookDetail>(`/books/${id}`, input);
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+export async function deleteBook(id: number): Promise<void> {
+  try {
+    await api.delete(`/books/${id}`);
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+export type BookUploadResult = {
+  kind: "image" | "video";
+  url: string;
+  posterUrl: string | null;
+};
+
+export async function uploadBookMedia(
+  bookId: number,
+  file: File,
+  poster?: File | null,
+): Promise<BookUploadResult> {
+  const fd = new FormData();
+  fd.append("file", file);
+  if (poster) fd.append("poster", poster);
+  try {
+    const { data } = await api.post<BookUploadResult>(
+      `/books/${bookId}/upload`,
+      fd,
+    );
+    return data;
   } catch (e) {
     rethrowAsApiError(e);
   }

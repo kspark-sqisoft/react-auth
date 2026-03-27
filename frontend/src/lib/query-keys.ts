@@ -6,6 +6,14 @@ export const userKeys = {
   me: () => [...userKeys.all, "me"] as const,
 };
 
+export const bookKeys = {
+  all: ["books"] as const,
+  lists: () => [...bookKeys.all, "list"] as const,
+  list: (search: string) => [...bookKeys.lists(), search] as const,
+  details: () => [...bookKeys.all, "detail"] as const,
+  detail: (id: number) => [...bookKeys.details(), id] as const,
+};
+
 export const postKeys = {
   all: ["posts"] as const,
   lists: () => [...postKeys.all, "list"] as const,

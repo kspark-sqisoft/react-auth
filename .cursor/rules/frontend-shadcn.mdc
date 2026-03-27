@@ -1,0 +1,11 @@
+---
+description: React 프론트엔드에서 shadcn/ui 우선 사용
+globs: frontend/**/*.{tsx,ts}
+alwaysApply: false
+---
+
+# shadcn / UI
+
+- 새 UI는 가능하면 **`@/components/ui`** 의 shadcn 래퍼( Radix 기반 )를 쓴다. 버튼, 입력, 메뉴, 다이얼로그, 컨텍스트 메뉴, 토스트 등은 직접 `<div>`로 흉내 내지 말고 기존 컴포넌트를 맞춘다.
+- **Context Menu**는 `@/components/ui/context-menu` 를 쓴다. **Radix `ContextMenuTrigger`** 는 dnd-kit `listeners`와 **같은 노드에 두면** 우클릭 메뉴가 동작하지 않을 수 있다. 그럴 때는 행에 `onContextMenu` + `createPortal` 로 **`ContextMenuFloatingPanel` / `ContextMenuFloatingItem`**(동일 파일에서 export)으로 맞춘다.
+- 스타일은 프로젝트의 Tailwind·`cn()` 패턴을 따른다.

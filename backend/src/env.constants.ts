@@ -27,6 +27,15 @@ export const POST_VIDEO_POSTERS_SUBDIR = 'post-video-posters';
 /** 프로필 이미지 하위 폴더명 (UPLOAD_ROOT 아래) */
 export const AVATARS_SUBDIR = 'avatars';
 
+/** 북(슬라이드) 이미지 */
+export const BOOK_IMAGES_SUBDIR = 'book-images';
+
+/** 북 동영상 */
+export const BOOK_VIDEOS_SUBDIR = 'book-videos';
+
+/** 북 동영상 포스터 */
+export const BOOK_VIDEO_POSTERS_SUBDIR = 'book-video-posters';
+
 export const JWT_ACCESS_SECRET =
   process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret-change-me';
 

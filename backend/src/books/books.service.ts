@@ -1,0 +1,564 @@
+import {
+  BadRequestException,
+  ForbiddenException,
+  Injectable,
+  NotFoundException,
+} from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import {
+  AVATARS_SUBDIR,
+  BOOK_IMAGES_SUBDIR,
+  BOOK_VIDEO_POSTERS_SUBDIR,
+  BOOK_VIDEOS_SUBDIR,
+} from '../env.constants';
+import { BookPage } from './book-page.entity';
+import { Book } from './book.entity';
+
+const TITLE_MAX = 200;
+const MAX_PAGES = 80;
+const MAX_ELEMENTS_PER_PAGE = 120;
+const DEFAULT_PAGE_W = 960;
+const DEFAULT_PAGE_H = 540;
+const PAGE_NAME_MAX = 120;
+
+export type BookAuthorPublic = {
+  id: number;
+  name: string;
+  imageUrl: string | null;
+};
+
+export type BookCanvasElementPublic =
+  | {
+      id: string;
+      type: 'text';
+      x: number;
+      y: number;
+      text: string;
+      richHtml?: string;
+      fontSize: number;
+      fill: string;
+      width?: number;
+      height?: number;
+    }
+  | {
+      id: string;
+      type: 'image';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      src: string;
+    }
+  | {
+      id: string;
+      type: 'video';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      src: string;
+      posterSrc: string | null;
+    };
+
+export type BookPagePublic = {
+  id: number;
+  sortOrder: number;
+  /** 표시용 이름; 빈 문자열이면 UI에서 "슬라이드 n" */
+  name: string;
+  /** 슬라이드 배경(CSS 색) */
+  backgroundColor: string;
+  elements: BookCanvasElementPublic[];
+};
+
+export type BookListItemPublic = {
+  id: number;
+  title: string;
+  createdAt: Date;
+  updatedAt: Date;
+  author: BookAuthorPublic;
+  pageCount: number;
+};
+
+export type BookPublic = {
+  id: number;
+  title: string;
+  /** 모든 슬라이드 공통 캔버스 크기 */
+  slideWidth: number;
+  slideHeight: number;
+  createdAt: Date;
+  updatedAt: Date;
+  author: BookAuthorPublic;
+  pages: BookPagePublic[];
+};
+
+export type BookPageInput = {
+  sortOrder: number;
+  name?: string;
+  /** 슬라이드 배경(CSS 색); 생략 시 #ffffff */
+  backgroundColor?: string;
+  elements?: unknown[];
+};
+
+@Injectable()
+export class BooksService {
+  constructor(
+    @InjectRepository(Book)
+    private bookRepo: Repository<Book>,
+    @InjectRepository(BookPage)
+    private pageRepo: Repository<BookPage>,
+  ) {}
+
+  private authorAvatarUrl(profileImageFilename: string | null): string | null {
+    if (!profileImageFilename) return null;
+    return `/uploads/${AVATARS_SUBDIR}/${profileImageFilename}`;
+  }
+
+  private imagePublicUrl(filename: string): string {
+    return `/uploads/${BOOK_IMAGES_SUBDIR}/${filename}`;
+  }
+
+  private videoPublicUrl(filename: string): string {
+    return `/uploads/${BOOK_VIDEOS_SUBDIR}/${filename}`;
+  }
+
+  private posterPublicUrl(filename: string): string {
+    return `/uploads/${BOOK_VIDEO_POSTERS_SUBDIR}/${filename}`;
+  }
+
+  private mapAuthor(u: {
+    id: number;
+    name: string;
+    profileImageFilename: string | null;
+  }): BookAuthorPublic {
+    return {
+      id: u.id,
+      name: u.name,
+      imageUrl: this.authorAvatarUrl(u.profileImageFilename),
+    };
+  }
+
+  private parseElementsJson(raw: string): BookCanvasElementPublic[] {
+    try {
+      const v = JSON.parse(raw) as unknown;
+      if (!Array.isArray(v)) {
+        throw new BadRequestException('elements는 배열이어야 합니다.');
+      }
+      this.validateElements(v);
+      return v as BookCanvasElementPublic[];
+    } catch (e) {
+      if (e instanceof BadRequestException) throw e;
+      throw new BadRequestException('elements JSON이 올바르지 않습니다.');
+    }
+  }
+
+  private validateElements(arr: unknown[]): void {
+    if (arr.length > MAX_ELEMENTS_PER_PAGE) {
+      throw new BadRequestException(
+        `페이지당 요소는 최대 ${MAX_ELEMENTS_PER_PAGE}개입니다.`,
+      );
+    }
+    for (const el of arr) {
+      if (!el || typeof el !== 'object') {
+        throw new BadRequestException('요소 형식이 올바르지 않습니다.');
+      }
+      const o = el as Record<string, unknown>;
+      if (typeof o.id !== 'string' || o.id.length > 80) {
+        throw new BadRequestException('요소 id가 올바르지 않습니다.');
+      }
+      if (o.type !== 'text' && o.type !== 'image' && o.type !== 'video') {
+        throw new BadRequestException('지원하지 않는 요소 타입입니다.');
+      }
+      const x = o.x;
+      const y = o.y;
+      if (
+        typeof x !== 'number' ||
+        typeof y !== 'number' ||
+        !Number.isFinite(x) ||
+        !Number.isFinite(y)
+      ) {
+        throw new BadRequestException('요소 위치(x,y)가 올바르지 않습니다.');
+      }
+      if (o.type === 'text') {
+        if (typeof o.text !== 'string' || o.text.length > 8000) {
+          throw new BadRequestException('텍스트 내용이 올바르지 않습니다.');
+        }
+        if (o.richHtml != null && typeof o.richHtml !== 'string') {
+          throw new BadRequestException(
+            '텍스트 richHtml 형식이 올바르지 않습니다.',
+          );
+        }
+        if (typeof o.richHtml === 'string' && o.richHtml.length > 32000) {
+          throw new BadRequestException('리치 텍스트가 너무 깁니다.');
+        }
+        const fs = o.fontSize;
+        if (typeof fs !== 'number' || fs < 8 || fs > 200) {
+          throw new BadRequestException('fontSize가 올바르지 않습니다.');
+        }
+        if (typeof o.fill !== 'string' || o.fill.length > 40) {
+          throw new BadRequestException('fill 색상이 올바르지 않습니다.');
+        }
+        if (o.width != null) {
+          if (typeof o.width !== 'number' || o.width < 20 || o.width > 4000) {
+            throw new BadRequestException('텍스트 width가 올바르지 않습니다.');
+          }
+        }
+        if (o.height != null) {
+          if (
+            typeof o.height !== 'number' ||
+            o.height < 28 ||
+            o.height > 4000
+          ) {
+            throw new BadRequestException('텍스트 height가 올바르지 않습니다.');
+          }
+        }
+      } else {
+        const w = o.width;
+        const h = o.height;
+        if (
+          typeof w !== 'number' ||
+          typeof h !== 'number' ||
+          w < 10 ||
+          h < 10 ||
+          w > 4000 ||
+          h > 4000
+        ) {
+          throw new BadRequestException(
+            '이미지·비디오 크기가 올바르지 않습니다.',
+          );
+        }
+        if (
+          typeof o.src !== 'string' ||
+          o.src.length > 500 ||
+          !o.src.startsWith('/uploads/')
+        ) {
+          throw new BadRequestException('미디어 src가 올바르지 않습니다.');
+        }
+        if (o.type === 'video') {
+          const ps = o.posterSrc;
+          if (ps != null && ps !== '') {
+            if (
+              typeof ps !== 'string' ||
+              ps.length > 500 ||
+              !ps.startsWith('/uploads/')
+            ) {
+              throw new BadRequestException('posterSrc가 올바르지 않습니다.');
+            }
+          }
+        }
+      }
+    }
+  }
+
+  private normalizePageBackgroundColor(raw: unknown): string {
+    if (raw == null || raw === '') return '#ffffff';
+    if (typeof raw !== 'string') {
+      throw new BadRequestException('backgroundColor는 문자열이어야 합니다.');
+    }
+    const s = raw.trim();
+    if (s.length === 0) return '#ffffff';
+    if (s.length > 64) {
+      throw new BadRequestException('배경색 값이 너무 깁니다.');
+    }
+    if (/[<>]/.test(s) || /url\s*\(/i.test(s)) {
+      throw new BadRequestException('허용되지 않는 배경색입니다.');
+    }
+    return s;
+  }
+
+  private normalizeBookSlideSize(
+    widthRaw: unknown,
+    heightRaw: unknown,
+  ): { width: number; height: number } {
+    const w =
+      typeof widthRaw === 'number' && Number.isFinite(widthRaw)
+        ? widthRaw
+        : DEFAULT_PAGE_W;
+    const h =
+      typeof heightRaw === 'number' && Number.isFinite(heightRaw)
+        ? heightRaw
+        : DEFAULT_PAGE_H;
+    if (w < 100 || w > 4000 || h < 100 || h > 4000) {
+      throw new BadRequestException(
+        '슬라이드 크기(너비·높이)가 올바르지 않습니다.',
+      );
+    }
+    return { width: w, height: h };
+  }
+
+  private normalizePagesInput(pages: BookPageInput[] | undefined): Array<{
+    sortOrder: number;
+    name: string;
+    backgroundColor: string;
+    elements: unknown[];
+  }> {
+    if (pages == null || pages.length === 0) {
+      return [
+        {
+          sortOrder: 0,
+          name: '',
+          backgroundColor: '#ffffff',
+          elements: [],
+        },
+      ];
+    }
+    if (pages.length > MAX_PAGES) {
+      throw new BadRequestException(`페이지는 최대 ${MAX_PAGES}장까지입니다.`);
+    }
+    const sorted = [...pages].sort((a, b) => a.sortOrder - b.sortOrder);
+    for (let i = 0; i < sorted.length; i++) {
+      const p = sorted[i];
+      if (typeof p.sortOrder !== 'number' || !Number.isFinite(p.sortOrder)) {
+        throw new BadRequestException('sortOrder가 올바르지 않습니다.');
+      }
+      if (p.name != null) {
+        if (typeof p.name !== 'string' || p.name.length > PAGE_NAME_MAX) {
+          throw new BadRequestException(
+            `페이지 이름은 ${PAGE_NAME_MAX}자 이하여야 합니다.`,
+          );
+        }
+      }
+      const elements = p.elements ?? [];
+      this.validateElements(elements);
+      this.normalizePageBackgroundColor(p.backgroundColor);
+    }
+    return sorted.map((p) => ({
+      sortOrder: p.sortOrder,
+      name:
+        typeof p.name === 'string' ? p.name.trim().slice(0, PAGE_NAME_MAX) : '',
+      backgroundColor: this.normalizePageBackgroundColor(p.backgroundColor),
+      elements: p.elements ?? [],
+    }));
+  }
+
+  async findPage(
+    skip: number,
+    take: number,
+    search?: string,
+  ): Promise<{ items: BookListItemPublic[]; total: number }> {
+    const qb = this.bookRepo
+      .createQueryBuilder('b')
+      .leftJoinAndSelect('b.author', 'author');
+
+    const term = search?.trim().slice(0, 120);
+    if (term) {
+      qb.andWhere('b.title LIKE :q', { q: `%${term}%` });
+    }
+
+    const total = await qb.clone().getCount();
+    const rows = await qb
+      .orderBy('b.updatedAt', 'DESC')
+      .skip(skip)
+      .take(take)
+      .getMany();
+
+    const ids = rows.map((r) => r.id);
+    const countMap = new Map<number, number>();
+    if (ids.length > 0) {
+      const raw = await this.pageRepo
+        .createQueryBuilder('p')
+        .select('p.bookId', 'bookId')
+        .addSelect('COUNT(1)', 'cnt')
+        .where('p.bookId IN (:...ids)', { ids })
+        .groupBy('p.bookId')
+        .getRawMany<{ bookId: number; cnt: string }>();
+      for (const r of raw) {
+        countMap.set(Number(r.bookId), Number(r.cnt));
+      }
+    }
+
+    const items: BookListItemPublic[] = rows.map((b) => ({
+      id: b.id,
+      title: b.title,
+      createdAt: b.createdAt,
+      updatedAt: b.updatedAt,
+      author: this.mapAuthor(b.author),
+      pageCount: countMap.get(b.id) ?? 0,
+    }));
+
+    return { items, total };
+  }
+
+  async findOne(id: number): Promise<BookPublic> {
+    const book = await this.bookRepo.findOne({
+      where: { id },
+      relations: ['author', 'pages'],
+    });
+    if (!book) throw new NotFoundException('북을 찾을 수 없습니다.');
+
+    const pages = [...(book.pages ?? [])].sort(
+      (a, b) => a.sortOrder - b.sortOrder,
+    );
+
+    return {
+      id: book.id,
+      title: book.title,
+      slideWidth: book.slideWidth ?? DEFAULT_PAGE_W,
+      slideHeight: book.slideHeight ?? DEFAULT_PAGE_H,
+      createdAt: book.createdAt,
+      updatedAt: book.updatedAt,
+      author: this.mapAuthor(book.author),
+      pages: pages.map((p) => ({
+        id: p.id,
+        sortOrder: p.sortOrder,
+        name: p.slideName ?? '',
+        backgroundColor: p.backgroundColor?.trim() || '#ffffff',
+        elements: this.parseElementsJson(p.elementsJson || '[]'),
+      })),
+    };
+  }
+
+  async create(
+    userId: number,
+    body: {
+      title: string;
+      pages?: BookPageInput[];
+      slideWidth?: number;
+      slideHeight?: number;
+    },
+  ): Promise<BookPublic> {
+    const title = body.title?.trim() ?? '';
+    if (!title) throw new BadRequestException('제목을 입력하세요.');
+    if (title.length > TITLE_MAX) {
+      throw new BadRequestException(`제목은 ${TITLE_MAX}자 이하입니다.`);
+    }
+
+    const normalized = this.normalizePagesInput(body.pages);
+    const { width: sw, height: sh } = this.normalizeBookSlideSize(
+      body.slideWidth,
+      body.slideHeight,
+    );
+
+    const book = this.bookRepo.create({
+      title,
+      author: { id: userId },
+      slideWidth: sw,
+      slideHeight: sh,
+    });
+    await this.bookRepo.save(book);
+
+    for (const p of normalized) {
+      const elements = p.elements ?? [];
+      this.validateElements(elements);
+      await this.pageRepo.save(
+        this.pageRepo.create({
+          book: { id: book.id },
+          sortOrder: p.sortOrder,
+          slideName: p.name,
+          backgroundColor: p.backgroundColor,
+          elementsJson: JSON.stringify(elements),
+        }),
+      );
+    }
+
+    return this.findOne(book.id);
+  }
+
+  async update(
+    bookId: number,
+    userId: number,
+    body: {
+      title?: string;
+      pages?: BookPageInput[];
+      slideWidth?: number;
+      slideHeight?: number;
+    },
+  ): Promise<BookPublic> {
+    const book = await this.bookRepo.findOne({
+      where: { id: bookId },
+      relations: ['author'],
+    });
+    if (!book) throw new NotFoundException('북을 찾을 수 없습니다.');
+    if (book.author.id !== userId) {
+      throw new ForbiddenException('수정 권한이 없습니다.');
+    }
+
+    if (body.title != null) {
+      const title = body.title.trim();
+      if (!title) throw new BadRequestException('제목을 입력하세요.');
+      if (title.length > TITLE_MAX) {
+        throw new BadRequestException(`제목은 ${TITLE_MAX}자 이하입니다.`);
+      }
+      book.title = title;
+      await this.bookRepo.save(book);
+    }
+
+    if (body.slideWidth != null || body.slideHeight != null) {
+      const { width, height } = this.normalizeBookSlideSize(
+        body.slideWidth ?? book.slideWidth ?? DEFAULT_PAGE_W,
+        body.slideHeight ?? book.slideHeight ?? DEFAULT_PAGE_H,
+      );
+      book.slideWidth = width;
+      book.slideHeight = height;
+      await this.bookRepo.save(book);
+    }
+
+    if (body.pages != null) {
+      const normalized = this.normalizePagesInput(body.pages);
+      await this.pageRepo.delete({ book: { id: bookId } });
+      for (const p of normalized) {
+        const elements = p.elements ?? [];
+        this.validateElements(elements);
+        await this.pageRepo.save(
+          this.pageRepo.create({
+            book: { id: bookId },
+            sortOrder: p.sortOrder,
+            slideName: p.name,
+            backgroundColor: p.backgroundColor,
+            elementsJson: JSON.stringify(elements),
+          }),
+        );
+      }
+    }
+
+    return this.findOne(bookId);
+  }
+
+  async remove(bookId: number, userId: number): Promise<void> {
+    const book = await this.bookRepo.findOne({
+      where: { id: bookId },
+      relations: ['author'],
+    });
+    if (!book) throw new NotFoundException('북을 찾을 수 없습니다.');
+    if (book.author.id !== userId) {
+      throw new ForbiddenException('삭제 권한이 없습니다.');
+    }
+    await this.bookRepo.remove(book);
+  }
+
+  async assertBookOwner(bookId: number, userId: number): Promise<Book> {
+    const b = await this.bookRepo.findOne({
+      where: { id: bookId },
+      relations: ['author'],
+    });
+    if (!b) throw new NotFoundException('북을 찾을 수 없습니다.');
+    if (b.author.id !== userId) {
+      throw new ForbiddenException('업로드 권한이 없습니다.');
+    }
+    return b;
+  }
+
+  mapUploadedFile(file: Express.Multer.File): {
+    kind: 'image' | 'video';
+    url: string;
+  } {
+    const imageMime = new Set([
+      'image/jpeg',
+      'image/png',
+      'image/gif',
+      'image/webp',
+    ]);
+    const videoMime = new Set(['video/mp4', 'video/webm', 'video/quicktime']);
+    if (imageMime.has(file.mimetype)) {
+      return { kind: 'image', url: this.imagePublicUrl(file.filename) };
+    }
+    if (videoMime.has(file.mimetype)) {
+      return { kind: 'video', url: this.videoPublicUrl(file.filename) };
+    }
+    throw new BadRequestException('지원하지 않는 파일 형식입니다.');
+  }
+
+  mapPosterFile(file: Express.Multer.File): string {
+    return this.posterPublicUrl(file.filename);
+  }
+}

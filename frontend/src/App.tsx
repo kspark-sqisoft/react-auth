@@ -1,13 +1,21 @@
-import { Route, Routes } from "react-router-dom";
+import { Navigate, Route, Routes, useParams } from "react-router-dom";
 import { ProtectedRoute } from "@/components/auth/ProtectedRoute";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { MyInfoPage } from "@/pages/MyInfoPage";
 import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
+import { BookDetailPage } from "@/pages/BookDetailPage";
+import { BookEditorPage } from "@/pages/BookEditorPage";
+import { BookListPage } from "@/pages/BookListPage";
 import { PostDetailPage } from "@/pages/PostDetailPage";
 import { PostEditorPage } from "@/pages/PostEditorPage";
 import { PostListPage } from "@/pages/PostListPage";
 import { SignupPage } from "@/pages/SignupPage";
+
+function BookLegacyEditRedirect() {
+  const { id } = useParams();
+  return <Navigate to={`/books/${id}`} replace />;
+}
 
 /**
  * 라우트 구성 요약
@@ -22,13 +30,17 @@ const App = () => {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/posts" element={<PostListPage />} />
+        <Route path="/books" element={<BookListPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/posts/new" element={<PostEditorPage />} />
           <Route path="/posts/:id/edit" element={<PostEditorPage />} />
+          <Route path="/books/new" element={<BookEditorPage />} />
           <Route path="/me" element={<MyInfoPage />} />
         </Route>
         {/* 상세는 공개; `/posts/new`보다 뒤에 두어 `new`가 id로 해석되지 않게 함 */}
         <Route path="/posts/:id" element={<PostDetailPage />} />
+        <Route path="/books/:id/edit" element={<BookLegacyEditRedirect />} />
+        <Route path="/books/:id" element={<BookDetailPage />} />
       </Route>
     </Routes>
   );

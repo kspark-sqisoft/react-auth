@@ -6,6 +6,7 @@ import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
 import { DATABASE_PATH } from './env.constants';
 import { ChatModule } from './chat/chat.module';
+import { BooksModule } from './books/books.module';
 import { PostsModule } from './posts/posts.module';
 import { UsersModule } from './users/users.module';
 
@@ -21,6 +22,7 @@ import { UsersModule } from './users/users.module';
     UsersModule,
     AuthModule,
     PostsModule,
+    BooksModule,
     ChatModule,
   ],
   controllers: [AppController],

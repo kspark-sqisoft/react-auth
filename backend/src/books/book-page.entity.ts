@@ -1,0 +1,26 @@
+import { Entity, PrimaryGeneratedColumn, Column, ManyToOne } from 'typeorm';
+import { Book } from './book.entity';
+
+@Entity()
+export class BookPage {
+  @PrimaryGeneratedColumn()
+  id: number;
+
+  @ManyToOne(() => Book, (b) => b.pages, { onDelete: 'CASCADE' })
+  book: Book;
+
+  @Column({ type: 'int' })
+  sortOrder: number;
+
+  /** 목록·속성 패널에 표시할 슬라이드 이름(비우면 클라이언트에서 "슬라이드 n") */
+  @Column({ type: 'varchar', length: 120, default: '' })
+  slideName: string;
+
+  /** JSON 배열: 텍스트·이미지·비디오 요소 */
+  @Column({ type: 'text', default: '[]' })
+  elementsJson: string;
+
+  /** 슬라이드 배경색(CSS 색 문자열, 예: #ffffff) */
+  @Column({ type: 'varchar', length: 64, default: '#ffffff' })
+  backgroundColor: string;
+}

@@ -1,4 +1,4 @@
-import { Link, NavLink, Outlet } from "react-router-dom";
+import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
 import { ChatDock } from "@/components/chat/ChatDock";
 import { ThemeToggle } from "@/components/layout/ThemeToggle";
 import { Toaster } from "@/components/ui/sonner";
@@ -28,17 +28,29 @@ function footerNavClass({ isActive }: { isActive: boolean }) {
 /** 공통 헤더·푸터와 `<Outlet />`으로 자식 라우트만 갈아 끼웁니다. */
 export function AppLayout() {
   const { user, signOut } = useAuth();
+  const location = useLocation();
+  /** 북 워크스페이스(상세·새 북 편집)만 넓게; `/books` 목록은 글 목록과 동일 `max-w-3xl` */
+  const wideMain =
+    location.pathname === "/books/new" || /^\/books\/\d+/.test(location.pathname);
 
   return (
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm">
-        <div className="mx-auto flex h-12 max-w-3xl items-center justify-between gap-4 px-4">
+        <div
+          className={cn(
+            "mx-auto flex h-12 items-center justify-between gap-4 px-4",
+            wideMain ? "max-w-6xl" : "max-w-3xl",
+          )}
+        >
           <nav className="flex items-center gap-2 text-sm font-medium sm:gap-3">
             <NavLink to="/" end className={headerNavClass}>
               홈
             </NavLink>
             <NavLink to="/posts" className={headerNavClass}>
               글
+            </NavLink>
+            <NavLink to="/books" className={headerNavClass}>
+              북
             </NavLink>
           </nav>
           <div className="flex min-w-0 items-center gap-1 sm:gap-2">
@@ -85,11 +97,21 @@ export function AppLayout() {
           </div>
         </div>
       </header>
-      <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-8">
+      <main
+        className={cn(
+          "mx-auto w-full flex-1 px-4 py-8",
+          wideMain ? "max-w-6xl" : "max-w-3xl",
+        )}
+      >
         <Outlet />
       </main>
       <footer className="mt-auto shrink-0 border-t border-border bg-card/40 backdrop-blur-sm">
-        <div className="mx-auto flex max-w-3xl flex-col gap-6 px-4 py-8 sm:flex-row sm:items-start sm:justify-between">
+        <div
+          className={cn(
+            "mx-auto flex flex-col gap-6 px-4 py-8 sm:flex-row sm:items-start sm:justify-between",
+            wideMain ? "max-w-6xl" : "max-w-3xl",
+          )}
+        >
           <div className="space-y-1">
             <p className="font-heading text-sm font-medium text-foreground">react-auth</p>
             <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
@@ -105,6 +127,9 @@ export function AppLayout() {
             </NavLink>
             <NavLink to="/posts" className={footerNavClass}>
               글
+            </NavLink>
+            <NavLink to="/books" className={footerNavClass}>
+              북
             </NavLink>
             {user ? (
               <NavLink to="/me" className={footerNavClass}>

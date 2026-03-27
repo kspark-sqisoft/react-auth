@@ -242,11 +242,53 @@ function ContextMenuShortcut({
   )
 }
 
+/**
+ * dnd-kit 등으로 `ContextMenuTrigger`와 같은 노드에 포인터 리스너를 둘 수 없을 때,
+ * `contextmenu` + `createPortal`로 좌표를 맞춰 띄우는 패널(ContextMenuContent와 동일 비주얼).
+ */
+const ContextMenuFloatingPanel = React.forwardRef<
+  HTMLDivElement,
+  React.ComponentProps<"div">
+>(({ className, ...props }, ref) => (
+  <div
+    ref={ref}
+    data-slot="context-menu-floating-panel"
+    role="menu"
+    className={cn(
+      "z-[320] min-w-36 rounded-lg bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10",
+      className,
+    )}
+    {...props}
+  />
+))
+ContextMenuFloatingPanel.displayName = "ContextMenuFloatingPanel"
+
+const ContextMenuFloatingItem = React.forwardRef<
+  HTMLButtonElement,
+  React.ComponentProps<"button"> & { variant?: "default" | "destructive" }
+>(({ className, variant = "default", ...props }, ref) => (
+  <button
+    ref={ref}
+    type="button"
+    role="menuitem"
+    data-slot="context-menu-floating-item"
+    data-variant={variant}
+    className={cn(
+      "group/context-menu-item relative flex w-full cursor-default items-center gap-1.5 rounded-md px-1.5 py-1 text-left text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-inset:pl-7 data-[variant=destructive]:text-destructive data-[variant=destructive]:focus:bg-destructive/10 data-[variant=destructive]:focus:text-destructive dark:data-[variant=destructive]:focus:bg-destructive/20 data-disabled:pointer-events-none data-disabled:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 focus:*:[svg]:text-accent-foreground data-[variant=destructive]:*:[svg]:text-destructive",
+      className,
+    )}
+    {...props}
+  />
+))
+ContextMenuFloatingItem.displayName = "ContextMenuFloatingItem"
+
 export {
   ContextMenu,
   ContextMenuTrigger,
   ContextMenuContent,
   ContextMenuItem,
+  ContextMenuFloatingPanel,
+  ContextMenuFloatingItem,
   ContextMenuCheckboxItem,
   ContextMenuRadioItem,
   ContextMenuLabel,
