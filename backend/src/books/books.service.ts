@@ -202,7 +202,10 @@ export class BooksService {
   }
 
   /** 저장·응답은 `/uploads/...` 경로만 쓰도록 맞춤(절대 URL·쿼리 제거). */
-  private normalizeBookMediaUploadsPath(raw: unknown, maxLen = 500): string | null {
+  private normalizeBookMediaUploadsPath(
+    raw: unknown,
+    maxLen = 500,
+  ): string | null {
     if (typeof raw !== 'string') return null;
     const t = raw.trim();
     if (!t) return null;
