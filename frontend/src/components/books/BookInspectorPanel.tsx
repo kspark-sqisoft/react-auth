@@ -477,12 +477,12 @@ export function BookInspectorPanel({
   mediaHint,
 }: BookInspectorPanelProps) {
   return (
-    <aside className="flex w-72 shrink-0 flex-col border-l border-border bg-card/50">
-      <div className="flex items-center gap-2 border-b border-border px-3 py-2">
+    <aside className="flex h-full min-h-0 w-72 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
+      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <SlidersHorizontal className="size-4 text-muted-foreground" aria-hidden />
         <span className="text-xs font-medium text-muted-foreground">위젯 속성</span>
       </div>
-      <ScrollArea className="min-h-0 flex-1">
+      <ScrollArea className="min-h-0 flex-1 overflow-hidden">
         <div className="space-y-4 p-3">
           {!selected ? (
             <p className="text-sm text-muted-foreground">

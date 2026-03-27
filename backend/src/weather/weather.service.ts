@@ -50,7 +50,9 @@ type OwmGeoItem = {
   lon?: number;
 };
 
-function aqiToKorean(aqi: number | undefined): { level: number; label: string } | null {
+function aqiToKorean(
+  aqi: number | undefined,
+): { level: number; label: string } | null {
   if (aqi == null || !Number.isFinite(aqi)) return null;
   const level = Math.min(5, Math.max(1, Math.round(aqi)));
   const labels: Record<number, string> = {
@@ -91,8 +93,7 @@ export class WeatherService {
     if (t.length > 120) {
       throw new BadRequestException('도시 검색어가 너무 깁니다.');
     }
-    const geoUrl =
-      `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(t)}&limit=1&appid=${encodeURIComponent(key)}`;
+    const geoUrl = `https://api.openweathermap.org/geo/1.0/direct?q=${encodeURIComponent(t)}&limit=1&appid=${encodeURIComponent(key)}`;
     let res: Response;
     try {
       res = await fetch(geoUrl);
@@ -145,7 +146,8 @@ export class WeatherService {
     }
 
     const w0 = weatherJson.weather?.[0];
-    const description = typeof w0?.description === 'string' ? w0.description : '';
+    const description =
+      typeof w0?.description === 'string' ? w0.description : '';
     const icon = typeof w0?.icon === 'string' ? w0.icon : '01d';
     const main = weatherJson.main;
     const tempC = typeof main?.temp === 'number' ? main.temp : 0;
