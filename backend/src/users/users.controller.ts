@@ -21,6 +21,7 @@ import {
 import type { Request } from 'express';
 import { JwtAuthGuard } from '../auth/jwt.guard';
 import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import { PatchMeDto } from './dto/patch-me.dto';
 import { userAvatarMulterOptions } from './user-avatar-upload.options';
 import { type MePublic, UsersService } from './users.service';
 
@@ -74,10 +75,10 @@ export class UsersController {
   @ApiOperation({ summary: '내 프로필(이름·이미지) 변경 또는 이미지 제거' })
   async patchMe(
     @Req() req: Request & { user: JwtPayload },
+    @Body() body: PatchMeDto,
     @UploadedFile() file?: Express.Multer.File,
-    @Body('removeImage') removeImage?: string,
-    @Body('name') nameRaw?: string,
   ): Promise<MePublic> {
+    const { removeImage, name: nameRaw } = body;
     const remove =
       !file &&
       (removeImage === '1' || removeImage === 'true' || removeImage === 'on');

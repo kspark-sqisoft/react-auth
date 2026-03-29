@@ -1,5 +1,6 @@
 import { Controller, Get, Query } from '@nestjs/common';
-import { WeatherService, type SeoulWeatherDto } from './weather.service';
+import { SeoulWeatherDto } from './dto/seoul-weather.dto';
+import { WeatherService } from './weather.service';
 
 @Controller('weather')
 export class WeatherController {

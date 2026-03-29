@@ -5,26 +5,12 @@ import {
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { SeoulWeatherDto } from './dto/seoul-weather.dto';
 
 /** 쿼리 없을 때 기본 (서울 시청 인근) */
 const SEOUL_LAT = 37.5665;
 const SEOUL_LON = 126.978;
 const SEOUL_LABEL = '서울';
-
-export type SeoulWeatherDto = {
-  locationLabel: string;
-  tempC: number;
-  feelsLikeC: number;
-  description: string;
-  icon: string;
-  humidity: number;
-  windMps: number;
-  pm25: number | null;
-  pm10: number | null;
-  aqiLevel: number | null;
-  aqiLabel: string | null;
-  updatedAt: string;
-};
 
 type OwmWeatherJson = {
   weather?: { description?: string; icon?: string }[];

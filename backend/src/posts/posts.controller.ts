@@ -34,6 +34,9 @@ import {
   postAttachmentsMulterOptions,
 } from './post-attachments-multer.options';
 import { CommentsService } from './comments.service';
+import { CreateCommentDto } from './dto/create-comment.dto';
+import { CreatePostFieldsDto } from './dto/create-post-fields.dto';
+import { UpdatePostFieldsDto } from './dto/update-post-fields.dto';
 import { PostsService } from './posts.service';
 
 const multipartPostBody = {
@@ -177,28 +180,15 @@ export class PostsController {
   @ApiBearerAuth('JWT-auth')
   @PostMethod(':id/comments')
   @ApiOperation({ summary: '댓글 작성(대댓글은 body.parentId)' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['content'],
-      properties: {
-        content: { type: 'string', example: '댓글 내용' },
-        parentId: {
-          type: 'number',
-          nullable: true,
-          description: '대댓글일 때 부모 댓글 id',
-        },
-      },
-    },
-  })
+  @ApiBody({ type: CreateCommentDto })
   createComment(
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
-    @Body() body: { content?: string; parentId?: number },
+    @Body() body: CreateCommentDto,
   ) {
     return this.commentsService.create(id, req.user.sub, {
       content: body.content ?? '',
-      parentId: body.parentId,
+      parentId: body.parentId ?? undefined,
     });
   }
 
@@ -232,8 +222,7 @@ export class PostsController {
   @ApiOperation({ summary: '글 작성' })
   async create(
     @Req() req: Request & { user: JwtPayload },
-    @Body('title') title: string,
-    @Body('content') content: string,
+    @Body() body: CreatePostFieldsDto,
     @UploadedFiles()
     files?: {
       attachments?: Express.Multer.File[];
@@ -246,8 +235,8 @@ export class PostsController {
     try {
       return await this.postsService.createWithAttachments(
         req.user.sub,
-        title,
-        content,
+        body.title,
+        body.content,
         attachmentFiles,
         posterFiles,
       );
@@ -275,12 +264,7 @@ export class PostsController {
   async update(
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
-    @Body('title') title?: string,
-    @Body('content') content?: string,
-    @Body('mediaPlan') mediaPlanRaw?: string,
-    @Body('removeMedia') removeMedia?: string,
-    @Body('removeImage') removeImage?: string,
-    @Body('removeVideo') removeVideo?: string,
+    @Body() body: UpdatePostFieldsDto,
     @UploadedFiles()
     files?: {
       newFiles?: Express.Multer.File[];
@@ -289,6 +273,14 @@ export class PostsController {
   ) {
     const newFiles = files?.newFiles ?? [];
     const newPosters = files?.newPosters ?? [];
+    const {
+      title,
+      content,
+      mediaPlan: mediaPlanRaw,
+      removeMedia,
+      removeImage,
+      removeVideo,
+    } = body;
 
     const truthy = (v: string | undefined) =>
       v === '1' || v === 'true' || v === 'on';

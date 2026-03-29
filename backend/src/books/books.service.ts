@@ -14,6 +14,9 @@ import {
 } from '../env.constants';
 import { BookPage } from './book-page.entity';
 import { Book } from './book.entity';
+import type { BookPageInputDto } from './dto/book-page-input.dto';
+import type { CreateBookDto } from './dto/create-book.dto';
+import type { UpdateBookDto } from './dto/update-book.dto';
 
 const TITLE_MAX = 200;
 const MAX_PAGES = 80;
@@ -153,14 +156,6 @@ export type BookPublic = {
   updatedAt: Date;
   author: BookAuthorPublic;
   pages: BookPagePublic[];
-};
-
-export type BookPageInput = {
-  sortOrder: number;
-  name?: string;
-  /** 슬라이드 배경(CSS 색); 생략 시 #ffffff */
-  backgroundColor?: string;
-  elements?: unknown[];
 };
 
 @Injectable()
@@ -599,7 +594,7 @@ export class BooksService {
     return { width: w, height: h };
   }
 
-  private normalizePagesInput(pages: BookPageInput[] | undefined): Array<{
+  private normalizePagesInput(pages: BookPageInputDto[] | undefined): Array<{
     sortOrder: number;
     name: string;
     backgroundColor: string;
@@ -756,15 +751,7 @@ export class BooksService {
     };
   }
 
-  async create(
-    userId: number,
-    body: {
-      title: string;
-      pages?: BookPageInput[];
-      slideWidth?: number;
-      slideHeight?: number;
-    },
-  ): Promise<BookPublic> {
+  async create(userId: number, body: CreateBookDto): Promise<BookPublic> {
     const title = body.title?.trim() ?? '';
     if (!title) throw new BadRequestException('제목을 입력하세요.');
     if (title.length > TITLE_MAX) {
@@ -805,12 +792,7 @@ export class BooksService {
   async update(
     bookId: number,
     userId: number,
-    body: {
-      title?: string;
-      pages?: BookPageInput[];
-      slideWidth?: number;
-      slideHeight?: number;
-    },
+    body: UpdateBookDto,
   ): Promise<BookPublic> {
     const book = await this.bookRepo.findOne({
       where: { id: bookId },

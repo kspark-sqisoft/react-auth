@@ -32,7 +32,9 @@ import {
   BOOK_MEDIA_POSTER_MAX_BYTES,
   bookMediaMulterOptions,
 } from './book-upload.options';
-import { BooksService, type BookPageInput } from './books.service';
+import { BooksService } from './books.service';
+import { CreateBookDto } from './dto/create-book.dto';
+import { UpdateBookDto } from './dto/update-book.dto';
 
 @ApiTags('books')
 @Controller('books')
@@ -68,41 +70,10 @@ export class BooksController {
   @ApiBearerAuth('JWT-auth')
   @Post()
   @ApiOperation({ summary: '북 만들기' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      required: ['title'],
-      properties: {
-        title: { type: 'string', example: '내 프레젠테이션' },
-        slideWidth: { type: 'number', description: '공통 슬라이드 너비(px)' },
-        slideHeight: { type: 'number', description: '공통 슬라이드 높이(px)' },
-        pages: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              sortOrder: { type: 'number' },
-              name: { type: 'string' },
-              backgroundColor: {
-                type: 'string',
-                description: '슬라이드 배경 CSS 색(예: #aabbcc)',
-              },
-              elements: { type: 'array' },
-            },
-          },
-        },
-      },
-    },
-  })
+  @ApiBody({ type: CreateBookDto })
   create(
     @Req() req: Request & { user: JwtPayload },
-    @Body()
-    body: {
-      title?: string;
-      pages?: BookPageInput[];
-      slideWidth?: number;
-      slideHeight?: number;
-    },
+    @Body() body: CreateBookDto,
   ) {
     return this.booksService.create(req.user.sub, {
       title: body.title ?? '',
@@ -116,41 +87,11 @@ export class BooksController {
   @ApiBearerAuth('JWT-auth')
   @Patch(':id')
   @ApiOperation({ summary: '북 수정(작성자만). pages내면 페이지 전체 교체' })
-  @ApiBody({
-    schema: {
-      type: 'object',
-      properties: {
-        title: { type: 'string' },
-        slideWidth: { type: 'number' },
-        slideHeight: { type: 'number' },
-        pages: {
-          type: 'array',
-          items: {
-            type: 'object',
-            properties: {
-              sortOrder: { type: 'number' },
-              name: { type: 'string' },
-              backgroundColor: {
-                type: 'string',
-                description: '슬라이드 배경 CSS 색(예: #aabbcc)',
-              },
-              elements: { type: 'array' },
-            },
-          },
-        },
-      },
-    },
-  })
+  @ApiBody({ type: UpdateBookDto })
   update(
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
-    @Body()
-    body: {
-      title?: string;
-      pages?: BookPageInput[];
-      slideWidth?: number;
-      slideHeight?: number;
-    },
+    @Body() body: UpdateBookDto,
   ) {
     return this.booksService.update(id, req.user.sub, body);
   }
