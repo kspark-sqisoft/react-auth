@@ -1,5 +1,5 @@
 ---
-description: React 프론트엔드에서 shadcn/ui 우선 사용
+description: Tailwind, shadcn/ui, Zustand, TanStack Query, React 19 폼, Zod 검증 등 프론트엔드 규칙
 globs: frontend/**/*.{tsx,ts}
 alwaysApply: false
 ---
@@ -8,4 +8,8 @@ alwaysApply: false
 
 - 새 UI는 가능하면 **`@/components/ui`** 의 shadcn 래퍼( Radix 기반 )를 쓴다. 버튼, 입력, 메뉴, 다이얼로그, 컨텍스트 메뉴, 토스트 등은 직접 `<div>`로 흉내 내지 말고 기존 컴포넌트를 맞춘다.
 - **Context Menu**는 `@/components/ui/context-menu` 를 쓴다. **Radix `ContextMenuTrigger`** 는 dnd-kit `listeners`와 **같은 노드에 두면** 우클릭 메뉴가 동작하지 않을 수 있다. 그럴 때는 행에 `onContextMenu` + `createPortal` 로 **`ContextMenuFloatingPanel` / `ContextMenuFloatingItem`**(동일 파일에서 export)으로 맞춘다.
-- 스타일은 프로젝트의 Tailwind·`cn()` 패턴을 따른다.
+- **스타일·레이아웃**은 **`tailwindcss`** 유틸 클래스로 맞춘다. 조건부·병합은 **`cn()`**(`clsx` + `tailwind-merge`). 전역·토큰은 `index.css`의 `@theme` / `@layer` 등 프로젝트 설정을 따른다. 인라인 `style`·별도 CSS 모듈은 꼭 필요할 때만 쓴다.
+- **전역·크로스 컷 상태**가 필요하면 **`zustand`** 로 스토어를 두고 쓴다. 단순 로컬 UI 상태는 `useState`로 충분할 때 굳이 스토어로 올리지 않는다.
+- **서버와의 동기화**(조회·캐시·무효화·mutation)는 **`@tanstack/react-query`**(TanStack Query)를 쓴다. API 호출만 던지는 경우에도 `useQuery` / `useMutation` 패턴에 맞춘다.
+- **폼**은 **React 19** 흐름을 우선한다: **`useActionState`**, **`useFormStatus`**, **`useOptimistic`**, `<form action>` / `formAction`으로 제출·에러·pending·낙관적 UI를 맞춘다. 필드가 매우 많거나 복잡한 클라이언트 전용·동적 필드가 필요하면 **`react-hook-form`**을 보완으로 쓰고, 역할이 겹치지 않게 나눈다.
+- **폼 검증**(스키마·필드 에러)은 **`zod`** 로 정의한다. **`react-hook-form`**과 쓸 때는 **`@hookform/resolvers`**의 **`zodResolver`**로 연결한다. **`useActionState`** / 제출 핸들러에서는 동일 스키마로 **`safeParse`**(또는 `parse`)해 메시지를 맞춘다. 수동 `if` 체인으로 검증을 새로 짓지 않는다.
