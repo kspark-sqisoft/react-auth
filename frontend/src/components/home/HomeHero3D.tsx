@@ -104,7 +104,8 @@ export function HomeHero3D({ className }: { className?: string }) {
     <div className={cn("min-h-0 w-full flex-1", className)}>
       <Canvas
         className="h-full w-full"
-        shadows
+        /** `true`(soft) 는 three r183+ 에서 PCFSoftShadowMap 폐기 경고 — `percentage` = PCFShadowMap */
+        shadows="percentage"
         gl={{ alpha: true, stencil: false, depth: false, antialias: false }}
         camera={{ position: [0, 0, 20], fov: 32.5, near: 1, far: 100 }}
         onCreated={(state) => {

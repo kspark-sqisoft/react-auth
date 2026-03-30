@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AuthModule } from '../auth/auth.module';
 import { Post } from './post.entity';
@@ -8,6 +8,10 @@ import { PostComment } from './post-comment.entity';
 import { CommentsService } from './comments.service';
 import { PostsController } from './posts.controller';
 import { PostsService } from './posts.service';
+import {
+  PostsDomainSpanInterceptor,
+  PostsDomainSpanMiddleware,
+} from './posts-domain-span';
 
 @Module({
   imports: [
@@ -15,6 +19,15 @@ import { PostsService } from './posts.service';
     AuthModule,
   ],
   controllers: [PostsController],
-  providers: [PostsService, CommentsService],
+  providers: [
+    PostsService,
+    CommentsService,
+    PostsDomainSpanMiddleware,
+    PostsDomainSpanInterceptor,
+  ],
 })
-export class PostsModule {}
+export class PostsModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(PostsDomainSpanMiddleware).forRoutes(PostsController);
+  }
+}

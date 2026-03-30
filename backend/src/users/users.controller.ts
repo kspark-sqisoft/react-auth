@@ -10,6 +10,7 @@ import {
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
+import { UsersDomainSpanInterceptor } from './users-domain-span';
 import { FileInterceptor } from '@nestjs/platform-express';
 import {
   ApiBearerAuth,
@@ -49,8 +50,9 @@ const multipartMePatchBody = {
 
 @ApiTags('users')
 @Controller('users')
+@UseInterceptors(UsersDomainSpanInterceptor)
 export class UsersController {
-  private readonly logger = new Logger(UsersController.name);
+  private readonly logger = new Logger('UsersController');
 
   constructor(private usersService: UsersService) {}
 
@@ -59,9 +61,10 @@ export class UsersController {
   @Get('me')
   @ApiOperation({ summary: '내 프로필(sub·이메일·이름·프로필 이미지 URL)' })
   async getMe(@Req() req: Request & { user: JwtPayload }): Promise<MePublic> {
+    this.logger.log('[USERS-09-CTRL] getMe() 핸들러 진입');
     const me: MePublic = await this.usersService.getMeProfile(req.user.sub);
     this.logger.log(
-      `[내 정보] 조회 sub=${me.sub} email=${me.email} name=${me.name}`,
+      `[USERS-09-CTRL] getMe 응답 | sub=${me.sub} email=${me.email} name=${me.name}`,
     );
     return me;
   }
@@ -96,7 +99,7 @@ export class UsersController {
       removeImage: remove,
       ...(hasName ? { name: nameTrimmed } : {}),
     });
-    this.logger.log(`[내 정보] 프로필 갱신 sub=${me.sub}`);
+    this.logger.log(`[USERS-09-CTRL] patchMe 완료 | sub=${me.sub}`);
     return me;
   }
 }

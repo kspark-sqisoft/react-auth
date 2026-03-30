@@ -28,7 +28,7 @@ export type CommentPublic = {
 
 @Injectable()
 export class CommentsService {
-  private readonly logger = new Logger(CommentsService.name);
+  private readonly logger = new Logger('CommentsService');
   private static readonly CONTENT_MAX = 8000;
 
   constructor(
@@ -102,6 +102,9 @@ export class CommentsService {
     authorId: number,
     body: { content: string; parentId?: number },
   ): Promise<CommentPublic> {
+    this.logger.log(
+      `[POSTS-11-CMT] create | postId=${postId} authorId=${authorId}`,
+    );
     const postExists = await this.postRepo.exist({ where: { id: postId } });
     if (!postExists) {
       throw new NotFoundException();
@@ -142,7 +145,7 @@ export class CommentsService {
       relations: ['author'],
     });
     this.logger.log(
-      `[댓글] 작성 postId=${postId} commentId=${saved.id} parentId=${body.parentId ?? '—'}`,
+      `[POSTS-11-CMT] create 완료 | postId=${postId} commentId=${saved.id} parentId=${body.parentId ?? '—'}`,
     );
     return this.toPublic(withAuthor, []);
   }
@@ -152,6 +155,9 @@ export class CommentsService {
     commentId: number,
     userId: number,
   ): Promise<void> {
+    this.logger.log(
+      `[POSTS-11-CMT] remove | postId=${postId} commentId=${commentId} userId=${userId}`,
+    );
     const c = await this.commentRepo.findOne({
       where: { id: commentId, post: { id: postId } },
       relations: ['author'],
@@ -164,7 +170,7 @@ export class CommentsService {
     }
     await this.commentRepo.remove(c);
     this.logger.log(
-      `[댓글] 삭제 postId=${postId} commentId=${commentId} userId=${userId}`,
+      `[POSTS-11-CMT] remove 완료 | postId=${postId} commentId=${commentId}`,
     );
   }
 }

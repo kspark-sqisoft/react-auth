@@ -77,7 +77,7 @@ export class ChatGateway
   @WebSocketServer()
   server!: Server;
 
-  private readonly logger = new Logger(ChatGateway.name);
+  private readonly logger = new Logger('ChatGateway');
 
   private readonly roomMembers = new Map<string, number>();
   private readonly knownRooms = new Set<string>(['lobby']);
@@ -99,7 +99,9 @@ export class ChatGateway
       }
       this.knownRooms.add('lobby');
     } catch (e) {
-      this.logger.warn(`[채팅] DB 방 목록 로드 실패: ${String(e)}`);
+      this.logger.warn(
+        `[CHAT-09-WS] onModuleInit | DB 방 목록 로드 실패: ${String(e)}`,
+      );
     }
   }
 
@@ -157,7 +159,7 @@ export class ChatGateway
       const rooms = await this.getRoomListPayload();
       this.server.emit('roomList', { rooms });
     } catch (e) {
-      this.logger.warn(`[채팅] roomList 전송 실패: ${String(e)}`);
+      this.logger.warn(`[CHAT-09-WS] roomList 전송 실패: ${String(e)}`);
     }
   }
 
@@ -197,7 +199,9 @@ export class ChatGateway
         name: (payload.name?.trim() || payload.email || 'user').slice(0, 80),
       };
       (client.data as ClientData) = data;
-      this.logger.log(`[채팅] 연결 socket=${client.id} userId=${data.userId}`);
+      this.logger.log(
+        `[CHAT-09-WS] handleConnection | socket=${client.id} userId=${data.userId}`,
+      );
       const rooms = await this.getRoomListPayload();
       client.emit('roomList', { rooms });
     } catch {
@@ -212,7 +216,7 @@ export class ChatGateway
     const d = client.data as ClientData;
     if (d?.userId != null) {
       this.logger.log(
-        `[채팅] 연결 해제 socket=${client.id} userId=${d.userId}`,
+        `[CHAT-09-WS] handleDisconnect | socket=${client.id} userId=${d.userId}`,
       );
     }
     const room = d?.currentRoom;
@@ -323,7 +327,9 @@ export class ChatGateway
     try {
       await this.chatService.deleteRoomFully(room);
     } catch (e) {
-      this.logger.error(`[채팅] 방 메시지 삭제 실패: ${String(e)}`);
+      this.logger.error(
+        `[CHAT-09-WS] deleteRoom | 메시지·메타 삭제 실패: ${String(e)}`,
+      );
       client.emit('chatError', { message: '방 삭제에 실패했습니다.' });
       return { ok: false };
     }
@@ -387,7 +393,7 @@ export class ChatGateway
         text,
       );
     } catch (e) {
-      this.logger.error(`[채팅] 저장 실패: ${String(e)}`);
+      this.logger.error(`[CHAT-09-WS] sendMessage | 저장 실패: ${String(e)}`);
       client.emit('chatError', { message: '메시지 저장에 실패했습니다.' });
       return { ok: false };
     }

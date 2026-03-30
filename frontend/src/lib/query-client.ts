@@ -1,4 +1,5 @@
 import { QueryClient } from "@tanstack/react-query";
+import { installQueryCacheHitLogging } from "@/lib/install-query-cache-hit-logging";
 
 /** 앱 전역 단일 인스턴스 — `main`의 Provider와 스토어 등에서 동일 참조로 무효화할 때 사용 */
 export const queryClient = new QueryClient({
@@ -19,3 +20,6 @@ export const queryClient = new QueryClient({
     },
   },
 });
+
+/** DEV: staleTime 안에서 캐시만으로 화면이 채워질 때 콘솔에 `[RQ-CACHE HIT]` 로그 */
+installQueryCacheHitLogging(queryClient);

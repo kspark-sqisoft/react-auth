@@ -2,6 +2,7 @@ import {
   BadGatewayException,
   BadRequestException,
   Injectable,
+  Logger,
   ServiceUnavailableException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
@@ -53,6 +54,8 @@ function aqiToKorean(
 
 @Injectable()
 export class WeatherService {
+  private readonly logger = new Logger('WeatherService');
+
   constructor(private readonly config: ConfigService) {}
 
   private apiKey(): string {
@@ -110,6 +113,13 @@ export class WeatherService {
 
   /** @param q Geocoding 쿼리(도시,국가). 비우면 서울. */
   async getWeather(q?: string): Promise<SeoulWeatherDto> {
+    const qTrim = q?.trim();
+    const qLabel = qTrim
+      ? qTrim.length > 60
+        ? `"${qTrim.slice(0, 60)}…"`
+        : `"${qTrim}"`
+      : '(기본 서울)';
+    this.logger.log(`[WEATHER-10-SVC] getWeather | q=${qLabel}`);
     const key = this.apiKey();
     const { lat, lon, locationLabel } = await this.resolveLatLon(q, key);
 
@@ -167,6 +177,9 @@ export class WeatherService {
       /* 대기질만 실패해도 날씨는 반환 */
     }
 
+    this.logger.log(
+      `[WEATHER-10-SVC] getWeather 완료 | ${locationLabel} tempC=${tempC}`,
+    );
     return {
       locationLabel,
       tempC,

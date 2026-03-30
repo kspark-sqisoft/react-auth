@@ -6,6 +6,7 @@ import {
   Req,
   Res,
   UnauthorizedException,
+  UseInterceptors,
 } from '@nestjs/common';
 import { ApiCookieAuth, ApiOperation, ApiTags } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -16,17 +17,20 @@ import {
 import { SignInDto } from './dto/signin.dto';
 import { SignUpDto } from './dto/signup.dto';
 import { AuthService } from './auth.service';
+import { AuthDomainSpanInterceptor } from './auth-domain-span';
 
 @ApiTags('auth')
 @Controller('auth')
+@UseInterceptors(AuthDomainSpanInterceptor)
 export class AuthController {
-  private readonly logger = new Logger(AuthController.name);
+  private readonly logger = new Logger('AuthController');
 
   constructor(private authService: AuthService) {}
 
   @Post('signup')
   @ApiOperation({ summary: '회원가입' })
   async signup(@Body() body: SignUpDto) {
+    this.logger.log('[AUTH-09-CTRL] signup() 핸들러 진입');
     const user = await this.authService.signup(
       body.email,
       body.password,
@@ -49,6 +53,7 @@ export class AuthController {
     @Body() body: SignInDto,
     @Res({ passthrough: true }) res: Response,
   ) {
+    this.logger.log('[AUTH-09-CTRL] signin() 핸들러 진입');
     const { access_token, refresh_token } = await this.authService.signin(
       body.email,
       body.password,
@@ -79,10 +84,11 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    this.logger.log('[AUTH-09-CTRL] refresh() 핸들러 진입');
     const cookies = req.cookies as Record<string, string> | undefined;
     const token = cookies?.[REFRESH_TOKEN_COOKIE];
     if (!token) {
-      this.logger.warn('[토큰 갱신] 요청 거절: 리프레시 쿠키 없음');
+      this.logger.warn('[AUTH-09-CTRL] refresh 거절 | 리프레시 쿠키 없음');
       throw new UnauthorizedException();
     }
     const { access_token, refresh_token } =
@@ -106,12 +112,13 @@ export class AuthController {
     ].join('\n'),
   })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
+    this.logger.log('[AUTH-09-CTRL] logout() 핸들러 진입');
     const cookies = req.cookies as Record<string, string> | undefined;
     const token = cookies?.[REFRESH_TOKEN_COOKIE];
     if (token) {
       await this.authService.revokeRefreshToken(token);
     }
-    this.logger.log('[로그아웃] 리프레시 쿠키 제거·DB 폐기');
+    this.logger.log('[AUTH-09-CTRL] logout | 리프레시 쿠키 제거·DB 폐기');
     res.clearCookie(REFRESH_TOKEN_COOKIE, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

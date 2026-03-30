@@ -6,6 +6,7 @@ import { Suspense, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame, type RootState, type ThreeElements } from "@react-three/fiber";
 import { Billboard, Image, ScrollControls, Text, useScroll } from "@react-three/drei";
 import { easing } from "maath";
+import { useTheme } from "next-themes";
 import { cn } from "@/lib/utils";
 import { cardImages } from "@/assets/cards";
 
@@ -40,7 +41,10 @@ const CAMERA_FOV = 24;
 const CAMERA_Y_BASE = 8.75;
 const lookTarget = new THREE.Vector3(0, 1.35, 0);
 
-function Scene({ ...props }: ThreeElements["group"]) {
+function Scene({
+  textColor,
+  ...props
+}: { textColor: string } & ThreeElements["group"]) {
   const ref = useRef<THREE.Group>(null);
   const scroll = useScroll();
   const [hovered, setHovered] = useState<number | null>(null);
@@ -66,6 +70,7 @@ function Scene({ ...props }: ThreeElements["group"]) {
       {SEASON_ROWS.map((row) => (
         <Cards
           key={row.category}
+          textColor={textColor}
           category={row.category}
           from={row.from}
           len={row.len}
@@ -80,7 +85,7 @@ function Scene({ ...props }: ThreeElements["group"]) {
           }}
         />
       ))}
-      <ActiveCard hovered={hovered} previewUrl={previewUrl} />
+      <ActiveCard textColor={textColor} hovered={hovered} previewUrl={previewUrl} />
     </group>
   );
 }
@@ -119,6 +124,7 @@ function Card({
 }
 
 function Cards({
+  textColor,
   category,
   from = 0,
   len = Math.PI * 2,
@@ -127,6 +133,7 @@ function Cards({
   onPointerOut,
   ...props
 }: {
+  textColor: string;
   category: string;
   from?: number;
   len?: number;
@@ -141,7 +148,7 @@ function Cards({
   return (
     <group {...props}>
       <Billboard position={[Math.sin(textPosition) * radius * 1.4, 0.5, Math.cos(textPosition) * radius * 1.4]}>
-        <Text font={INTER_FONT} fontSize={0.25} anchorX="center" color="black">
+        <Text font={INTER_FONT} fontSize={0.25} anchorX="center" color={textColor}>
           {category}
         </Text>
       </Billboard>
@@ -174,7 +181,15 @@ function Cards({
 
 type ImageShaderMaterial = THREE.ShaderMaterial & { zoom: number; opacity: number };
 
-function ActiveCard({ hovered, previewUrl }: { hovered: number | null; previewUrl: string | null }) {
+function ActiveCard({
+  textColor,
+  hovered,
+  previewUrl,
+}: {
+  textColor: string;
+  hovered: number | null;
+  previewUrl: string | null;
+}) {
   const meshRef = useRef<THREE.Mesh>(null);
   const displayUrl = previewUrl ?? cardImages[0]!;
   const name = useMemo(() => {
@@ -205,7 +220,7 @@ function ActiveCard({ hovered, previewUrl }: { hovered: number | null; previewUr
         fontSize={0.5}
         position={[2.15, 3.85, 0]}
         anchorX="left"
-        color="black"
+        color={textColor}
       >
         {hovered !== null ? `${name}\n${hovered}` : " "}
       </Text>
@@ -224,6 +239,9 @@ function ActiveCard({ hovered, previewUrl }: { hovered: number | null; previewUr
 }
 
 export function HomeHeroCards3D({ className }: { className?: string }) {
+  const { resolvedTheme } = useTheme();
+  const textColor = resolvedTheme === "dark" ? "#fafafa" : "#0a0a0a";
+
   return (
     <div className={cn("min-h-0 w-full flex-1", className)}>
       <Canvas
@@ -234,7 +252,7 @@ export function HomeHeroCards3D({ className }: { className?: string }) {
       >
         <Suspense fallback={null}>
           <ScrollControls pages={4} infinite style={{ width: "100%", height: "100%" }}>
-            <Scene position={[0, 1.5, 0]} />
+            <Scene textColor={textColor} position={[0, 1.5, 0]} />
           </ScrollControls>
         </Suspense>
       </Canvas>

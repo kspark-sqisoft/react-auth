@@ -94,9 +94,7 @@ export class CatsController {
    * Guard들이 먼저 실행되므로, 비로그인이면 Pipe·핸들러까지 오지 않습니다.
    */
   create(@Body(ParseCreateCatPipe) dto: CreateCatDto) {
-    this.logger.log(
-      `[Cats 학습 Controller] create() 핸들러 진입 — Pipe 통과한 DTO로 Service 호출`,
-    );
+    this.logger.log(`[CATS-09-CTRL] create() 핸들러 진입 | DTO로 SVC 호출`);
     return this.catsService.create(dto);
   }
 

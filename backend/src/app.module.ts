@@ -1,4 +1,4 @@
-import { Module } from '@nestjs/common';
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
@@ -11,6 +11,10 @@ import { WeatherModule } from './weather/weather.module';
 import { PostsModule } from './posts/posts.module';
 import { UsersModule } from './users/users.module';
 import { CatsModule } from './cats/cats.module';
+import {
+  AppDomainSpanInterceptor,
+  AppDomainSpanMiddleware,
+} from './app-domain-span';
 
 @Module({
   imports: [
@@ -30,6 +34,10 @@ import { CatsModule } from './cats/cats.module';
     CatsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [AppService, AppDomainSpanMiddleware, AppDomainSpanInterceptor],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(AppDomainSpanMiddleware).forRoutes(AppController);
+  }
+}

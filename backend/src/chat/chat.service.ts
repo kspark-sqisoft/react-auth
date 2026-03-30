@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { In, Repository } from 'typeorm';
 import { ChatMessage } from './chat-message.entity';
@@ -8,6 +8,8 @@ const HISTORY_PAGE = 50;
 
 @Injectable()
 export class ChatService {
+  private readonly logger = new Logger('ChatService');
+
   constructor(
     @InjectRepository(ChatMessage)
     private readonly msgRepo: Repository<ChatMessage>,
@@ -22,6 +24,9 @@ export class ChatService {
     authorImageUrl: string | null,
     body: string,
   ): Promise<ChatMessage> {
+    this.logger.log(
+      `[CHAT-10-SVC] append | roomId=${roomId} authorId=${authorId} len=${body.length}`,
+    );
     const row = this.msgRepo.create({
       roomId,
       authorId,
@@ -128,6 +133,7 @@ export class ChatService {
   }
 
   async deleteRoomFully(roomId: string): Promise<void> {
+    this.logger.log(`[CHAT-10-SVC] deleteRoomFully | roomId=${roomId}`);
     await this.msgRepo.delete({ roomId });
     await this.roomRepo.delete({ roomId });
   }

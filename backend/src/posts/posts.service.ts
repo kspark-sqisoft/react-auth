@@ -78,7 +78,7 @@ type MediaPlanItem = { t: 'e'; id: number } | { t: 'n'; i: number };
 
 @Injectable()
 export class PostsService {
-  private readonly logger = new Logger(PostsService.name);
+  private readonly logger = new Logger('PostsService');
 
   constructor(
     @InjectRepository(Post)
@@ -281,7 +281,7 @@ export class PostsService {
         : raw;
 
     this.logger.log(
-      `[글] 목록 페이지 조회 skip=${skip} take=${take} search=${term ? `"${term.slice(0, 40)}${term.length > 40 ? '…' : ''}"` : '(없음)'}`,
+      `[POSTS-10-SVC] 목록 페이지 조회 skip=${skip} take=${take} search=${term ? `"${term.slice(0, 40)}${term.length > 40 ? '…' : ''}"` : '(없음)'}`,
     );
 
     const applySearch = (
@@ -311,7 +311,7 @@ export class PostsService {
     const total = await countQb.getCount();
 
     if (ids.length === 0) {
-      this.logger.log(`[글] 목록 페이지 응답 반환=0 total=${total}`);
+      this.logger.log(`[POSTS-10-SVC] 목록 페이지 응답 반환=0 total=${total}`);
       return { items: [], total };
     }
 
@@ -327,7 +327,7 @@ export class PostsService {
     const posts = ids.map((id) => byId.get(id)!);
     const agg = await this.getLikeAggregates(ids, viewerId);
     this.logger.log(
-      `[글] 목록 페이지 응답 반환=${posts.length} total=${total}`,
+      `[POSTS-10-SVC] 목록 페이지 응답 반환=${posts.length} total=${total}`,
     );
     return {
       items: posts.map((p) => this.toPublic(p, agg.get(p.id))),
@@ -336,18 +336,20 @@ export class PostsService {
   }
 
   async findOne(id: number, viewerId?: number): Promise<PostPublic> {
-    this.logger.log(`[글] 단건 조회 postId=${id}`);
+    this.logger.log(`[POSTS-10-SVC] 단건 조회 postId=${id}`);
     const post = await this.repo.findOne({
       where: { id },
       relations: ['author', 'attachments'],
     });
     if (!post) {
-      this.logger.warn(`[글] 단건 없음 postId=${id}`);
+      this.logger.warn(`[POSTS-10-SVC] 단건 없음 postId=${id}`);
       throw new NotFoundException();
     }
     const agg = await this.getLikeAggregates([id], viewerId);
     const meta = agg.get(id)!;
-    this.logger.log(`[글] 단건 응답 postId=${id} authorId=${post.author.id}`);
+    this.logger.log(
+      `[POSTS-10-SVC] 단건 응답 postId=${id} authorId=${post.author.id}`,
+    );
     return this.toPublic(post, meta);
   }
 
@@ -441,7 +443,7 @@ export class PostsService {
     });
     const likeState = await this.getLikeState(saved.id, authorId);
     this.logger.log(
-      `[글] 작성 완료 postId=${saved.id} authorId=${authorId} 첨부=${attachmentFiles.length}`,
+      `[POSTS-10-SVC] 작성 완료 postId=${saved.id} authorId=${authorId} 첨부=${attachmentFiles.length}`,
     );
     return this.toPublic(withAll, likeState);
   }
@@ -463,17 +465,19 @@ export class PostsService {
       relations: ['author', 'attachments'],
     });
     if (!post) {
-      this.logger.warn(`[글] 수정 실패: 없음 postId=${id}`);
+      this.logger.warn(`[POSTS-10-SVC] 수정 실패: 없음 postId=${id}`);
       throw new NotFoundException();
     }
     if (post.author.id !== authorId) {
       this.logger.warn(
-        `[글] 수정 거절: 권한 없음 postId=${id} 요청자=${authorId} 작성자=${post.author.id}`,
+        `[POSTS-10-SVC] 수정 거절: 권한 없음 postId=${id} 요청자=${authorId} 작성자=${post.author.id}`,
       );
       throw new ForbiddenException();
     }
 
-    this.logger.log(`[글] 수정 시도 postId=${id} authorId=${authorId}`);
+    this.logger.log(
+      `[POSTS-10-SVC] 수정 시도 postId=${id} authorId=${authorId}`,
+    );
 
     const newFiles = body.newFiles ?? [];
     const newPosters = body.newPosters ?? [];
@@ -596,7 +600,7 @@ export class PostsService {
       relations: ['author', 'attachments'],
     });
     const likeState = await this.getLikeState(id, authorId);
-    this.logger.log(`[글] 수정 완료 postId=${id}`);
+    this.logger.log(`[POSTS-10-SVC] 수정 완료 postId=${id}`);
     return this.toPublic(refreshed, likeState);
   }
 
@@ -606,16 +610,18 @@ export class PostsService {
       relations: ['author', 'attachments'],
     });
     if (!post) {
-      this.logger.warn(`[글] 삭제 실패: 없음 postId=${id}`);
+      this.logger.warn(`[POSTS-10-SVC] 삭제 실패: 없음 postId=${id}`);
       throw new NotFoundException();
     }
     if (post.author.id !== authorId) {
       this.logger.warn(
-        `[글] 삭제 거절: 권한 없음 postId=${id} 요청자=${authorId} 작성자=${post.author.id}`,
+        `[POSTS-10-SVC] 삭제 거절: 권한 없음 postId=${id} 요청자=${authorId} 작성자=${post.author.id}`,
       );
       throw new ForbiddenException();
     }
-    this.logger.log(`[글] 삭제 완료 postId=${id} authorId=${authorId}`);
+    this.logger.log(
+      `[POSTS-10-SVC] 삭제 완료 postId=${id} authorId=${authorId}`,
+    );
     for (const a of this.sortedAttachments(post)) {
       await this.unlinkAttachmentRow(a);
     }
@@ -644,7 +650,7 @@ export class PostsService {
           /UNIQUE|unique/i.test(String(e.message))
         ) {
           this.logger.debug(
-            `[글] 좋아요 유니크 경합 무시 postId=${postId} userId=${userId}`,
+            `[POSTS-10-SVC] 좋아요 유니크 경합 무시 postId=${postId} userId=${userId}`,
           );
         } else {
           throw e;

@@ -62,7 +62,7 @@ export class CatsService {
   }
 
   async remove(id: number): Promise<void> {
-    this.logger.log(`[Cats 학습 Service] remove(${id}) — 존재 확인 후 삭제`);
+    this.logger.log(`[CATS-10-SVC] remove(${id}) | 존재 확인 후 삭제`);
     await this.findOne(id);
     await this.cats.delete(id);
     this.logger.log(`[CATS-10-SVC] remove(${id}) | 완료`);

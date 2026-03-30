@@ -4,6 +4,7 @@ import { join } from 'path';
 import {
   BadRequestException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -20,6 +21,8 @@ export type MePublic = {
 
 @Injectable()
 export class UsersService {
+  private readonly logger = new Logger('UsersService');
+
   constructor(
     @InjectRepository(User)
     private repo: Repository<User>,
@@ -60,11 +63,13 @@ export class UsersService {
   }
 
   create(email: string, password: string, name: string) {
+    this.logger.log(`[USERS-10-SVC] create | email=${email}`);
     const user = this.repo.create({ email, password, name: name.trim() });
     return this.repo.save(user);
   }
 
   async getMeProfile(userId: number): Promise<MePublic> {
+    this.logger.log(`[USERS-10-SVC] getMeProfile | userId=${userId}`);
     const user = await this.findByIdOrFail(userId);
     return this.toMePublic(user);
   }
@@ -108,6 +113,7 @@ export class UsersService {
     }
 
     await this.repo.save(user);
+    this.logger.log(`[USERS-10-SVC] updateMyProfile 완료 | userId=${userId}`);
     return this.toMePublic(user);
   }
 }

@@ -1,3 +1,4 @@
+import "@/lib/three-r183-fiber-polyfill";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { QueryClientProvider } from "@tanstack/react-query";

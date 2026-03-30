@@ -2,6 +2,7 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  Logger,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -160,6 +161,8 @@ export type BookPublic = {
 
 @Injectable()
 export class BooksService {
+  private readonly logger = new Logger('BooksService');
+
   constructor(
     @InjectRepository(Book)
     private bookRepo: Repository<Book>,
@@ -644,6 +647,9 @@ export class BooksService {
     take: number,
     search?: string,
   ): Promise<{ items: BookListItemPublic[]; total: number }> {
+    this.logger.log(
+      `[BOOKS-10-SVC] findPage | skip=${skip} take=${take} search=${search ? `"${search.slice(0, 40)}${search.length > 40 ? '…' : ''}"` : '(없음)'}`,
+    );
     const qb = this.bookRepo
       .createQueryBuilder('b')
       .leftJoinAndSelect('b.author', 'author');
@@ -723,6 +729,7 @@ export class BooksService {
   }
 
   async findOne(id: number): Promise<BookPublic> {
+    this.logger.log(`[BOOKS-10-SVC] findOne | bookId=${id}`);
     const book = await this.bookRepo.findOne({
       where: { id },
       relations: ['author', 'pages'],
@@ -752,6 +759,7 @@ export class BooksService {
   }
 
   async create(userId: number, body: CreateBookDto): Promise<BookPublic> {
+    this.logger.log(`[BOOKS-10-SVC] create | userId=${userId}`);
     const title = body.title?.trim() ?? '';
     if (!title) throw new BadRequestException('제목을 입력하세요.');
     if (title.length > TITLE_MAX) {
@@ -786,7 +794,9 @@ export class BooksService {
       );
     }
 
-    return this.findOne(book.id);
+    const created = await this.findOne(book.id);
+    this.logger.log(`[BOOKS-10-SVC] create 완료 | bookId=${book.id}`);
+    return created;
   }
 
   async update(
@@ -794,6 +804,9 @@ export class BooksService {
     userId: number,
     body: UpdateBookDto,
   ): Promise<BookPublic> {
+    this.logger.log(
+      `[BOOKS-10-SVC] update | bookId=${bookId} userId=${userId}`,
+    );
     const book = await this.bookRepo.findOne({
       where: { id: bookId },
       relations: ['author'],
@@ -841,10 +854,15 @@ export class BooksService {
       }
     }
 
-    return this.findOne(bookId);
+    const updated = await this.findOne(bookId);
+    this.logger.log(`[BOOKS-10-SVC] update 완료 | bookId=${bookId}`);
+    return updated;
   }
 
   async remove(bookId: number, userId: number): Promise<void> {
+    this.logger.log(
+      `[BOOKS-10-SVC] remove | bookId=${bookId} userId=${userId}`,
+    );
     const book = await this.bookRepo.findOne({
       where: { id: bookId },
       relations: ['author'],
@@ -856,6 +874,7 @@ export class BooksService {
     /* DB에 ON DELETE CASCADE가 없으면 페이지 행 때문에 삭제가 실패할 수 있어 명시적으로 먼저 제거 */
     await this.pageRepo.delete({ book: { id: bookId } });
     await this.bookRepo.delete(bookId);
+    this.logger.log(`[BOOKS-10-SVC] remove 완료 | bookId=${bookId}`);
   }
 
   async assertBookOwner(bookId: number, userId: number): Promise<Book> {
