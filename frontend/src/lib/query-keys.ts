@@ -14,6 +14,14 @@ export const bookKeys = {
   detail: (id: number) => [...bookKeys.details(), id] as const,
 };
 
+export const catKeys = {
+  all: ["cats"] as const,
+  lists: () => [...catKeys.all, "list"] as const,
+  list: () => [...catKeys.lists()] as const,
+  details: () => [...catKeys.all, "detail"] as const,
+  detail: (id: number) => [...catKeys.details(), id] as const,
+};
+
 export const postKeys = {
   all: ["posts"] as const,
   lists: () => [...postKeys.all, "list"] as const,

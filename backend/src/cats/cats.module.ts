@@ -1,0 +1,138 @@
+import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
+import { TypeOrmModule } from '@nestjs/typeorm';
+import { AuthModule } from '../auth/auth.module';
+import { Cat } from './cat.entity';
+import { CatsController } from './cats.controller';
+import { CatsService } from './cats.service';
+import { CatNotFoundFilter } from './filters/cat-not-found.filter';
+import { CatsAfterJwtLogGuard } from './guards/cats-after-jwt-log.guard';
+import { CatsBeforeJwtLogGuard } from './guards/cats-before-jwt-log.guard';
+import { CatsJwtLogGuard } from './guards/cats-jwt-log.guard';
+import { CatsLoggingInterceptor } from './interceptors/cats-logging.interceptor';
+import { CatsLoggerMiddleware } from './middleware/cats-logger.middleware';
+import { CatsParseIntIdPipe } from './pipes/cats-parse-int-id.pipe';
+import { ParseCreateCatPipe } from './pipes/parse-create-cat.pipe';
+
+/**
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * Module (모듈)
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ * - 역할: 이 도메인(cats)에 속한 Controller, Service, Guard, Pipe 등을 한 덩어리로 묶고,
+ *   AppModule 같은 상위 모듈의 `imports`에 넣어 애플리케이션에 등록합니다.
+ * - `@Module({ imports, controllers, providers, exports })`
+ *   - imports: 다른 모듈을 가져옴. 여기서는 TypeORM에 Cat 엔티티를 등록해 Repository 주입이 가능해짐.
+ *   - controllers: HTTP 라우트를 정의하는 클래스.
+ *   - providers: Nest DI 컨테이너에 등록되는 클래스(@Injectable 등). Service, Guard, Pipe, Filter,
+ *     Interceptor, Middleware 클래스를 쓰려면 대개 여기(또는 전역 모듈)에 넣어야 합니다.
+ *
+ * NestModule + configure()
+ * - 미들웨어는 `@Module` 데코레이터만으로는 라우트에 붙이지 못합니다.
+ * - `NestModule`을 구현하고 `configure(consumer)` 안에서 `MiddlewareConsumer`로
+ *   어떤 미들웨어를 어떤 경로/컨트롤러에 적용할지 지정합니다.
+ *   예: `consumer.apply(CatsLoggerMiddleware).forRoutes(CatsController)`
+ *
+ * ┌─────────────────────────────────────────────────────────────────
+ * │ Cats HTTP 요청 처리 순서 (위 → 아래, 학습용 로그 태그와 대응)
+ * └─────────────────────────────────────────────────────────────────
+ *
+ *                    클라이언트 HTTP 요청
+ *                            │
+ *                            ▼
+ *    ┌──────────────────────────────────────────────────────────┐
+ *    │  [CATS REQ START] ═══════ (요청 단위 시작 구분선)          │
+ *    │  CATS-01-MW  CatsLoggerMiddleware                        │
+ *    └───────────────────────────┬──────────────────────────────┘
+ *                                │
+ *              ┌─────────────────┴─────────────────┐
+ *              │ POST /cats  또는 DELETE /cats/:id │     GET /cats , GET /cats/:id
+ *              ▼                                   │              │
+ *    ┌─────────────────────┐                     │              │
+ *    │ CATS-02-G1          │                     │              │
+ *    │ CatsBeforeJwtLogGuard│                     │              │
+ *    ├─────────────────────┤                     │              │
+ *    │ CATS-03-GJWT        │                     │   (JWT 가드 없음, 바로 아래로)
+ *    │ CatsJwtLogGuard     │                     │              │
+ *    ├─────────────────────┤                     │              │
+ *    │ CATS-04-G2          │                     │              │
+ *    │ CatsAfterJwtLogGuard│                     │              │
+ *    └──────────┬──────────┘                     │              │
+ *               └─────────────────┬─────────────┴──────────────┘
+ *                                 ▼
+ *    ┌──────────────────────────────────────────────────────────┐
+ *    │ CATS-05-IXIN   CatsLoggingInterceptor (전)               │
+ *    │               next.handle() 안으로 들어감 ▼               │
+ *    └───────────────────────────┬──────────────────────────────┘
+ *                                │
+ *         라우트별 파라미터 해석 (해당하는 것만 실행)
+ *                                │
+ *         ┌──────────────────────┼──────────────────────┐
+ *         ▼                      ▼                      ▼
+ *   CATS-06-PID            CATS-07-PBD            CATS-08-DEC
+ *   CatsParseIntIdPipe     ParseCreateCatPipe     @CatsClientMeta()
+ *   (:id 경로)             (POST body)            (GET 목록 meta)
+ *         │                      │                      │
+ *         └──────────────────────┴──────────────────────┘
+ *                                │
+ *                                ▼
+ *    ┌──────────────────────────────────────────────────────────┐
+ *    │ CATS-09-CTRL   CatsController  (findAll / findOne / …)    │
+ *    └───────────────────────────┬──────────────────────────────┘
+ *                                │
+ *                                ▼
+ *    ┌──────────────────────────────────────────────────────────┐
+ *    │ CATS-10-SVC    CatsService   (DB 접근·도메인 로직)         │
+ *    └───────────────────────────┬──────────────────────────────┘
+ *                                │
+ *              ┌─────────────────┴─────────────────┐
+ *              │ 정상 응답                          │  CatNotFoundException 등
+ *              ▼                                   ▼
+ *    ┌─────────────────────┐           ┌─────────────────────┐
+ *    │ CATS-11-IXOUT       │           │ CATS-12-IXERR       │
+ *    │ CatsLoggingInterceptor tap      │ CatsLoggingInterceptor catchError
+ *    │ (소요 시간 로그)     │           │ (재전파)            │
+ *    └──────────┬──────────┘           └──────────┬──────────┘
+ *               │                               │
+ *               │                               ▼
+ *               │                    ┌─────────────────────┐
+ *               │                    │ CATS-13-FLT          │
+ *               │                    │ CatNotFoundFilter    │
+ *               │                    │ [CatsExceptionFilter]│
+ *               │                    │ → JSON 404           │
+ *               │                    └─────────────────────┘
+ *               │
+ *               ▼
+ *    ┌──────────────────────────────────────────────────────────┐
+ *    │  res.on('finish')  →  [CATS REQ END] ═════ (요청 단위 끝) │
+ *    └──────────────────────────────────────────────────────────┘
+ *
+ * Nest 로그 대괄호(레이어별 필터): CatsLoggerMiddleware | CatsGuardBeforeJwt |
+ *   CatsGuardJwt | CatsGuardAfterJwt | CatsLoggingInterceptor | CatsPipeParamId |
+ *   CatsPipeBody | CatsParamDecorator | CatsController | CatsService |
+ *   CatsExceptionFilter
+ *
+ * 콘솔 검색: `[CATS-` 또는 `[CATS REQ`. 프론트는 `[CATS-C01]`~`C08`, `CATS-CERR`.
+ * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+ */
+@Module({
+  /** TypeORM: 이 모듈 범위에서 Cat 엔티티용 Repository를 주입할 수 있게 함 */
+  /** AuthModule: JwtStrategy 등 — 컨트롤러의 JwtAuthGuard가 Bearer 검증할 때 필요 */
+  imports: [TypeOrmModule.forFeature([Cat]), AuthModule],
+  controllers: [CatsController],
+  providers: [
+    CatsService,
+    CatsLoggingInterceptor,
+    CatNotFoundFilter,
+    ParseCreateCatPipe,
+    CatsParseIntIdPipe,
+    CatsBeforeJwtLogGuard,
+    CatsJwtLogGuard,
+    CatsAfterJwtLogGuard,
+    /** 미들웨어 클래스도 DI로 주입되려면 providers에 등록하는 것이 일반적 */
+    CatsLoggerMiddleware,
+  ],
+})
+export class CatsModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(CatsLoggerMiddleware).forRoutes(CatsController);
+  }
+}

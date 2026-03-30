@@ -47,3 +47,25 @@ export const postEditorSchema = z.object({
 });
 
 export type PostEditorFormValues = z.infer<typeof postEditorSchema>;
+
+/** Cats 등록(백엔드 ParseCreateCatPipe·DTO와 규칙 맞춤) */
+export const catCreateSchema = z
+  .object({
+    name: z.string().trim().min(1, "이름을 입력해 주세요."),
+    breed: z.string(),
+    age: z.string(),
+  })
+  .superRefine((val, ctx) => {
+    const t = val.age.trim();
+    if (t === "") return;
+    const n = Number(t);
+    if (!Number.isInteger(n) || n < 0 || n > 40) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: "나이는 0~40 정수이거나 비워 두세요.",
+        path: ["age"],
+      });
+    }
+  });
+
+export type CatCreateFormValues = z.infer<typeof catCreateSchema>;

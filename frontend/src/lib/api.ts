@@ -20,7 +20,10 @@ export const API_BASE_URL = normalizeApiBase(import.meta.env.VITE_API_BASE_URL);
 
 /** 채팅 소켓 등 “API 서버 오리진” (프론트와 포트가 다를 때 `VITE_API_BASE_URL` 사용) */
 export function apiOrigin(): string {
-  return API_BASE_URL || (typeof window !== "undefined" ? window.location.origin : "");
+  return (
+    API_BASE_URL ||
+    (typeof window !== "undefined" ? window.location.origin : "")
+  );
 }
 
 /**
@@ -131,7 +134,9 @@ export const api = axios.create({
  * 성공 시 sessionStorage에 새 액세스 토큰을 저장합니다.
  */
 export async function refreshAccessToken(): Promise<boolean> {
-  const refreshUrl = API_BASE_URL ? `${API_BASE_URL}/auth/refresh` : "/auth/refresh";
+  const refreshUrl = API_BASE_URL
+    ? `${API_BASE_URL}/auth/refresh`
+    : "/auth/refresh";
   try {
     const { data } = await axios.post<{ access_token?: string }>(
       refreshUrl,
@@ -179,7 +184,9 @@ function accessTokenExpiresWithin(token: string, withinMs: number): boolean {
   }
 }
 
-function requestSkipsProactiveRefresh(config: InternalAxiosRequestConfig): boolean {
+function requestSkipsProactiveRefresh(
+  config: InternalAxiosRequestConfig,
+): boolean {
   const path = String(config.url ?? "");
   return (
     path.includes("/auth/refresh") ||
@@ -321,7 +328,9 @@ export async function fetchPost(id: number): Promise<Post> {
 }
 
 /** 글 댓글 트리(공개) */
-export async function fetchPostComments(postId: number): Promise<PostComment[]> {
+export async function fetchPostComments(
+  postId: number,
+): Promise<PostComment[]> {
   try {
     const { data } = await api.get<PostComment[]>(`/posts/${postId}/comments`);
     return data;
@@ -462,7 +471,9 @@ export type SeoulWeatherPayload = {
 };
 
 /** `q` 비우면 서울. 예: `Seoul,KR`, `Busan,KR` */
-export async function fetchWeatherCurrent(q?: string | null): Promise<SeoulWeatherPayload> {
+export async function fetchWeatherCurrent(
+  q?: string | null,
+): Promise<SeoulWeatherPayload> {
   try {
     const trimmed = q?.trim();
     const { data } = await api.get<SeoulWeatherPayload>("/weather/current", {
@@ -476,6 +487,80 @@ export async function fetchWeatherCurrent(q?: string | null): Promise<SeoulWeath
 
 export async function fetchSeoulWeather(): Promise<SeoulWeatherPayload> {
   return fetchWeatherCurrent(null);
+}
+
+// --- Cats (학습용 API; 목록·상세는 공개, 등록·삭제는 JWT) ---
+
+export type Cat = {
+  id: number;
+  name: string;
+  age: number;
+  breed: string;
+  createdAt: string;
+  updatedAt: string;
+};
+
+/** 공개: 목록 */
+export async function fetchCats(): Promise<Cat[]> {
+  appLog("cats-api", "[CATS-C01] GET /cats → 요청 (브라우저→프록시/백엔드)");
+  try {
+    const { data } = await api.get<{ cats: Cat[] }>("/cats");
+    const cats = data.cats ?? [];
+    appLog("cats-api", "[CATS-C02] GET /cats ← 응답", { count: cats.length });
+    return cats;
+  } catch (e) {
+    appLog("cats-api", "[CATS-CERR] GET /cats 실패", e);
+    rethrowAsApiError(e);
+  }
+}
+
+/** 공개: 단건 */
+export async function fetchCat(id: number): Promise<Cat> {
+  appLog("cats-api", `[CATS-C03] GET /cats/${id} → 요청`);
+  try {
+    const { data } = await api.get<Cat>(`/cats/${id}`);
+    appLog("cats-api", `[CATS-C04] GET /cats/${id} ← 응답`, {
+      id: data.id,
+      name: data.name,
+    });
+    return data;
+  } catch (e) {
+    appLog("cats-api", `[CATS-CERR] GET /cats/${id} 실패`, e);
+    rethrowAsApiError(e);
+  }
+}
+
+/** JWT 필요 */
+export async function createCat(input: {
+  name: string;
+  age?: number;
+  breed?: string;
+}): Promise<Cat> {
+  appLog("cats-api", "[CATS-C05] POST /cats → 요청 | Bearer 자동", {
+    body: input,
+  });
+  try {
+    const { data } = await api.post<Cat>("/cats", input);
+    appLog("cats-api", "[CATS-C06] POST /cats ← 응답 | 등록됨", {
+      id: data.id,
+    });
+    return data;
+  } catch (e) {
+    appLog("cats-api", "[CATS-CERR] POST /cats 실패", e);
+    rethrowAsApiError(e);
+  }
+}
+
+/** JWT 필요 */
+export async function deleteCat(id: number): Promise<void> {
+  appLog("cats-api", `[CATS-C07] DELETE /cats/${id} → 요청`);
+  try {
+    await api.delete(`/cats/${id}`);
+    appLog("cats-api", `[CATS-C08] DELETE /cats/${id} ← 완료`);
+  } catch (e) {
+    appLog("cats-api", `[CATS-CERR] DELETE /cats/${id} 실패`, e);
+    rethrowAsApiError(e);
+  }
 }
 
 // --- Books (슬라이드 / Konva) ---

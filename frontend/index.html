@@ -16,6 +16,28 @@
         } catch (_) {}
       })();
     </script>
+    <!-- F5 새로고침마다 가장 먼저: 콘솔 필터가 Log만 켜져 있어도 warn은 보이도록 console.warn 사용 -->
+    <script>
+      (function () {
+        try {
+          if (typeof console === "undefined" || !console.warn) return;
+          var h = location.hostname;
+          var p = String(location.port || "");
+          var show =
+            h === "localhost" ||
+            h === "127.0.0.1" ||
+            p === "5173" ||
+            p === "4173";
+          if (!show) return;
+          var line = "============================================================";
+          console.warn(line);
+          console.warn(
+            "[react-auth:session] 새로고침/최초 진입 (HTML · main.tsx 이전 · 아래부터 이 세션 로그)",
+          );
+          console.warn(line);
+        } catch (_) {}
+      })();
+    </script>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>frontend</title>

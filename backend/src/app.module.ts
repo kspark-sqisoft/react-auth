@@ -10,6 +10,7 @@ import { BooksModule } from './books/books.module';
 import { WeatherModule } from './weather/weather.module';
 import { PostsModule } from './posts/posts.module';
 import { UsersModule } from './users/users.module';
+import { CatsModule } from './cats/cats.module';
 
 @Module({
   imports: [
@@ -26,6 +27,7 @@ import { UsersModule } from './users/users.module';
     BooksModule,
     ChatModule,
     WeatherModule,
+    CatsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

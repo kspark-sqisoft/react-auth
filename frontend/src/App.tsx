@@ -11,6 +11,8 @@ import { PostDetailPage } from "@/pages/PostDetailPage";
 import { PostEditorPage } from "@/pages/PostEditorPage";
 import { PostListPage } from "@/pages/PostListPage";
 import { SignupPage } from "@/pages/SignupPage";
+import { CatsPage } from "@/pages/CatsPage";
+import { CatDetailPage } from "@/pages/CatDetailPage";
 
 function BookLegacyEditRedirect() {
   const { id } = useParams();
@@ -19,7 +21,7 @@ function BookLegacyEditRedirect() {
 
 /**
  * 라우트 구성 요약
- * - 공개: 홈, 로그인/가입, 글 목록·상세
+ * - 공개: 홈, 로그인/가입, 글·Cats 목록·상세
  * - 보호(`ProtectedRoute`): 글 작성/수정, 내 정보 — 비로그인 시 로그인으로 보냄
  */
 const App = () => {
@@ -31,6 +33,8 @@ const App = () => {
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/posts" element={<PostListPage />} />
         <Route path="/books" element={<BookListPage />} />
+        <Route path="/cats" element={<CatsPage />} />
+        <Route path="/cats/:id" element={<CatDetailPage />} />
         <Route element={<ProtectedRoute />}>
           <Route path="/posts/new" element={<PostEditorPage />} />
           <Route path="/posts/:id/edit" element={<PostEditorPage />} />

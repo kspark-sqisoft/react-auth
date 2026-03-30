@@ -67,6 +67,9 @@ export function AppLayout() {
             <NavLink to="/books" className={headerNavClass}>
               북
             </NavLink>
+            <NavLink to="/cats" className={headerNavClass}>
+              Cats
+            </NavLink>
           </nav>
           <div className="flex min-w-0 items-center gap-1 sm:gap-2">
             <ThemeToggle />
@@ -150,6 +153,9 @@ export function AppLayout() {
             </NavLink>
             <NavLink to="/books" className={footerNavClass}>
               북
+            </NavLink>
+            <NavLink to="/cats" className={footerNavClass}>
+              Cats
             </NavLink>
             {user ? (
               <NavLink to="/me" className={footerNavClass}>
