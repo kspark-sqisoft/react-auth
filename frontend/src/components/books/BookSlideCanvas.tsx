@@ -998,17 +998,21 @@ export function BookSlideCanvas({
 
   useEffect(() => {
     const tr = trRef.current;
-    const only =
-      selectedIds.length === 1 && selectedIds[0] != null ? selectedIds[0] : null;
-    const node = only ? konvaNodeByIdRef.current.get(only) : undefined;
-    const sel = only ? elements.find((e) => e.id === only) : undefined;
-    const selectedOnCanvas =
-      Boolean(only) &&
-      sel != null &&
-      sel.type !== "drawing" &&
-      isBookElementVisible(sel) &&
-      !isBookElementLocked(sel) &&
-      node != null;
+    const nodes: Konva.Node[] = [];
+    for (const id of selectedIds) {
+      if (id == null) continue;
+      const sel = elements.find((e) => e.id === id);
+      if (
+        sel == null ||
+        sel.type === "drawing" ||
+        !isBookElementVisible(sel) ||
+        isBookElementLocked(sel)
+      )
+        continue;
+      const node = konvaNodeByIdRef.current.get(id);
+      if (node) nodes.push(node);
+    }
+    const selectedOnCanvas = nodes.length > 0;
     if (mode !== "edit" || !tr || !selectedOnCanvas) {
       tr?.nodes([]);
       tr?.getLayer()?.batchDraw();
@@ -1016,7 +1020,7 @@ export function BookSlideCanvas({
     }
     /* 드래그·변형 중 tr.nodes 재호출 시 앵커/노드가 한 프레임 덮여 튐 */
     if (isLiveInteracting) return;
-    tr.nodes([node]);
+    tr.nodes(nodes);
     tr.getLayer()?.batchDraw();
   }, [mode, selectedIds, elements, visibleElements, pageWidth, pageHeight, isLiveInteracting]);
 
@@ -1271,8 +1275,8 @@ export function BookSlideCanvas({
             );
           })}
           {mode === "edit" &&
-          selectedIds.length === 1 &&
-          !(inlineTextEdit && selectedIds[0] === inlineTextEdit.id) ? (
+          selectedIds.length > 0 &&
+          !(inlineTextEdit && selectedIds.length === 1 && selectedIds[0] === inlineTextEdit.id) ? (
             <Transformer
               ref={trRef}
               rotateEnabled
