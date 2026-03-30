@@ -200,6 +200,7 @@ export function CatsPage() {
                   autoComplete="off"
                   placeholder="예: 코리안숏헤어"
                   aria-invalid={Boolean(createState.fieldErrors.breed)}
+                  className="mb-4"
                 />
                 <FormFieldError message={createState.fieldErrors.breed} />
               </div>

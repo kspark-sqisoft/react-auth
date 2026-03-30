@@ -10,7 +10,11 @@ const HomeHeroCards3D = lazy(() =>
   import("@/components/home/HomeHeroCards3D").then((m) => ({ default: m.HomeHeroCards3D })),
 );
 
-const HERO_COUNT = 2;
+const HomeHeroEnvmap3D = lazy(() =>
+  import("@/components/home/HomeHeroEnvmap3D").then((m) => ({ default: m.HomeHeroEnvmap3D })),
+);
+
+const HERO_COUNT = 3;
 
 /**
  * 홈: 보블 히어로(zxpv7)일 때만 `DirtyFigmaExport` 타이포 오버레이. 그라데이션은 원본 `styles.css`에 맞춤.
@@ -25,6 +29,7 @@ export function HomePage() {
       >
         {heroIndex === 0 && <HomeHero3D className="relative z-0 min-h-0 flex-1" />}
         {heroIndex === 1 && <HomeHeroCards3D className="relative z-0 min-h-0 flex-1" />}
+        {heroIndex === 2 && <HomeHeroEnvmap3D className="relative z-0 min-h-0 flex-1" />}
       </Suspense>
       <div
         className="pointer-events-auto absolute bottom-5 left-0 right-0 z-20 flex justify-center gap-2"
@@ -37,7 +42,7 @@ export function HomePage() {
             type="button"
             role="tab"
             aria-selected={heroIndex === i}
-            aria-label={i === 0 ? "보블 히어로" : "카드 히어로"}
+            aria-label={i === 0 ? "보블 히어로" : i === 1 ? "카드 히어로" : "다이내믹 환경맵 히어로"}
             className={cn(
               "h-2.5 w-2.5 rounded-full border border-foreground/25 transition-[transform,background-color] duration-200",
               "hover:scale-110 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
