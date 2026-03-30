@@ -18,6 +18,7 @@ import {
   resolveBookElementRotation,
   resolveBookMediaObjectFit,
   resolveBookWeatherDisplay,
+  isBookElementLocked,
 } from "@/lib/book-canvas";
 import {
   defaultTextWidgetBoxHeight,
@@ -47,6 +48,8 @@ type BookInspectorPanelProps = {
   onChange: (id: string, patch: Partial<BookCanvasElement>) => void;
   onDelete: () => void;
   mediaHint?: string | null;
+  /** 오른쪽 컬럼 안(레이어 패널 아래)에 넣을 때: 테두리·고정 너비 제거 */
+  embedded?: boolean;
 };
 
 function num(v: string, fallback: number, min: number, max: number) {
@@ -474,9 +477,16 @@ export function BookInspectorPanel({
   onChange,
   onDelete,
   mediaHint,
+  embedded = false,
 }: BookInspectorPanelProps) {
+  const Root = embedded ? "div" : "aside";
   return (
-    <aside className="flex h-full min-h-0 max-h-full w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
+    <Root
+      className={cn(
+        "flex h-full min-h-0 max-h-full flex-col overflow-hidden bg-card/50",
+        embedded ? "min-w-0" : "w-80 shrink-0 border-l border-border",
+      )}
+    >
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <SlidersHorizontal className="size-4 text-muted-foreground" aria-hidden />
         <span className="text-xs font-medium text-muted-foreground">위젯 속성</span>
@@ -487,7 +497,20 @@ export function BookInspectorPanel({
             <p className="text-sm text-muted-foreground">
               캔버스에서 위젯을 선택하면 여기서 글자·위치·크기를 바꿀 수 있습니다.
             </p>
-          ) : selected.type === "text" ? (
+          ) : (
+            <>
+              {isBookElementLocked(selected) ? (
+                <p className="mb-1 rounded-md border border-amber-500/30 bg-amber-500/10 px-2 py-2 text-xs text-amber-900 dark:text-amber-100">
+                  잠긴 위젯입니다. 레이어 목록의 자물쇠로 잠금을 해제한 뒤 편집할 수 있습니다.
+                </p>
+              ) : null}
+              <div
+                className={cn(
+                  "space-y-4",
+                  isBookElementLocked(selected) && "pointer-events-none opacity-[0.68]",
+                )}
+              >
+          {selected.type === "text" ? (
             <>
               <div className="space-y-1">
                 <Label>내용 (리치 텍스트)</Label>
@@ -771,36 +794,45 @@ export function BookInspectorPanel({
             </>
           )}
 
-          {selected ? (
-            <div className="flex flex-col gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                className="w-full"
-                onClick={() =>
-                  onChange(selected.id, {
-                    x: 0,
-                    y: 0,
-                    width: slideWidth,
-                    height: slideHeight,
-                  })
-                }
-              >
-                <Expand className="mr-1.5 size-3.5" aria-hidden />
-                슬라이드 전체(0,0)로 맞추기
-              </Button>
-              <Button type="button" variant="destructive" size="sm" className="w-full" onClick={onDelete}>
-                <Trash2 className="mr-1.5 size-3.5" aria-hidden />
-                위젯 삭제
-              </Button>
-            </div>
-          ) : null}
+                {selected ? (
+                  <div className="flex flex-col gap-2">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="w-full"
+                      onClick={() =>
+                        onChange(selected.id, {
+                          x: 0,
+                          y: 0,
+                          width: slideWidth,
+                          height: slideHeight,
+                        })
+                      }
+                    >
+                      <Expand className="mr-1.5 size-3.5" aria-hidden />
+                      슬라이드 전체(0,0)로 맞추기
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      className="w-full"
+                      onClick={onDelete}
+                    >
+                      <Trash2 className="mr-1.5 size-3.5" aria-hidden />
+                      위젯 삭제
+                    </Button>
+                  </div>
+                ) : null}
+              </div>
+            </>
+          )}
 
           {mediaHint ? <p className="text-xs text-amber-600 dark:text-amber-400">{mediaHint}</p> : null}
         </div>
       </div>
-    </aside>
+    </Root>
   );
 }
 

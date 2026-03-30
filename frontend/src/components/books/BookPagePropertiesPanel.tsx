@@ -13,6 +13,8 @@ type BookPagePropertiesPanelProps = {
   onChangeName: (name: string) => void;
   backgroundColor: string;
   onChangeBackgroundColor: (color: string) => void;
+  /** 레이어 패널과 같은 컬럼에 넣을 때 */
+  embedded?: boolean;
 };
 
 function hexForColorInput(css: string): string {
@@ -26,12 +28,19 @@ export function BookPagePropertiesPanel({
   onChangeName,
   backgroundColor,
   onChangeBackgroundColor,
+  embedded = false,
 }: BookPagePropertiesPanelProps) {
   const preview = slideDisplayLabel(name, pageIndex);
   const pickerValue = hexForColorInput(backgroundColor.trim());
 
+  const Root = embedded ? "div" : "aside";
   return (
-    <aside className="flex h-full min-h-0 max-h-full w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
+    <Root
+      className={cn(
+        "flex h-full min-h-0 max-h-full flex-col overflow-hidden bg-card/50",
+        embedded ? "min-w-0" : "w-80 shrink-0 border-l border-border",
+      )}
+    >
       <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
         <LayoutTemplate className="size-4 text-muted-foreground" aria-hidden />
         <span className="text-xs font-medium text-muted-foreground">페이지 속성</span>
@@ -115,6 +124,6 @@ export function BookPagePropertiesPanel({
           </div>
         </div>
       </div>
-    </aside>
+    </Root>
   );
 }

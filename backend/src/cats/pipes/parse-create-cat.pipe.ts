@@ -30,9 +30,7 @@ export class ParseCreateCatPipe implements PipeTransform<
   private readonly logger = new Logger('CatsPipeBody');
 
   transform(value: unknown, _metadata: ArgumentMetadata): CreateCatDto {
-    this.logger.log(
-      `[CATS·파이프·요청본문] 검증·정규화 시작`,
-    );
+    this.logger.log(`[CATS·파이프·요청본문] 검증·정규화 시작`);
     if (value === null || typeof value !== 'object') {
       throw new BadRequestException('JSON body 가 필요합니다.');
     }

@@ -6,6 +6,7 @@ import {
   bookWidgetBackdropAlphaFromCss,
   canvasRoundRectPath,
   DEFAULT_PAGE_BACKGROUND,
+  isBookElementVisible,
   parseBookClockBackground,
   parseBookWeatherBackground,
   parseBookWidgetTextColor,
@@ -226,6 +227,7 @@ export async function captureBookSlideToDataURL(
     const sx = (v: number) => v * scale;
 
     for (const el of page.elements) {
+      if (!isBookElementVisible(el)) continue;
       const elOp = resolveBookElementOpacity(el.opacity);
       if (el.type === "text") {
         const tw = sx(el.width ?? 720);

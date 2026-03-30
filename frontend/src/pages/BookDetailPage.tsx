@@ -50,6 +50,7 @@ import { useAuth } from "@/stores/auth-store";
 import { BookCanvasToolbar } from "@/components/books/BookCanvasToolbar";
 import { BookHeaderSlideDimensions } from "@/components/books/BookHeaderSlideDimensions";
 import { BookInspectorPanel } from "@/components/books/BookInspectorPanel";
+import { BookLayersPanel } from "@/components/books/BookLayersPanel";
 import { BookPagePropertiesPanel } from "@/components/books/BookPagePropertiesPanel";
 import { BookPageSidebar } from "@/components/books/BookPageSidebar";
 import {
@@ -269,6 +270,27 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       });
     },
     [activePageIndex, updatePages],
+  );
+
+  const onLayerVisibilityChange = useCallback(
+    (elementId: string, visible: boolean) => {
+      onElementChange(
+        elementId,
+        visible ? ({ visible: undefined } as Partial<BookCanvasElement>) : { visible: false },
+      );
+      if (!visible && canvasSelectedId === elementId) setSelectedId(null);
+    },
+    [onElementChange, canvasSelectedId],
+  );
+
+  const onLayerLockChange = useCallback(
+    (elementId: string, locked: boolean) => {
+      onElementChange(
+        elementId,
+        locked ? { locked: true } : ({ locked: undefined } as Partial<BookCanvasElement>),
+      );
+    },
+    [onElementChange],
   );
 
   const updateCurrentPageName = useCallback(
@@ -805,27 +827,42 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         </>
       }
       right={
-        canvasSelectedId ? (
-          <BookInspectorPanel
-            selected={selectedEl}
-            slideWidth={slideWidth}
-            slideHeight={slideHeight}
-            onChange={onElementChange}
-            onDelete={removeSelected}
-            mediaHint={mediaHint}
+        <aside className="flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
+          <BookLayersPanel
+            elements={activePage.elements}
+            selectedId={canvasSelectedId}
+            onSelect={setSelectedId}
+            onReorderZ={onReorderZ}
+            onVisibilityChange={onLayerVisibilityChange}
+            onLockChange={onLayerLockChange}
+            onRequestDelete={requestRemoveWidget}
           />
-        ) : (
-          <BookPagePropertiesPanel
-            pageIndex={activePageIndex}
-            totalPages={localPages.length}
-            name={activePage.name}
-            onChangeName={updateCurrentPageName}
-            backgroundColor={
-              activePage.backgroundColor?.trim() || DEFAULT_PAGE_BACKGROUND
-            }
-            onChangeBackgroundColor={updateCurrentPageBackground}
-          />
-        )
+          <div className="min-h-0 flex-1 overflow-hidden">
+            {canvasSelectedId ? (
+              <BookInspectorPanel
+                embedded
+                selected={selectedEl}
+                slideWidth={slideWidth}
+                slideHeight={slideHeight}
+                onChange={onElementChange}
+                onDelete={removeSelected}
+                mediaHint={mediaHint}
+              />
+            ) : (
+              <BookPagePropertiesPanel
+                embedded
+                pageIndex={activePageIndex}
+                totalPages={localPages.length}
+                name={activePage.name}
+                onChangeName={updateCurrentPageName}
+                backgroundColor={
+                  activePage.backgroundColor?.trim() || DEFAULT_PAGE_BACKGROUND
+                }
+                onChangeBackgroundColor={updateCurrentPageBackground}
+              />
+            )}
+          </div>
+        </aside>
       }
     />
     {deleteBookDialog}
@@ -938,6 +975,17 @@ function BookDetailGuestBookView({
             />
           </div>
         </div>
+      }
+      right={
+        <aside className="flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
+          <BookLayersPanel
+            expandVertical
+            elements={viewPage.elements}
+            selectedId={null}
+            onSelect={() => undefined}
+            readOnly
+          />
+        </aside>
       }
     />
   );

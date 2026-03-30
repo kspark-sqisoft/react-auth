@@ -35,6 +35,16 @@ export function resolveBookElementRotation(deg: number | undefined): number {
   return deg;
 }
 
+/** 캔버스·썸네일·보기 모드에서 그립니다. `visible === false`만 숨김(생략·true = 보임). */
+export function isBookElementVisible(el: { visible?: boolean }): boolean {
+  return el.visible !== false;
+}
+
+/** `locked === true`이면 캔버스에서 이동·변형·삭제(컨텍스트) 불가. 레이어 패널에서만 잠금 해제·삭제 가능. */
+export function isBookElementLocked(el: { locked?: boolean }): boolean {
+  return el.locked === true;
+}
+
 /**
  * 저장값: (x,y) = Konva `getTransform().point({0,0})` (로컬 왼쪽 위), rotation = `node.rotation()` 도.
  * 피벗 (cx,cy) = `node.x()/y()` 와 같아야 하며, TL에서 중심까지 벡터 (w/2,h/2)를 rotation만큼 돌린 값을 더합니다.
@@ -150,6 +160,10 @@ export type BookCanvasElement =
       outlineWidth?: number;
       /** 외곽선 색(CSS). outlineWidth가 0보다 클 때. */
       outlineColor?: string;
+      /** false면 캔버스·보기에서 숨김(레이어 목록에는 남음). 생략·true = 보임 */
+      visible?: boolean;
+      /** true면 캔버스에서 위치·크기·삭제 등 편집 불가 */
+      locked?: boolean;
     }
   | {
       id: string;
@@ -166,6 +180,8 @@ export type BookCanvasElement =
       borderRadius?: number;
       outlineWidth?: number;
       outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
     }
   | {
       id: string;
@@ -182,6 +198,8 @@ export type BookCanvasElement =
       borderRadius?: number;
       outlineWidth?: number;
       outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
     }
   | {
       id: string;
@@ -203,6 +221,8 @@ export type BookCanvasElement =
       borderRadius?: number;
       outlineWidth?: number;
       outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
     }
   | {
       id: string;
@@ -222,6 +242,8 @@ export type BookCanvasElement =
       borderRadius?: number;
       outlineWidth?: number;
       outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
     };
 
 /** 날씨 위젯 표시 플래그(저장용). `false` = 숨김. */
@@ -530,25 +552,38 @@ function finiteWH(w: unknown, h: unknown, fallbackW: number, fallbackH: number) 
   };
 }
 
+/** API 본문: `visible: false`·`locked: true`만 명시(나머지 키 생략). */
+function finalizeElementForApi(el: BookCanvasElement): BookCanvasElement {
+  const copy = { ...(el as BookCanvasElement & { visible?: boolean; locked?: boolean }) };
+  if (copy.visible !== false) delete copy.visible;
+  if (copy.locked !== true) delete copy.locked;
+  return copy as BookCanvasElement;
+}
+
 /** POST/PATCH `pages[].elements` 직전: 숫자·경로 정규화로 서버 검증 실패를 줄임 */
 function normalizeBookElementsForSave(elements: BookCanvasElement[]): BookCanvasElement[] {
   return elements.map((el) => {
     const xy = finiteXY(el.x, el.y);
     if (el.type === "image") {
       const wh = finiteWH(el.width, el.height, 320, 180);
-      return { ...el, ...xy, ...wh, src: bookMediaSrcForApi(el.src) };
+      return finalizeElementForApi({
+        ...el,
+        ...xy,
+        ...wh,
+        src: bookMediaSrcForApi(el.src),
+      });
     }
     if (el.type === "video") {
       const wh = finiteWH(el.width, el.height, 480, 270);
       const ps = el.posterSrc;
-      return {
+      return finalizeElementForApi({
         ...el,
         ...xy,
         ...wh,
         src: bookMediaSrcForApi(el.src),
         posterSrc:
           ps != null && String(ps).trim() !== "" ? bookMediaSrcForApi(String(ps)) : ps,
-      };
+      });
     }
     if (el.type === "weather") {
       const wh = finiteWH(
@@ -557,7 +592,7 @@ function normalizeBookElementsForSave(elements: BookCanvasElement[]): BookCanvas
         DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
         DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
       );
-      return { ...el, ...xy, ...wh };
+      return finalizeElementForApi({ ...el, ...xy, ...wh });
     }
     if (el.type === "digitalClock") {
       const wh = finiteWH(
@@ -566,7 +601,7 @@ function normalizeBookElementsForSave(elements: BookCanvasElement[]): BookCanvas
         DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
         DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
       );
-      return { ...el, ...xy, ...wh };
+      return finalizeElementForApi({ ...el, ...xy, ...wh });
     }
     const fs = Number(el.fontSize);
     const fontSize = Number.isFinite(fs) && fs >= 8 && fs <= 200 ? fs : 24;
@@ -575,7 +610,7 @@ function normalizeBookElementsForSave(elements: BookCanvasElement[]): BookCanvas
     const h = el.height != null ? Number(el.height) : undefined;
     if (w != null && Number.isFinite(w)) out.width = w;
     if (h != null && Number.isFinite(h)) out.height = h;
-    return out;
+    return finalizeElementForApi(out);
   });
 }
 
@@ -822,6 +857,8 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
+        ...(o.visible === false ? { visible: false as const } : {}),
+        ...(o.locked === true ? { locked: true as const } : {}),
       });
     } else if (o.type === "image") {
       const objectFit = parseBookMediaObjectFit(o.objectFit);
@@ -837,6 +874,8 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
+        ...(o.visible === false ? { visible: false as const } : {}),
+        ...(o.locked === true ? { locked: true as const } : {}),
       });
     } else if (o.type === "video") {
       const objectFit = parseBookMediaObjectFit(o.objectFit);
@@ -856,6 +895,8 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
+        ...(o.visible === false ? { visible: false as const } : {}),
+        ...(o.locked === true ? { locked: true as const } : {}),
       });
     } else if (o.type === "weather") {
       const cityQuery =
@@ -879,6 +920,8 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
+        ...(o.visible === false ? { visible: false as const } : {}),
+        ...(o.locked === true ? { locked: true as const } : {}),
       });
     } else if (o.type === "digitalClock") {
       const cd = parseBookDigitalClockDisplay(o.clockDisplay);
@@ -897,6 +940,8 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
+        ...(o.visible === false ? { visible: false as const } : {}),
+        ...(o.locked === true ? { locked: true as const } : {}),
       });
     }
   }

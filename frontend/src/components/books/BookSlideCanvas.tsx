@@ -30,6 +30,8 @@ import {
   resolveBookElementRotation,
   resolveBookMediaObjectFit,
   snapKonvaBookNodePositionToGrid,
+  isBookElementLocked,
+  isBookElementVisible,
   type BookCanvasElement,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
@@ -425,6 +427,11 @@ export function BookSlideCanvas({
   /** 편집 모드에서 우클릭: 순서·삭제·슬라이드 전체 맞춤 등 */
   const elementContextMenuEnabled = mode === "edit";
 
+  const visibleElements = useMemo(
+    () => elements.filter(isBookElementVisible),
+    [elements],
+  );
+
   const [dragLive, setDragLive] = useState<BookDragLive | null>(null);
   const [transformLive, setTransformLive] = useState<BookTransformLive | null>(null);
   const dragLiveRafRef = useRef<number | null>(null);
@@ -651,7 +658,7 @@ export function BookSlideCanvas({
         return;
       }
       const el = elements.find((x) => x.id === selectedId);
-      if (!el) return;
+      if (!el || isBookElementLocked(el)) return;
       e.preventDefault();
       const step = e.shiftKey ? 10 : 1;
       let dx = 0;
@@ -706,7 +713,13 @@ export function BookSlideCanvas({
   useEffect(() => {
     const tr = trRef.current;
     const node = selectedNodeRef.current;
-    if (mode !== "edit" || !tr || !node || !selectedId) {
+    const sel = selectedId ? elements.find((e) => e.id === selectedId) : undefined;
+    const selectedOnCanvas =
+      Boolean(selectedId) &&
+      sel != null &&
+      isBookElementVisible(sel) &&
+      !isBookElementLocked(sel);
+    if (mode !== "edit" || !tr || !node || !selectedId || !selectedOnCanvas) {
       tr?.nodes([]);
       tr?.getLayer()?.batchDraw();
       return;
@@ -715,7 +728,7 @@ export function BookSlideCanvas({
     if (isLiveInteracting) return;
     tr.nodes([node]);
     tr.getLayer()?.batchDraw();
-  }, [mode, selectedId, elements, pageWidth, pageHeight, isLiveInteracting]);
+  }, [mode, selectedId, elements, visibleElements, pageWidth, pageHeight, isLiveInteracting]);
 
   const sw = pageWidth * scale;
   const sh = pageHeight * scale;
@@ -818,7 +831,7 @@ export function BookSlideCanvas({
           ) : null}
         </div>
       ) : null}
-      {elements
+      {visibleElements
         .filter((e): e is Extract<BookCanvasElement, { type: "video" }> => e.type === "video")
         .map((el) => (
           <BookSlideVideoOverlay
@@ -849,21 +862,23 @@ export function BookSlideCanvas({
               onSelect(null);
             }}
           />
-          {elements.map((el) => {
+          {visibleElements.map((el) => {
             const isSelected = el.id === selectedId;
-            const attachRef = isSelected && mode === "edit";
+            const locked = isBookElementLocked(el);
+            const attachRef = isSelected && mode === "edit" && !locked;
             if (el.type === "text") {
               return (
                 <BookTextHitShape
                   key={el.id}
                   el={el}
+                  locked={locked}
                   liveSync={shapeLiveSync}
                   attachRef={attachRef}
                   selectedRef={selectedNodeRef}
                   mode={mode}
                   onSelect={onSelect}
                   onElementChange={onElementChange}
-                  zMenuEnabled={elementContextMenuEnabled}
+                  zMenuEnabled={elementContextMenuEnabled && !locked}
                   onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
                 />
               );
@@ -873,13 +888,14 @@ export function BookSlideCanvas({
                 <BookWeatherHitShape
                   key={el.id}
                   el={el}
+                  locked={locked}
                   liveSync={shapeLiveSync}
                   attachRef={attachRef}
                   selectedRef={selectedNodeRef}
                   mode={mode}
                   onSelect={onSelect}
                   onElementChange={onElementChange}
-                  zMenuEnabled={elementContextMenuEnabled}
+                  zMenuEnabled={elementContextMenuEnabled && !locked}
                   onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
                 />
               );
@@ -889,13 +905,14 @@ export function BookSlideCanvas({
                 <BookDigitalClockHitShape
                   key={el.id}
                   el={el}
+                  locked={locked}
                   liveSync={shapeLiveSync}
                   attachRef={attachRef}
                   selectedRef={selectedNodeRef}
                   mode={mode}
                   onSelect={onSelect}
                   onElementChange={onElementChange}
-                  zMenuEnabled={elementContextMenuEnabled}
+                  zMenuEnabled={elementContextMenuEnabled && !locked}
                   onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
                 />
               );
@@ -905,13 +922,14 @@ export function BookSlideCanvas({
                 <BookImageShape
                   key={el.id}
                   el={el}
+                  locked={locked}
                   liveSync={shapeLiveSync}
                   attachRef={attachRef}
                   selectedRef={selectedNodeRef}
                   mode={mode}
                   onSelect={onSelect}
                   onElementChange={onElementChange}
-                  zMenuEnabled={elementContextMenuEnabled}
+                  zMenuEnabled={elementContextMenuEnabled && !locked}
                   onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
                 />
               );
@@ -920,6 +938,7 @@ export function BookSlideCanvas({
               <BookVideoBox
                 key={el.id}
                 el={el}
+                locked={locked}
                 liveSync={shapeLiveSync}
                 attachRef={attachRef}
                 selectedRef={selectedNodeRef}
@@ -928,7 +947,7 @@ export function BookSlideCanvas({
                 onElementChange={onElementChange}
                 onVideoHoverEnter={() => showVideoBar(el.id)}
                 onVideoHoverLeave={() => scheduleHideVideoBar(el.id)}
-                zMenuEnabled={elementContextMenuEnabled}
+                zMenuEnabled={elementContextMenuEnabled && !locked}
                 onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
               />
             );
@@ -963,7 +982,7 @@ export function BookSlideCanvas({
         </div>
       ) : null}
       <div className="pointer-events-none absolute inset-0 z-[5] overflow-hidden">
-        {elements
+        {visibleElements
           .filter(
             (e): e is Extract<BookCanvasElement, { type: "text" | "weather" | "digitalClock" }> =>
               e.type === "text" || e.type === "weather" || e.type === "digitalClock",
@@ -1118,6 +1137,7 @@ export function BookSlideCanvas({
 /** 리치 텍스트는 HTML 오버레이로 그리고, Konva Rect는 조작·히트만 담당합니다. */
 function BookTextHitShape({
   el,
+  locked,
   liveSync,
   attachRef,
   selectedRef,
@@ -1128,6 +1148,7 @@ function BookTextHitShape({
   onZMenu,
 }: {
   el: Extract<BookCanvasElement, { type: "text" }>;
+  locked: boolean;
   liveSync: BookShapeLiveSync;
   attachRef: boolean;
   selectedRef: MutableRefObject<Konva.Node | null>;
@@ -1182,7 +1203,7 @@ function BookTextHitShape({
       cornerRadius={tBr}
       stroke={tOw > 0 ? tOc : "transparent"}
       strokeWidth={tOw > 0 ? tOw : 0}
-      draggable={mode === "edit"}
+      draggable={mode === "edit" && !locked}
       onMouseDown={(e) => {
         if (mode !== "edit") return;
         e.cancelBubble = true;
@@ -1197,47 +1218,69 @@ function BookTextHitShape({
             }
           : undefined
       }
-      onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
-      onDragMove={(e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)}
-      onDragEnd={(e) => {
-        const n = e.target;
-        snapKonvaBookNodePositionToGrid(
-          n,
-          {
-            width: fw,
-            height: fh,
-            rotation: n.rotation(),
-          },
-          liveSync.dragGridPx,
-        );
-        const tl = konvaBookTopLeftFromNode(n);
-        onElementChange(el.id, { x: tl.x, y: tl.y });
-        liveSync.clearDragLive();
-      }}
-      onTransformStart={(e) => liveSync.onTransformLiveStart(el.id, e.target)}
-      onTransform={(e) => liveSync.onTransformLiveMove(el.id, e.target)}
-      onTransformEnd={(e) => {
-        liveSync.clearTransformLive();
-        const node = e.target;
-        const sx = Math.abs(node.scaleX());
-        const sy = Math.abs(node.scaleY());
-        node.scaleX(1);
-        node.scaleY(1);
-        const nw = Math.max(24, node.width() * sx);
-        const nh = Math.max(28, node.height() * sy);
-        node.width(nw);
-        node.height(nh);
-        node.offsetX(nw / 2);
-        node.offsetY(nh / 2);
-        const tl = konvaBookTopLeftFromNode(node);
-        onElementChange(el.id, {
-          x: tl.x,
-          y: tl.y,
-          width: nw,
-          height: nh,
-          rotation: node.rotation(),
-        });
-      }}
+      onDragStart={
+        locked
+          ? undefined
+          : (e) => {
+              liveSync.onDragLiveStart(el.id, e.target);
+            }
+      }
+      onDragMove={
+        locked
+          ? undefined
+          : (e) => {
+              liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh);
+            }
+      }
+      onDragEnd={
+        locked
+          ? undefined
+          : (e) => {
+              const n = e.target;
+              snapKonvaBookNodePositionToGrid(
+                n,
+                {
+                  width: fw,
+                  height: fh,
+                  rotation: n.rotation(),
+                },
+                liveSync.dragGridPx,
+              );
+              const tl = konvaBookTopLeftFromNode(n);
+              onElementChange(el.id, { x: tl.x, y: tl.y });
+              liveSync.clearDragLive();
+            }
+      }
+      onTransformStart={
+        locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
+      }
+      onTransform={locked ? undefined : (e) => liveSync.onTransformLiveMove(el.id, e.target)}
+      onTransformEnd={
+        locked
+          ? undefined
+          : (e) => {
+              liveSync.clearTransformLive();
+              const node = e.target;
+              const sx = Math.abs(node.scaleX());
+              const sy = Math.abs(node.scaleY());
+              node.scaleX(1);
+              node.scaleY(1);
+              const nw = Math.max(24, node.width() * sx);
+              const nh = Math.max(28, node.height() * sy);
+              node.width(nw);
+              node.height(nh);
+              node.offsetX(nw / 2);
+              node.offsetY(nh / 2);
+              const tl = konvaBookTopLeftFromNode(node);
+              onElementChange(el.id, {
+                x: tl.x,
+                y: tl.y,
+                width: nw,
+                height: nh,
+                rotation: node.rotation(),
+              });
+            }
+      }
     />
   );
 }
@@ -1250,6 +1293,7 @@ const DIGITAL_CLOCK_MIN_H = 52;
 
 function BookDigitalClockHitShape({
   el,
+  locked,
   liveSync,
   attachRef,
   selectedRef,
@@ -1260,6 +1304,7 @@ function BookDigitalClockHitShape({
   onZMenu,
 }: {
   el: Extract<BookCanvasElement, { type: "digitalClock" }>;
+  locked: boolean;
   liveSync: BookShapeLiveSync;
   attachRef: boolean;
   selectedRef: MutableRefObject<Konva.Node | null>;
@@ -1314,7 +1359,7 @@ function BookDigitalClockHitShape({
       cornerRadius={dcBr}
       stroke={dcOw > 0 ? dcOc : "transparent"}
       strokeWidth={dcOw > 0 ? dcOw : 0}
-      draggable={mode === "edit"}
+      draggable={mode === "edit" && !locked}
       onMouseDown={(e) => {
         if (mode !== "edit") return;
         e.cancelBubble = true;
@@ -1329,53 +1374,70 @@ function BookDigitalClockHitShape({
             }
           : undefined
       }
-      onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
-      onDragMove={(e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)}
-      onDragEnd={(e) => {
-        const n = e.target;
-        snapKonvaBookNodePositionToGrid(
-          n,
-          {
-            width: fw,
-            height: fh,
-            rotation: n.rotation(),
-          },
-          liveSync.dragGridPx,
-        );
-        const tl = konvaBookTopLeftFromNode(n);
-        onElementChange(el.id, { x: tl.x, y: tl.y });
-        liveSync.clearDragLive();
-      }}
-      onTransformStart={(e) => liveSync.onTransformLiveStart(el.id, e.target)}
-      onTransform={(e) => liveSync.onTransformLiveMove(el.id, e.target)}
-      onTransformEnd={(e) => {
-        liveSync.clearTransformLive();
-        const node = e.target;
-        const sx = Math.abs(node.scaleX());
-        const sy = Math.abs(node.scaleY());
-        node.scaleX(1);
-        node.scaleY(1);
-        const nw = Math.max(DIGITAL_CLOCK_MIN_W, node.width() * sx);
-        const nh = Math.max(DIGITAL_CLOCK_MIN_H, node.height() * sy);
-        node.width(nw);
-        node.height(nh);
-        node.offsetX(nw / 2);
-        node.offsetY(nh / 2);
-        const tl = konvaBookTopLeftFromNode(node);
-        onElementChange(el.id, {
-          x: tl.x,
-          y: tl.y,
-          width: nw,
-          height: nh,
-          rotation: node.rotation(),
-        });
-      }}
+      onDragStart={
+        locked ? undefined : (e) => liveSync.onDragLiveStart(el.id, e.target)
+      }
+      onDragMove={
+        locked ? undefined : (e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)
+      }
+      onDragEnd={
+        locked
+          ? undefined
+          : (e) => {
+              const n = e.target;
+              snapKonvaBookNodePositionToGrid(
+                n,
+                {
+                  width: fw,
+                  height: fh,
+                  rotation: n.rotation(),
+                },
+                liveSync.dragGridPx,
+              );
+              const tl = konvaBookTopLeftFromNode(n);
+              onElementChange(el.id, { x: tl.x, y: tl.y });
+              liveSync.clearDragLive();
+            }
+      }
+      onTransformStart={
+        locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
+      }
+      onTransform={
+        locked ? undefined : (e) => liveSync.onTransformLiveMove(el.id, e.target)
+      }
+      onTransformEnd={
+        locked
+          ? undefined
+          : (e) => {
+              liveSync.clearTransformLive();
+              const node = e.target;
+              const sx = Math.abs(node.scaleX());
+              const sy = Math.abs(node.scaleY());
+              node.scaleX(1);
+              node.scaleY(1);
+              const nw = Math.max(DIGITAL_CLOCK_MIN_W, node.width() * sx);
+              const nh = Math.max(DIGITAL_CLOCK_MIN_H, node.height() * sy);
+              node.width(nw);
+              node.height(nh);
+              node.offsetX(nw / 2);
+              node.offsetY(nh / 2);
+              const tl = konvaBookTopLeftFromNode(node);
+              onElementChange(el.id, {
+                x: tl.x,
+                y: tl.y,
+                width: nw,
+                height: nh,
+                rotation: node.rotation(),
+              });
+            }
+      }
     />
   );
 }
 
 function BookWeatherHitShape({
   el,
+  locked,
   liveSync,
   attachRef,
   selectedRef,
@@ -1386,6 +1448,7 @@ function BookWeatherHitShape({
   onZMenu,
 }: {
   el: Extract<BookCanvasElement, { type: "weather" }>;
+  locked: boolean;
   liveSync: BookShapeLiveSync;
   attachRef: boolean;
   selectedRef: MutableRefObject<Konva.Node | null>;
@@ -1440,7 +1503,7 @@ function BookWeatherHitShape({
       cornerRadius={wBr}
       stroke={wOw > 0 ? wOc : "transparent"}
       strokeWidth={wOw > 0 ? wOw : 0}
-      draggable={mode === "edit"}
+      draggable={mode === "edit" && !locked}
       onMouseDown={(e) => {
         if (mode !== "edit") return;
         e.cancelBubble = true;
@@ -1455,53 +1518,70 @@ function BookWeatherHitShape({
             }
           : undefined
       }
-      onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
-      onDragMove={(e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)}
-      onDragEnd={(e) => {
-        const n = e.target;
-        snapKonvaBookNodePositionToGrid(
-          n,
-          {
-            width: fw,
-            height: fh,
-            rotation: n.rotation(),
-          },
-          liveSync.dragGridPx,
-        );
-        const tl = konvaBookTopLeftFromNode(n);
-        onElementChange(el.id, { x: tl.x, y: tl.y });
-        liveSync.clearDragLive();
-      }}
-      onTransformStart={(e) => liveSync.onTransformLiveStart(el.id, e.target)}
-      onTransform={(e) => liveSync.onTransformLiveMove(el.id, e.target)}
-      onTransformEnd={(e) => {
-        liveSync.clearTransformLive();
-        const node = e.target;
-        const sx = Math.abs(node.scaleX());
-        const sy = Math.abs(node.scaleY());
-        node.scaleX(1);
-        node.scaleY(1);
-        const nw = Math.max(WEATHER_WIDGET_MIN_W, node.width() * sx);
-        const nh = Math.max(WEATHER_WIDGET_MIN_H, node.height() * sy);
-        node.width(nw);
-        node.height(nh);
-        node.offsetX(nw / 2);
-        node.offsetY(nh / 2);
-        const tl = konvaBookTopLeftFromNode(node);
-        onElementChange(el.id, {
-          x: tl.x,
-          y: tl.y,
-          width: nw,
-          height: nh,
-          rotation: node.rotation(),
-        });
-      }}
+      onDragStart={
+        locked ? undefined : (e) => liveSync.onDragLiveStart(el.id, e.target)
+      }
+      onDragMove={
+        locked ? undefined : (e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)
+      }
+      onDragEnd={
+        locked
+          ? undefined
+          : (e) => {
+              const n = e.target;
+              snapKonvaBookNodePositionToGrid(
+                n,
+                {
+                  width: fw,
+                  height: fh,
+                  rotation: n.rotation(),
+                },
+                liveSync.dragGridPx,
+              );
+              const tl = konvaBookTopLeftFromNode(n);
+              onElementChange(el.id, { x: tl.x, y: tl.y });
+              liveSync.clearDragLive();
+            }
+      }
+      onTransformStart={
+        locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
+      }
+      onTransform={
+        locked ? undefined : (e) => liveSync.onTransformLiveMove(el.id, e.target)
+      }
+      onTransformEnd={
+        locked
+          ? undefined
+          : (e) => {
+              liveSync.clearTransformLive();
+              const node = e.target;
+              const sx = Math.abs(node.scaleX());
+              const sy = Math.abs(node.scaleY());
+              node.scaleX(1);
+              node.scaleY(1);
+              const nw = Math.max(WEATHER_WIDGET_MIN_W, node.width() * sx);
+              const nh = Math.max(WEATHER_WIDGET_MIN_H, node.height() * sy);
+              node.width(nw);
+              node.height(nh);
+              node.offsetX(nw / 2);
+              node.offsetY(nh / 2);
+              const tl = konvaBookTopLeftFromNode(node);
+              onElementChange(el.id, {
+                x: tl.x,
+                y: tl.y,
+                width: nw,
+                height: nh,
+                rotation: node.rotation(),
+              });
+            }
+      }
     />
   );
 }
 
 function BookImageShape({
   el,
+  locked,
   liveSync,
   attachRef,
   selectedRef,
@@ -1512,6 +1592,7 @@ function BookImageShape({
   onZMenu,
 }: {
   el: Extract<BookCanvasElement, { type: "image" }>;
+  locked: boolean;
   liveSync: BookShapeLiveSync;
   attachRef: boolean;
   selectedRef: MutableRefObject<Konva.Node | null>;
@@ -1570,7 +1651,7 @@ function BookImageShape({
       clipFunc={(ctx) => {
         canvasRoundRectPath(ctx as never, 0, 0, fw, fh, imgBr);
       }}
-      draggable={mode === "edit"}
+      draggable={mode === "edit" && !locked}
       onMouseDown={(e) => {
         if (mode !== "edit") return;
         e.cancelBubble = true;
@@ -1585,46 +1666,62 @@ function BookImageShape({
             }
           : undefined
       }
-      onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
-      onDragMove={(e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)}
-      onDragEnd={(e) => {
-        const n = e.target as Konva.Group;
-        snapKonvaBookNodePositionToGrid(
-          n,
-          {
-            width: fw,
-            height: fh,
-            rotation: n.rotation(),
-          },
-          liveSync.dragGridPx,
-        );
-        const tl = konvaBookTopLeftFromNode(n);
-        onElementChange(el.id, { x: tl.x, y: tl.y });
-        liveSync.clearDragLive();
-      }}
-      onTransformStart={(e) => liveSync.onTransformLiveStart(el.id, e.target)}
-      onTransform={(e) => liveSync.onTransformLiveMove(el.id, e.target)}
-      onTransformEnd={(e) => {
-        liveSync.clearTransformLive();
-        const node = e.target as Konva.Group;
-        const sx = Math.abs(node.scaleX());
-        const sy = Math.abs(node.scaleY());
-        node.scaleX(1);
-        node.scaleY(1);
-        const { w: nw, h: nh } = clampSize(node.width() * sx, node.height() * sy);
-        node.width(nw);
-        node.height(nh);
-        node.offsetX(nw / 2);
-        node.offsetY(nh / 2);
-        const tl = konvaBookTopLeftFromNode(node);
-        onElementChange(el.id, {
-          x: tl.x,
-          y: tl.y,
-          width: nw,
-          height: nh,
-          rotation: node.rotation(),
-        });
-      }}
+      onDragStart={
+        locked ? undefined : (e) => liveSync.onDragLiveStart(el.id, e.target)
+      }
+      onDragMove={
+        locked ? undefined : (e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)
+      }
+      onDragEnd={
+        locked
+          ? undefined
+          : (e) => {
+              const n = e.target as Konva.Group;
+              snapKonvaBookNodePositionToGrid(
+                n,
+                {
+                  width: fw,
+                  height: fh,
+                  rotation: n.rotation(),
+                },
+                liveSync.dragGridPx,
+              );
+              const tl = konvaBookTopLeftFromNode(n);
+              onElementChange(el.id, { x: tl.x, y: tl.y });
+              liveSync.clearDragLive();
+            }
+      }
+      onTransformStart={
+        locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
+      }
+      onTransform={
+        locked ? undefined : (e) => liveSync.onTransformLiveMove(el.id, e.target)
+      }
+      onTransformEnd={
+        locked
+          ? undefined
+          : (e) => {
+              liveSync.clearTransformLive();
+              const node = e.target as Konva.Group;
+              const sx = Math.abs(node.scaleX());
+              const sy = Math.abs(node.scaleY());
+              node.scaleX(1);
+              node.scaleY(1);
+              const { w: nw, h: nh } = clampSize(node.width() * sx, node.height() * sy);
+              node.width(nw);
+              node.height(nh);
+              node.offsetX(nw / 2);
+              node.offsetY(nh / 2);
+              const tl = konvaBookTopLeftFromNode(node);
+              onElementChange(el.id, {
+                x: tl.x,
+                y: tl.y,
+                width: nw,
+                height: nh,
+                rotation: node.rotation(),
+              });
+            }
+      }
     >
       {img && layout ? (
         <KonvaImage
@@ -1677,6 +1774,7 @@ function BookImageShape({
 
 function BookVideoBox({
   el,
+  locked,
   liveSync,
   attachRef,
   selectedRef,
@@ -1689,6 +1787,7 @@ function BookVideoBox({
   onZMenu,
 }: {
   el: Extract<BookCanvasElement, { type: "video" }>;
+  locked: boolean;
   liveSync: BookShapeLiveSync;
   attachRef: boolean;
   selectedRef: MutableRefObject<Konva.Node | null>;
@@ -1742,7 +1841,7 @@ function BookVideoBox({
       cornerRadius={vBr}
       stroke={vOw > 0 ? vOc : videoEditGuide ? "#cbd5e1" : "transparent"}
       strokeWidth={vOw > 0 ? vOw : videoEditGuide ? 1 : 0}
-      draggable={mode === "edit"}
+      draggable={mode === "edit" && !locked}
       onMouseEnter={onVideoHoverEnter}
       onMouseLeave={onVideoHoverLeave}
       onMouseDown={(e) => {
@@ -1759,46 +1858,62 @@ function BookVideoBox({
             }
           : undefined
       }
-      onDragStart={(e) => liveSync.onDragLiveStart(el.id, e.target)}
-      onDragMove={(e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)}
-      onDragEnd={(e) => {
-        const n = e.target;
-        snapKonvaBookNodePositionToGrid(
-          n,
-          {
-            width: fw,
-            height: fh,
-            rotation: n.rotation(),
-          },
-          liveSync.dragGridPx,
-        );
-        const tl = konvaBookTopLeftFromNode(n);
-        onElementChange(el.id, { x: tl.x, y: tl.y });
-        liveSync.clearDragLive();
-      }}
-      onTransformStart={(e) => liveSync.onTransformLiveStart(el.id, e.target)}
-      onTransform={(e) => liveSync.onTransformLiveMove(el.id, e.target)}
-      onTransformEnd={(e) => {
-        liveSync.clearTransformLive();
-        const node = e.target;
-        const sx = Math.abs(node.scaleX());
-        const sy = Math.abs(node.scaleY());
-        node.scaleX(1);
-        node.scaleY(1);
-        const { w: nw, h: nh } = clampSize(node.width() * sx, node.height() * sy);
-        node.width(nw);
-        node.height(nh);
-        node.offsetX(nw / 2);
-        node.offsetY(nh / 2);
-        const tl = konvaBookTopLeftFromNode(node);
-        onElementChange(el.id, {
-          x: tl.x,
-          y: tl.y,
-          width: nw,
-          height: nh,
-          rotation: node.rotation(),
-        });
-      }}
+      onDragStart={
+        locked ? undefined : (e) => liveSync.onDragLiveStart(el.id, e.target)
+      }
+      onDragMove={
+        locked ? undefined : (e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)
+      }
+      onDragEnd={
+        locked
+          ? undefined
+          : (e) => {
+              const n = e.target;
+              snapKonvaBookNodePositionToGrid(
+                n,
+                {
+                  width: fw,
+                  height: fh,
+                  rotation: n.rotation(),
+                },
+                liveSync.dragGridPx,
+              );
+              const tl = konvaBookTopLeftFromNode(n);
+              onElementChange(el.id, { x: tl.x, y: tl.y });
+              liveSync.clearDragLive();
+            }
+      }
+      onTransformStart={
+        locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
+      }
+      onTransform={
+        locked ? undefined : (e) => liveSync.onTransformLiveMove(el.id, e.target)
+      }
+      onTransformEnd={
+        locked
+          ? undefined
+          : (e) => {
+              liveSync.clearTransformLive();
+              const node = e.target;
+              const sx = Math.abs(node.scaleX());
+              const sy = Math.abs(node.scaleY());
+              node.scaleX(1);
+              node.scaleY(1);
+              const { w: nw, h: nh } = clampSize(node.width() * sx, node.height() * sy);
+              node.width(nw);
+              node.height(nh);
+              node.offsetX(nw / 2);
+              node.offsetY(nh / 2);
+              const tl = konvaBookTopLeftFromNode(node);
+              onElementChange(el.id, {
+                x: tl.x,
+                y: tl.y,
+                width: nw,
+                height: nh,
+                rotation: node.rotation(),
+              });
+            }
+      }
     />
   );
 }

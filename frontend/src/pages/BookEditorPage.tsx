@@ -31,6 +31,7 @@ import { useBookDocumentHistory } from "@/lib/use-book-document-history";
 import { useBookPageThumbnails } from "@/lib/use-book-page-thumbnails";
 import { BookCanvasToolbar } from "@/components/books/BookCanvasToolbar";
 import { BookInspectorPanel } from "@/components/books/BookInspectorPanel";
+import { BookLayersPanel } from "@/components/books/BookLayersPanel";
 import { BookHeaderSlideDimensions } from "@/components/books/BookHeaderSlideDimensions";
 import { BookPagePropertiesPanel } from "@/components/books/BookPagePropertiesPanel";
 import { BookPageSidebar } from "@/components/books/BookPageSidebar";
@@ -179,6 +180,27 @@ export function BookEditorPage() {
       });
     },
     [activePageIndex, updatePages],
+  );
+
+  const onLayerVisibilityChange = useCallback(
+    (elementId: string, visible: boolean) => {
+      onElementChange(
+        elementId,
+        visible ? ({ visible: undefined } as Partial<BookCanvasElement>) : { visible: false },
+      );
+      if (!visible && canvasSelectedId === elementId) setSelectedId(null);
+    },
+    [onElementChange, canvasSelectedId],
+  );
+
+  const onLayerLockChange = useCallback(
+    (elementId: string, locked: boolean) => {
+      onElementChange(
+        elementId,
+        locked ? { locked: true } : ({ locked: undefined } as Partial<BookCanvasElement>),
+      );
+    },
+    [onElementChange],
   );
 
   const updateCurrentPageName = useCallback(
@@ -515,26 +537,43 @@ export function BookEditorPage() {
         </>
       }
       right={
-        canvasSelectedId ? (
-          <BookInspectorPanel
-            selected={selectedEl}
-            slideWidth={slideWidth}
-            slideHeight={slideHeight}
-            onChange={onElementChange}
-            onDelete={removeSelected}
-            mediaHint={mediaHint}
-          />
-        ) : currentPage ? (
-          <BookPagePropertiesPanel
-            pageIndex={activePageIndex}
-            totalPages={pages.length}
-            name={currentPage.name}
-            onChangeName={updateCurrentPageName}
-            backgroundColor={
-              currentPage.backgroundColor?.trim() || DEFAULT_PAGE_BACKGROUND
-            }
-            onChangeBackgroundColor={updateCurrentPageBackground}
-          />
+        currentPage ? (
+          <aside className="flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
+            <BookLayersPanel
+              elements={currentPage.elements}
+              selectedId={canvasSelectedId}
+              onSelect={setSelectedId}
+              onReorderZ={onReorderZ}
+              onVisibilityChange={onLayerVisibilityChange}
+              onLockChange={onLayerLockChange}
+              onRequestDelete={requestRemoveWidget}
+            />
+            <div className="min-h-0 flex-1 overflow-hidden">
+              {canvasSelectedId ? (
+                <BookInspectorPanel
+                  embedded
+                  selected={selectedEl}
+                  slideWidth={slideWidth}
+                  slideHeight={slideHeight}
+                  onChange={onElementChange}
+                  onDelete={removeSelected}
+                  mediaHint={mediaHint}
+                />
+              ) : (
+                <BookPagePropertiesPanel
+                  embedded
+                  pageIndex={activePageIndex}
+                  totalPages={pages.length}
+                  name={currentPage.name}
+                  onChangeName={updateCurrentPageName}
+                  backgroundColor={
+                    currentPage.backgroundColor?.trim() || DEFAULT_PAGE_BACKGROUND
+                  }
+                  onChangeBackgroundColor={updateCurrentPageBackground}
+                />
+              )}
+            </div>
+          </aside>
         ) : null
       }
     />

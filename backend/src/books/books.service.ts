@@ -51,6 +51,10 @@ export type BookCanvasElementPublic =
       borderRadius?: number;
       outlineWidth?: number;
       outlineColor?: string;
+      /** false면 보기·썸네일에서 숨김 */
+      visible?: boolean;
+      /** true면 캔버스에서 이동·크기·삭제(컨텍스트) 불가 */
+      locked?: boolean;
     }
   | {
       id: string;
@@ -66,6 +70,8 @@ export type BookCanvasElementPublic =
       borderRadius?: number;
       outlineWidth?: number;
       outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
     }
   | {
       id: string;
@@ -82,6 +88,8 @@ export type BookCanvasElementPublic =
       borderRadius?: number;
       outlineWidth?: number;
       outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
     }
   | {
       id: string;
@@ -99,6 +107,8 @@ export type BookCanvasElementPublic =
       borderRadius?: number;
       outlineWidth?: number;
       outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
     }
   | {
       id: string;
@@ -116,6 +126,8 @@ export type BookCanvasElementPublic =
       borderRadius?: number;
       outlineWidth?: number;
       outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
     };
 
 export type BookPagePublic = {
@@ -260,6 +272,16 @@ export class BooksService {
         o.type !== 'digitalClock'
       ) {
         throw new BadRequestException('지원하지 않는 요소 타입입니다.');
+      }
+      if (o.visible !== undefined && typeof o.visible !== 'boolean') {
+        throw new BadRequestException(
+          '요소 visible은 true 또는 false여야 합니다.',
+        );
+      }
+      if (o.locked !== undefined && typeof o.locked !== 'boolean') {
+        throw new BadRequestException(
+          '요소 locked은 true 또는 false여야 합니다.',
+        );
       }
       const x = o.x;
       const y = o.y;
