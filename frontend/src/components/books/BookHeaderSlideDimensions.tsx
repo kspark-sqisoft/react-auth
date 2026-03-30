@@ -51,10 +51,10 @@ export function BookHeaderSlideDimensions({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-l border-border pl-3 sm:gap-x-4 sm:pl-4"
+      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-l border-border/70 pl-3 sm:gap-x-4 sm:pl-4"
       title={`슬라이드 캔버스 크기(px). ${DIM_MIN}~${DIM_MAX}. 입력 후 Enter 또는 포커스 이동.`}
     >
-      <span className="text-[11px] font-medium text-muted-foreground sm:text-xs">캔버스</span>
+      <span className="text-[11px] font-semibold tracking-tight text-foreground/80 sm:text-xs">캔버스</span>
       <div className="flex items-center gap-1.5">
         <Label htmlFor="book-hdr-slide-w" className="sr-only">
           너비 픽셀

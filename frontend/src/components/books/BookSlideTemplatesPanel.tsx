@@ -6,6 +6,12 @@ import {
   type BookSlideTemplateId,
 } from "@/lib/book-slide-templates";
 import { Button } from "@/components/ui/button";
+import {
+  bookDockedPanelHeaderIconClass,
+  bookDockedPanelHeaderRowClass,
+  bookDockedPanelHeadingClass,
+  bookDockedPanelRootClass,
+} from "@/lib/book-workspace-ui";
 import { cn } from "@/lib/utils";
 
 export function BookSlideTemplatesPanel({
@@ -17,15 +23,15 @@ export function BookSlideTemplatesPanel({
 }) {
   return (
     <div
-      className={cn("flex h-full min-h-0 flex-col overflow-hidden bg-card/50", className)}
+      className={cn(bookDockedPanelRootClass(), className)}
       role="region"
       aria-label="슬라이드 템플릿"
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <LayoutTemplate className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="text-xs font-medium text-muted-foreground">템플릿</span>
+      <div className={bookDockedPanelHeaderRowClass()}>
+        <LayoutTemplate className={bookDockedPanelHeaderIconClass()} aria-hidden />
+        <span className={bookDockedPanelHeadingClass()}>템플릿</span>
       </div>
-      <p className="shrink-0 px-3 pt-2 text-[11px] leading-snug text-muted-foreground">
+      <p className="shrink-0 border-b border-border/40 bg-muted/[0.06] px-3 py-2.5 text-[11px] leading-relaxed text-muted-foreground">
         디지털 사이니지·메뉴보드·공지 패널용 레이아웃입니다. 유형별로 골라 적용하세요. 미리보기는 배치만
         표시하며, <code className="rounded bg-muted px-1 py-0.5 text-[10px]">public/cards/</code> 샘플 이미지가
         포함될 수 있습니다.

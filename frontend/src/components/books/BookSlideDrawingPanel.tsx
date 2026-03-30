@@ -1,5 +1,11 @@
 import { Pencil } from "lucide-react";
 import { Label } from "@/components/ui/label";
+import {
+  bookDockedPanelHeaderIconClass,
+  bookDockedPanelHeaderRowClass,
+  bookDockedPanelHeadingClass,
+  bookDockedPanelRootClass,
+} from "@/lib/book-workspace-ui";
 import { cn } from "@/lib/utils";
 
 const PRESET_COLORS = ["#0f172a", "#dc2626", "#2563eb", "#16a34a", "#ca8a04", "#9333ea"];
@@ -19,16 +25,16 @@ export function BookSlideDrawingPanel({
 }) {
   return (
     <div
-      className={cn("flex h-full min-h-0 flex-col overflow-hidden bg-card/50", className)}
+      className={cn(bookDockedPanelRootClass(), className)}
       role="region"
       aria-label="자유 그리기"
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <Pencil className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="text-xs font-medium text-muted-foreground">드로잉</span>
+      <div className={bookDockedPanelHeaderRowClass()}>
+        <Pencil className={bookDockedPanelHeaderIconClass()} aria-hidden />
+        <span className={bookDockedPanelHeadingClass()}>드로잉</span>
       </div>
       <div className="min-h-0 flex-1 space-y-4 overflow-y-auto overscroll-contain p-3 [-webkit-overflow-scrolling:touch]">
-        <p className="text-[11px] leading-snug text-muted-foreground">
+        <p className="rounded-md border border-border/50 bg-muted/[0.06] px-2.5 py-2 text-[11px] leading-relaxed text-muted-foreground">
           이 탭이 선택된 상태에서 슬라이드 위를 드래그하면 선이 그어집니다. 다른 탭으로 바꾸면 선택·이동 모드로
           돌아갑니다.
         </p>

@@ -39,13 +39,21 @@ import {
 } from "@/lib/book-canvas";
 import { publicAssetUrl } from "@/lib/api";
 import {
+  BookTextWidgetInlineEditor,
+  type BookTextWidgetInlineEditorHandle,
+} from "@/components/books/BookTextWidgetInlineEditor";
+import {
   BookTextWidgetOverlay,
   type BookTextOverlayLiveFrame,
 } from "@/components/books/BookTextWidgetOverlay";
 import { BookDigitalClockWidgetOverlay } from "@/components/books/BookDigitalClockWidgetOverlay";
 import { BookWeatherWidgetOverlay } from "@/components/books/BookWeatherWidgetOverlay";
 import { computeKonvaFittedImageLayout, mediaObjectFitToCssClass } from "@/lib/book-media-layout";
-import { defaultTextWidgetBoxHeight, textWidgetHitHeight } from "@/lib/book-text-widget";
+import {
+  defaultTextWidgetBoxHeight,
+  getTextWidgetDisplayHtml,
+  textWidgetHitHeight,
+} from "@/lib/book-text-widget";
 
 function useBookImage(src: string) {
   const url = publicAssetUrl(src) ?? src;
@@ -589,6 +597,12 @@ export function BookSlideCanvas({
   const [videoBarVisible, setVideoBarVisible] = useState<Record<string, boolean>>({});
   const [zMenu, setZMenu] = useState<{ x: number; y: number; elementId: string } | null>(null);
   const zMenuRef = useRef<HTMLDivElement>(null);
+  /** 텍스트 위젯 캔버스 인라인 편집(더블클릭) */
+  const [inlineTextEdit, setInlineTextEdit] = useState<{
+    id: string;
+    initialHtml: string;
+  } | null>(null);
+  const inlineTextEditorRef = useRef<BookTextWidgetInlineEditorHandle>(null);
   /** 편집 모드에서 우클릭: 순서·삭제·슬라이드 전체 맞춤 등 */
   const elementContextMenuEnabled = mode === "edit";
 
@@ -847,6 +861,39 @@ export function BookSlideCanvas({
     },
     [onElementChange],
   );
+
+  const beginInlineTextEdit = useCallback(
+    (elementId: string) => {
+      const tel = elements.find((e) => e.id === elementId);
+      if (!tel || tel.type !== "text") return;
+      if (isBookElementLocked(tel)) return;
+      setInlineTextEdit({ id: elementId, initialHtml: getTextWidgetDisplayHtml(tel) });
+      onSelect({ id: elementId, shiftKey: false });
+    },
+    [elements, onSelect],
+  );
+
+  useEffect(() => {
+    if (!inlineTextEdit) return;
+    if (!selectedIdSet.has(inlineTextEdit.id)) {
+      queueMicrotask(() => inlineTextEditorRef.current?.commit());
+    }
+  }, [inlineTextEdit, selectedIdSet]);
+
+  useEffect(() => {
+    if (!inlineTextEdit) return;
+    const exists = elements.some((e) => e.id === inlineTextEdit.id && e.type === "text");
+    if (!exists) queueMicrotask(() => setInlineTextEdit(null));
+  }, [elements, inlineTextEdit]);
+
+  useEffect(() => {
+    if (mode !== "edit" && inlineTextEdit) queueMicrotask(() => setInlineTextEdit(null));
+  }, [mode, inlineTextEdit]);
+
+  useEffect(() => {
+    if (editInteractionTool === "draw" && inlineTextEdit)
+      queueMicrotask(() => setInlineTextEdit(null));
+  }, [editInteractionTool, inlineTextEdit]);
 
   useEffect(() => {
     if (!zMenu) return;
@@ -1137,6 +1184,8 @@ export function BookSlideCanvas({
                   onElementChange={onElementChange}
                   zMenuEnabled={elementContextMenuEnabled && !locked}
                   onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                  inlineTextEditing={inlineTextEdit?.id === el.id}
+                  onRequestInlineTextEdit={beginInlineTextEdit}
                 />
               );
             }
@@ -1221,7 +1270,9 @@ export function BookSlideCanvas({
               />
             );
           })}
-          {mode === "edit" && selectedIds.length === 1 ? (
+          {mode === "edit" &&
+          selectedIds.length === 1 &&
+          !(inlineTextEdit && selectedIds[0] === inlineTextEdit.id) ? (
             <Transformer
               ref={trRef}
               rotateEnabled
@@ -1271,6 +1322,7 @@ export function BookSlideCanvas({
           )
           .map((el) => {
             if (el.type === "text") {
+              if (inlineTextEdit?.id === el.id) return null;
               const tw = el.width ?? 720;
               const th = textWidgetHitHeight(el);
               const textLive = overlayLiveFrame(el.id, dragLive, transformLive, {
@@ -1330,6 +1382,46 @@ export function BookSlideCanvas({
               />
             );
           })}
+        {mode === "edit" && inlineTextEdit
+          ? (() => {
+              const tel = elements.find(
+                (e): e is Extract<BookCanvasElement, { type: "text" }> =>
+                  e.id === inlineTextEdit.id && e.type === "text",
+              );
+              if (!tel) return null;
+              const tw = tel.width ?? 720;
+              const th = textWidgetHitHeight(tel);
+              const textLive = overlayLiveFrame(tel.id, dragLive, transformLive, {
+                w: tw,
+                h: th,
+                rotation: resolveBookElementRotation(tel.rotation),
+              });
+              return (
+                <BookTextWidgetInlineEditor
+                  ref={inlineTextEditorRef}
+                  key={`inline-${inlineTextEdit.id}`}
+                  el={tel}
+                  scale={scale}
+                  liveFrame={textLive}
+                  initialDisplayHtml={inlineTextEdit.initialHtml}
+                  onCommit={(patch) => {
+                    onElementChange(inlineTextEdit.id, patch);
+                    setInlineTextEdit(null);
+                  }}
+                  onCancel={() => setInlineTextEdit(null)}
+                  onReportLogicalHeight={(logical) => {
+                    const next = Math.max(28, Math.min(4000, Math.ceil(logical)));
+                    const prev =
+                      typeof tel.height === "number"
+                        ? tel.height
+                        : defaultTextWidgetBoxHeight(tel.fontSize);
+                    if (Math.abs(next - prev) <= 2) return;
+                    scheduleTextBoxHeight(tel.id, next);
+                  }}
+                />
+              );
+            })()
+          : null}
       </div>
       {zMenu && mode === "edit"
         ? createPortal(
@@ -1581,6 +1673,8 @@ function BookTextHitShape({
   onElementChange,
   zMenuEnabled,
   onZMenu,
+  inlineTextEditing,
+  onRequestInlineTextEdit,
 }: {
   el: Extract<BookCanvasElement, { type: "text" }>;
   locked: boolean;
@@ -1591,6 +1685,8 @@ function BookTextHitShape({
   onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
   zMenuEnabled: boolean;
   onZMenu: (clientX: number, clientY: number) => void;
+  inlineTextEditing: boolean;
+  onRequestInlineTextEdit: (elementId: string) => void;
 }) {
   const w = el.width ?? 720;
   const h = textWidgetHitHeight(el);
@@ -1636,11 +1732,21 @@ function BookTextHitShape({
       cornerRadius={tBr}
       stroke={tOw > 0 ? tOc : "transparent"}
       strokeWidth={tOw > 0 ? tOw : 0}
-      draggable={mode === "edit" && !locked}
+      draggable={mode === "edit" && !locked && !inlineTextEditing}
       onMouseDown={(e) => {
         if (mode !== "edit") return;
         e.cancelBubble = true;
         onSelect({ id: el.id, shiftKey: e.evt.shiftKey });
+      }}
+      onDblClick={(e) => {
+        if (mode !== "edit" || locked) return;
+        e.cancelBubble = true;
+        onRequestInlineTextEdit(el.id);
+      }}
+      onDblTap={(e) => {
+        if (mode !== "edit" || locked) return;
+        e.cancelBubble = true;
+        onRequestInlineTextEdit(el.id);
       }}
       onContextMenu={
         zMenuEnabled
@@ -1652,7 +1758,7 @@ function BookTextHitShape({
           : undefined
       }
       onDragStart={
-        locked
+        locked || inlineTextEditing
           ? undefined
           : (e) => {
               liveSync.onDragLiveStart(el.id, e.target);

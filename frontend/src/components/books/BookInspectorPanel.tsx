@@ -26,6 +26,12 @@ import {
 } from "@/lib/book-text-widget";
 import { BookTextRichEditor } from "@/components/books/BookTextRichEditor";
 import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
+import {
+  bookDockedPanelHeaderIconClass,
+  bookDockedPanelHeaderRowClass,
+  bookDockedPanelHeadingClass,
+  bookDockedPanelRootClass,
+} from "@/lib/book-workspace-ui";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -588,32 +594,32 @@ export function BookInspectorPanel({
   return (
     <Root
       className={cn(
-        "flex h-full min-h-0 max-h-full flex-col overflow-hidden bg-card/50",
-        embedded ? "min-w-0" : "w-80 shrink-0 border-l border-border",
+        bookDockedPanelRootClass("max-h-full"),
+        embedded ? "min-w-0" : "w-80 shrink-0 border-l border-border/70",
       )}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <SlidersHorizontal className="size-4 text-muted-foreground" aria-hidden />
-        <span className="text-xs font-medium text-muted-foreground">위젯 속성</span>
+      <div className={bookDockedPanelHeaderRowClass()}>
+        <SlidersHorizontal className={bookDockedPanelHeaderIconClass()} aria-hidden />
+        <span className={bookDockedPanelHeadingClass()}>위젯 속성</span>
       </div>
       <div className="min-h-0 flex-1 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
         <div className="space-y-4 p-3">
           {multiSelectionCount >= 2 ? (
-            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
-              <p className="text-sm font-medium text-foreground">
+            <div className="space-y-3 rounded-lg border border-border/70 bg-muted/[0.08] p-3 shadow-sm">
+              <p className="text-sm font-semibold text-foreground">
                 위젯 {multiSelectionCount}개 선택됨
               </p>
               <p className="text-xs leading-relaxed text-muted-foreground">
-                한 번에 하나만 속성을 편집할 수 있습니다. Shift+클릭으로 선택을 추가하거나 빼거나, 캔버스 빈 곳을
-                눌러 모두 해제할 수 있습니다. Delete 키로 선택한 항목을 함께 삭제할 수 있습니다.
+                한 번에 하나만 속성을 편집할 수 있습니다. Shift+클릭으로 선택을 추가·해제하고, 캔버스 빈 곳을
+                눌러 모두 해제할 수 있습니다. Delete로 선택 항목을 함께 삭제할 수 있습니다.
               </p>
               <Button type="button" variant="destructive" size="sm" className="w-full" onClick={onDelete}>
                 선택 항목 모두 삭제…
               </Button>
             </div>
           ) : !selected ? (
-            <p className="text-sm text-muted-foreground">
-              캔버스에서 위젯을 선택하면 여기서 글자·위치·크기를 바꿀 수 있습니다.
+            <p className="rounded-md border border-dashed border-border/60 bg-muted/[0.05] px-3 py-4 text-center text-sm leading-relaxed text-muted-foreground">
+              캔버스에서 위젯을 선택하면 이 패널에서 글자·위치·크기를 바꿀 수 있습니다.
             </p>
           ) : (
             <>

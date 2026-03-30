@@ -4,6 +4,12 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { DEFAULT_PAGE_BACKGROUND, slideDisplayLabel } from "@/lib/book-canvas";
 import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
+import {
+  bookDockedPanelHeaderIconClass,
+  bookDockedPanelHeaderRowClass,
+  bookDockedPanelHeadingClass,
+  bookDockedPanelRootClass,
+} from "@/lib/book-workspace-ui";
 import { cn } from "@/lib/utils";
 
 type BookPagePropertiesPanelProps = {
@@ -37,18 +43,18 @@ export function BookPagePropertiesPanel({
   return (
     <Root
       className={cn(
-        "flex h-full min-h-0 max-h-full flex-col overflow-hidden bg-card/50",
-        embedded ? "min-w-0" : "w-80 shrink-0 border-l border-border",
+        bookDockedPanelRootClass("max-h-full"),
+        embedded ? "min-w-0" : "w-80 shrink-0 border-l border-border/70",
       )}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <LayoutTemplate className="size-4 text-muted-foreground" aria-hidden />
-        <span className="text-xs font-medium text-muted-foreground">페이지 속성</span>
+      <div className={bookDockedPanelHeaderRowClass()}>
+        <LayoutTemplate className={bookDockedPanelHeaderIconClass()} aria-hidden />
+        <span className={bookDockedPanelHeadingClass()}>페이지 속성</span>
       </div>
       <div className="min-h-0 flex-1 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
         <div className="space-y-4 p-3">
-          <p className="text-xs text-muted-foreground">
-            슬라이드 크기는 위쪽 헤더의 캔버스 W·H에서 바꿀 수 있습니다.
+          <p className="rounded-md border border-border/50 bg-muted/[0.06] px-2.5 py-2 text-xs leading-relaxed text-muted-foreground">
+            슬라이드 크기는 상단 바의 캔버스 W·H에서 바꿀 수 있습니다.
           </p>
           <div className="space-y-1">
             <p className="text-xs font-medium text-foreground">이 슬라이드</p>

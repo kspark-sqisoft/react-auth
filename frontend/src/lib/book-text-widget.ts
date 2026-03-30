@@ -117,6 +117,36 @@ export function sanitizeBookRichHtml(dirty: string): string {
   return bookRichHtmlPostProcessStyle(pass);
 }
 
+/**
+ * contentEditable(Chromium 등)이 Enter로 넣는 `<div>`는 허용 태그가 아니라 살균 시 줄이 한 덩어리로 무너집니다.
+ * 안쪽부터 `<p>`로 바꿉니다.
+ */
+export function normalizeContentEditableHtmlForBook(html: string): string {
+  if (typeof document === "undefined") return html;
+  try {
+    const doc = new DOMParser().parseFromString(
+      `<div id="book-ce-normalize-root">${html}</div>`,
+      "text/html",
+    );
+    const root = doc.getElementById("book-ce-normalize-root");
+    if (!root) return html;
+    const divs = Array.from(root.querySelectorAll("div")).reverse();
+    for (const div of divs) {
+      const p = doc.createElement("p");
+      while (div.firstChild) p.appendChild(div.firstChild);
+      div.parentNode?.replaceChild(p, div);
+    }
+    return root.innerHTML;
+  } catch {
+    return html;
+  }
+}
+
+/** 캔버스 인라인 편집 종료 시: div→p 정규화 후 살균 */
+export function bookRichHtmlFromContentEditable(raw: string): string {
+  return sanitizeBookRichHtml(normalizeContentEditableHtmlForBook(raw));
+}
+
 export function escapeHtmlPlain(s: string): string {
   return s
     .replace(/&/g, "&amp;")

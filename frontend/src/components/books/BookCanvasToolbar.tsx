@@ -53,7 +53,7 @@ export function BookCanvasToolbar({
   return (
     <div
       className={cn(
-        "pointer-events-auto z-10 flex items-center gap-1 rounded-lg border border-border bg-card/95 px-1.5 py-1 shadow-md backdrop-blur-sm",
+        "pointer-events-auto z-10 flex items-center gap-0.5 rounded-xl border border-border/80 bg-card/95 px-2 py-1.5 shadow-sm ring-1 ring-black/[0.03] backdrop-blur-md dark:ring-white/[0.06]",
         className,
       )}
       role="toolbar"

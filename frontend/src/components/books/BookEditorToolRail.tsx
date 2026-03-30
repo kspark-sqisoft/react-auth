@@ -10,14 +10,14 @@ import {
 import { cn } from "@/lib/utils";
 
 const railBtn = cn(
-  "relative size-10 shrink-0 rounded-lg border border-transparent text-muted-foreground transition-colors",
-  "hover:bg-accent/80 hover:text-accent-foreground",
+  "relative size-10 shrink-0 rounded-xl border border-transparent text-muted-foreground transition-[color,background-color,border-color,box-shadow] duration-150",
+  "hover:bg-muted/70 hover:text-foreground",
   "focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
 );
 
 const railBtnActive = cn(
-  "border-primary/35 bg-primary/12 text-primary shadow-sm",
-  "hover:bg-primary/15 hover:text-primary",
+  "border-primary/40 bg-primary/14 text-primary shadow-sm ring-1 ring-primary/10",
+  "hover:bg-primary/[0.18] hover:text-primary",
 );
 
 export type BookEditorToolRailProps = {
@@ -40,7 +40,7 @@ export function BookEditorToolRail({
     <TooltipProvider delayDuration={400}>
       <nav
         className={cn(
-          "flex w-[52px] shrink-0 flex-col items-center gap-1 border-e border-border/70 bg-card/40 py-2 backdrop-blur-sm",
+          "flex w-14 shrink-0 flex-col items-center gap-1 border-e border-border/60 bg-gradient-to-b from-muted/[0.12] via-card/50 to-card/30 py-2.5 backdrop-blur-sm",
           className,
         )}
         aria-label="편집 메뉴"
@@ -94,7 +94,7 @@ export function BookEditorToolRail({
           </Button>
         </RailTooltip>
 
-        <div className="my-1 h-px w-7 bg-border/80" role="separator" />
+        <div className="my-1 h-px w-8 bg-border/60" role="separator" aria-hidden />
 
         <RailTooltip label="템플릿 — 슬라이드에 제목·본문 등 예시 블록 추가">
           <Button
@@ -129,7 +129,17 @@ function RailTooltip({ label, children }: { label: string; children: React.React
   return (
     <Tooltip>
       <TooltipTrigger asChild>{children}</TooltipTrigger>
-      <TooltipContent side="right" className="max-w-[240px] text-left leading-snug">
+      <TooltipContent
+        side="right"
+        sideOffset={10}
+        arrowClassName="bg-zinc-900 fill-zinc-900 dark:bg-zinc-100 dark:fill-zinc-100"
+        className={cn(
+          "z-[500] max-w-[min(280px,calc(100vw-4rem))] px-3 py-2 text-left text-[13px] font-medium leading-snug",
+          /* 기본 Tooltip은 text-background인데 bg-popover만 쓰면 대비가 무너짐 — 라이트/다크 모두 선명하게 */
+          "border border-zinc-700/90 bg-zinc-900 text-zinc-50 shadow-xl",
+          "dark:border-zinc-600 dark:bg-zinc-100 dark:text-zinc-950 dark:shadow-2xl",
+        )}
+      >
         {label}
       </TooltipContent>
     </Tooltip>

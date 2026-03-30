@@ -42,6 +42,11 @@ import {
   isBookElementLocked,
   isBookElementVisible,
 } from "@/lib/book-canvas";
+import {
+  bookDockedPanelHeaderIconClass,
+  bookDockedPanelHeaderRowClass,
+  bookDockedPanelHeadingClass,
+} from "@/lib/book-workspace-ui";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 
@@ -481,15 +486,15 @@ export function BookLayersPanel({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-col border-b border-border bg-card/40",
+        "flex min-h-0 flex-col border-b border-border/70 bg-muted/[0.04]",
         expandVertical ? "flex-1 border-b-0" : "shrink-0",
         className,
       )}
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border/80 px-3 py-2">
-        <Layers className="size-4 text-muted-foreground" aria-hidden />
-        <span className="text-xs font-medium text-muted-foreground">레이어</span>
-        <span className="ml-auto text-[10px] tabular-nums text-muted-foreground">
+      <div className={bookDockedPanelHeaderRowClass()}>
+        <Layers className={bookDockedPanelHeaderIconClass()} aria-hidden />
+        <span className={bookDockedPanelHeadingClass()}>레이어</span>
+        <span className="ml-auto rounded-md bg-muted/50 px-1.5 py-0.5 text-[10px] font-medium tabular-nums text-muted-foreground">
           {elements.length}
         </span>
       </div>
@@ -500,8 +505,8 @@ export function BookLayersPanel({
         )}
       >
         {rev.length === 0 ? (
-          <p className="px-3 py-4 text-center text-xs text-muted-foreground">
-            이 슬라이드에 위젯이 없습니다.
+          <p className="px-3 py-5 text-center text-xs leading-relaxed text-muted-foreground">
+            이 슬라이드에 위젯이 없습니다. 왼쪽에서 위젯을 끌어 오거나 템플릿을 적용해 보세요.
           </p>
         ) : dragSortEnabled ? (
           <DndContext

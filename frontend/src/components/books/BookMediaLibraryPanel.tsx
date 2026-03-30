@@ -29,6 +29,12 @@ import {
 import { BOOK_LIBRARY_DRAG_TYPE } from "@/components/books/BookSlideCanvas";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  bookDockedPanelHeaderIconClass,
+  bookDockedPanelHeaderRowClass,
+  bookDockedPanelHeadingClass,
+  bookDockedPanelRootClass,
+} from "@/lib/book-workspace-ui";
 import { cn } from "@/lib/utils";
 
 const STORAGE_KEY = "book-media-library-panel";
@@ -215,7 +221,7 @@ function BookMediaLibraryDocked({
 
   return (
     <div
-      className={cn("flex h-full min-h-0 flex-col overflow-hidden bg-card/50", className)}
+      className={cn(bookDockedPanelRootClass(), className)}
       role="region"
       aria-label="미디어 라이브러리"
     >
@@ -226,11 +232,9 @@ function BookMediaLibraryDocked({
         className="hidden"
         onChange={onPickFile}
       />
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <ImagePlus className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="min-w-0 flex-1 text-xs font-medium text-muted-foreground">
-          미디어 라이브러리
-        </span>
+      <div className={bookDockedPanelHeaderRowClass()}>
+        <ImagePlus className={bookDockedPanelHeaderIconClass()} aria-hidden />
+        <span className={cn(bookDockedPanelHeadingClass(), "min-w-0 flex-1")}>미디어 라이브러리</span>
         {onRequestFloat ? (
           <Button
             type="button"
@@ -244,7 +248,7 @@ function BookMediaLibraryDocked({
           </Button>
         ) : null}
       </div>
-      <p className="shrink-0 px-3 pt-2 text-[11px] leading-snug text-muted-foreground">
+      <p className="shrink-0 border-b border-border/40 bg-muted/[0.04] px-3 py-2 text-[11px] leading-relaxed text-muted-foreground">
         업로드한 뒤 썸네일을 슬라이드로 끌어 놓을 수 있어요.
       </p>
       <div className="shrink-0 px-3 pb-2 pt-2">

@@ -55,6 +55,7 @@ import {
 } from "@/lib/book-slide-templates";
 import { defaultTextWidgetBoxHeight } from "@/lib/book-text-widget";
 import { warmBookCanvasImagesForNeighborPages } from "@/lib/book-image-cache";
+import { bookLeftDockContentColumnClass } from "@/lib/book-workspace-ui";
 import { bookKeys } from "@/lib/query-keys";
 import { useBookCanvasDisplayScale } from "@/lib/use-book-canvas-display-scale";
 import { useBookDocumentHistory } from "@/lib/use-book-document-history";
@@ -342,6 +343,27 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     },
     onError: (e: Error) => toast.error(e.message),
   });
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s")) return;
+      const t = e.target as HTMLElement;
+      if (t.closest("input, textarea, [contenteditable=true]")) return;
+      if (
+        t.closest(
+          '[data-slot="select-content"], [data-slot="combobox-content"], [data-slot="combobox-list"]',
+        )
+      ) {
+        return;
+      }
+      if (widgetDeleteOpen || deleteConfirmOpen || pageDeleteOpen) return;
+      e.preventDefault();
+      if (saveMutation.isPending) return;
+      saveMutation.mutate();
+    };
+    window.addEventListener("keydown", onKey, true);
+    return () => window.removeEventListener("keydown", onKey, true);
+  }, [saveMutation, widgetDeleteOpen, deleteConfirmOpen, pageDeleteOpen]);
 
   const deleteMutation = useMutation({
     mutationFn: (bid: number) => deleteBook(bid),
@@ -958,7 +980,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         titleArea={
           <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
             <Input
-              className="h-9 min-w-[10rem] max-w-md flex-1 border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none focus-visible:ring-0 sm:text-lg"
+              className="h-9 min-w-[10rem] max-w-md flex-1 rounded-md border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/25 focus-visible:bg-muted/20 focus-visible:ring-1 focus-visible:ring-ring/50 sm:text-lg"
               value={bookTitle}
               onChange={(e) => setBookTitle(e.target.value)}
               placeholder="북 제목"
@@ -1010,7 +1032,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
               onActiveTabChange={setLeftDockTab}
               mediaLibraryEnabled
             />
-            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-border/60 bg-card/30 sm:max-w-[24rem]">
+            <div className={bookLeftDockContentColumnClass("border-s border-border/40")}>
               {leftDockTab === "page" ? (
                 <BookPageSidebar
                   fluid
@@ -1103,7 +1125,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       titleArea={
         <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
           <Input
-            className="h-9 min-w-[10rem] max-w-md flex-1 border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none focus-visible:ring-0 sm:text-lg"
+            className="h-9 min-w-[10rem] max-w-md flex-1 rounded-md border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/25 focus-visible:bg-muted/20 focus-visible:ring-1 focus-visible:ring-ring/50 sm:text-lg"
             value={bookTitle}
             onChange={(e) => setBookTitle(e.target.value)}
             placeholder="북 제목"
@@ -1155,7 +1177,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
             onActiveTabChange={setLeftDockTab}
             mediaLibraryEnabled
           />
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-border/60 bg-card/30 sm:max-w-[24rem]">
+          <div className={bookLeftDockContentColumnClass("border-s border-border/40")}>
             {leftDockTab === "page" ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <BookPageSidebar

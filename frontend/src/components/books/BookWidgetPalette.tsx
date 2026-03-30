@@ -23,6 +23,12 @@ import {
 } from "lucide-react";
 import { BOOK_WIDGET_DRAG_TYPE, type BookDropWidgetKind } from "@/components/books/BookSlideCanvas";
 import { Button } from "@/components/ui/button";
+import {
+  bookDockedPanelHeaderIconClass,
+  bookDockedPanelHeaderRowClass,
+  bookDockedPanelHeadingClass,
+  bookDockedPanelRootClass,
+} from "@/lib/book-workspace-ui";
 import { cn } from "@/lib/utils";
 
 /** 텍스트·이미지·동영상은 항상 맨 앞 순서, 그 외 위젯은 뒤에 둡니다. */
@@ -102,16 +108,13 @@ function BookWidgetPaletteDocked({
 }) {
   return (
     <div
-      className={cn(
-        "flex h-full min-h-0 flex-col overflow-hidden bg-card/50",
-        className,
-      )}
+      className={cn(bookDockedPanelRootClass(), className)}
       role="region"
       aria-label="위젯"
     >
-      <div className="flex shrink-0 items-center gap-2 border-b border-border px-3 py-2">
-        <Blocks className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="min-w-0 flex-1 text-xs font-medium text-muted-foreground">위젯</span>
+      <div className={bookDockedPanelHeaderRowClass()}>
+        <Blocks className={bookDockedPanelHeaderIconClass()} aria-hidden />
+        <span className={cn(bookDockedPanelHeadingClass(), "min-w-0 flex-1")}>위젯</span>
         {onRequestFloat ? (
           <Button
             type="button"

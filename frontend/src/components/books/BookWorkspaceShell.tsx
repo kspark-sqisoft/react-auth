@@ -121,12 +121,12 @@ export function BookWorkspaceShell({
         className,
       )}
     >
-      <header className="relative z-[250] flex min-h-12 shrink-0 items-center gap-2 border-b border-border bg-card/80 px-2 py-1.5 backdrop-blur-sm sm:gap-3 sm:px-3">
+      <header className="relative z-[250] flex min-h-[3.25rem] shrink-0 items-center gap-2 border-b border-border/80 bg-card/95 px-2 py-2 shadow-sm backdrop-blur-md sm:gap-3 sm:px-4">
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="shrink-0"
+          className="shrink-0 rounded-lg text-muted-foreground hover:bg-muted/80 hover:text-foreground"
           onClick={() => void navigate("/books")}
           aria-label="북 목록으로"
         >
@@ -141,7 +141,7 @@ export function BookWorkspaceShell({
       <div className="flex min-h-0 min-w-0 flex-1 overflow-x-visible overflow-y-hidden">
         {leftOpen ? (
           <div className="relative z-20 flex min-h-0 shrink-0 self-stretch overflow-visible">
-            <div className="flex h-full min-h-0 min-w-0 max-h-full flex-col overflow-hidden border-e border-border/60 bg-card/30">
+            <div className="flex h-full min-h-0 min-w-0 max-h-full flex-col overflow-hidden border-e border-border/50 bg-gradient-to-b from-card/80 to-muted/[0.06]">
               {left}
             </div>
             <PanelEdgeToggle
@@ -158,7 +158,7 @@ export function BookWorkspaceShell({
           </div>
         ) : null}
 
-        <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-visible overflow-y-hidden bg-muted/20">
+        <div className="relative z-10 flex min-h-0 min-w-0 flex-1 flex-col overflow-x-visible overflow-y-hidden bg-muted/15">
           <div className="relative z-0 min-h-0 flex min-w-0 flex-1 flex-col overflow-hidden">
             {center}
           </div>
@@ -203,7 +203,7 @@ export function BookWorkspaceShell({
             >
               <PanelRightClose className="size-4" aria-hidden />
             </PanelEdgeToggle>
-            <div className="flex h-full min-h-0 min-w-0 max-h-full flex-col overflow-hidden border-s border-border/60 bg-card/30">
+            <div className="flex h-full min-h-0 min-w-0 max-h-full flex-col overflow-hidden border-s border-border/50 bg-gradient-to-b from-card/85 to-muted/[0.05]">
               {right}
             </div>
           </div>
