@@ -6,9 +6,21 @@
  *
  * Lamborghini GLB: Sketchfab CC-BY-NC-4.0 — Steven007
  * https://sketchfab.com/3d-models/lamborghini-urus-2650599973b649ddb4460ff6c03e4aa2
+ *
+ * Porsche 911 (930 Turbo 1975): GitHub MIT — Utkarsh Pathrabe
+ * https://github.com/UtkarshPathrabe/Porche-911-930-Turbo-1975-3D-Model · `public/porsche-911-930-turbo/scene.gltf`
  */
 import * as THREE from "three";
-import { Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import {
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type RefObject,
+} from "react";
 import { Canvas, applyProps, useLoader, type ThreeElements } from "@react-three/fiber";
 import { ContactShadows, Environment, Lightformer, OrbitControls, Stats, useGLTF } from "@react-three/drei";
 import { Bloom, EffectComposer, LUT } from "@react-three/postprocessing";
@@ -19,6 +31,8 @@ import { cn } from "@/lib/utils";
 type PrimitiveWithoutObject = Omit<ThreeElements["primitive"], "object">;
 
 THREE.ColorManagement.enabled = true;
+
+export type EnvmapCarModelId = "lambo" | "porsche";
 
 /** 원본 `Effects.js` 의 `useControls` 스키마 + Bloom/LUT 튜닝(SSR 슬라이더는 스택에 SSR 없어 비연동). */
 const envmapEffectsSchema = {
@@ -59,8 +73,15 @@ const envmapEffectsSchema = {
   lutEnabled: true,
 };
 
-/** Leva select: 라벨 → hex. 기본은 기존 포팅과 동일한 다크 차체(#111). */
+/** Leva: 차종 + 차체 색. 911 은 `public/porsche-911-930-turbo/scene.gltf` (GitHub MIT, 파일 상단 링크). */
 const vehicleControlsSchema = {
+  model: {
+    value: "lambo" satisfies EnvmapCarModelId,
+    options: {
+      "람보르기니 Urus": "lambo",
+      "포르쉐 911": "porsche",
+    },
+  },
   carBody: {
     value: "#111111",
     options: {
@@ -88,9 +109,28 @@ License: CC-BY-NC-4.0 (http://creativecommons.org/licenses/by-nc/4.0/)
 Source: https://sketchfab.com/3d-models/lamborghini-urus-2650599973b649ddb4460ff6c03e4aa2
 Title: Lamborghini Urus
 */
-type LamborghiniProps = PrimitiveWithoutObject & { paintColor: string };
+type EnvmapCarProps = PrimitiveWithoutObject & { paintColor: string };
 
-function Lamborghini({ paintColor, ...props }: LamborghiniProps) {
+/** `ContactShadows`·바닥 링 메쉬와 같은 월드 높이 — 차량 최저점(AABB)이 여기에 오도록 그룹 Y 를 잡음. */
+const ENVMAP_FLOOR_Y = -1.16;
+
+function uniformScaleFromProps(s: EnvmapCarProps["scale"] | undefined): number {
+  if (s == null) return 1;
+  if (typeof s === "number") return s;
+  if (Array.isArray(s)) return Number(s[0] ?? 1);
+  return s.x;
+}
+
+function tuple3FromR3fPosition(
+  p: EnvmapCarProps["position"] | undefined,
+): [number, number, number] {
+  if (p == null) return [0, 0, 0];
+  if (typeof p === "number") return [0, 0, 0];
+  if (Array.isArray(p)) return [Number(p[0] ?? 0), Number(p[1] ?? 0), Number(p[2] ?? 0)];
+  return [p.x, p.y, p.z];
+}
+
+function Lamborghini({ paintColor, ...props }: EnvmapCarProps) {
   const gltf = useGLTF("/lambo.glb") as unknown as LamborghiniGltf;
   const { scene, nodes, materials } = gltf;
 
@@ -136,6 +176,74 @@ function Lamborghini({ paintColor, ...props }: LamborghiniProps) {
   return <primitive {...props} object={scene} />;
 }
 
+/*
+License: MIT — see `public/porsche-911-930-turbo/LICENSE`
+Source: https://github.com/UtkarshPathrabe/Porche-911-930-Turbo-1975-3D-Model
+Title: Porsche 911 930 Turbo (1975) glTF
+*/
+function Porsche911({ paintColor, position, scale, rotation, ...props }: EnvmapCarProps) {
+  const gltf = useGLTF("/porsche-911-930-turbo/scene.gltf") as unknown as LamborghiniGltf;
+  const { scene, nodes, materials } = gltf;
+  const [px, py, pz] = tuple3FromR3fPosition(position);
+  const s = uniformScaleFromProps(scale);
+  /** 스케일이 자식에만 적용될 때: `groupY + s * box.min.y === ENVMAP_FLOOR_Y` */
+  const floorAlignY = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(scene);
+    return ENVMAP_FLOOR_Y - s * box.min.y;
+  }, [scene, s]);
+
+  useLayoutEffect(() => {
+    Object.values(nodes).forEach((node) => {
+      const mesh = node as THREE.Mesh;
+      if (mesh.isMesh) {
+        mesh.receiveShadow = true;
+        mesh.castShadow = true;
+      }
+    });
+    const plastics = materials["930_plastics"] as THREE.MeshStandardMaterial | undefined;
+    if (plastics) {
+      applyProps(plastics, {
+        color: "#222",
+        roughness: 0.6,
+        roughnessMap: null,
+        normalScale: new THREE.Vector2(4, 4),
+      });
+    }
+    const glassMat = materials.glass as THREE.MeshStandardMaterial | undefined;
+    if (glassMat) applyProps(glassMat, { color: "black", roughness: 0, clearcoat: 0.1 });
+    const coat = materials.coat as THREE.MeshStandardMaterial | undefined;
+    if (coat) applyProps(coat, { envMapIntensity: 4, roughness: 0.5, metalness: 1 });
+    const chromes = materials["930_chromes"] as THREE.MeshStandardMaterial | undefined;
+    if (chromes) applyProps(chromes, { metalness: 1, roughness: 0.12, envMapIntensity: 1.25 });
+    const paint = materials.paint as THREE.MeshStandardMaterial | undefined;
+    if (paint) {
+      applyProps(paint, {
+        envMapIntensity: 2,
+        roughness: 0.45,
+        metalness: 0.8,
+        color: paintColor,
+      });
+    }
+  }, [nodes, materials, paintColor]);
+
+  return (
+    <group position={[px, py + floorAlignY, pz]}>
+      <group scale={scale} rotation={rotation} {...props}>
+        <primitive object={scene} />
+      </group>
+    </group>
+  );
+}
+
+function EnvmapVehicle({ model, paintColor }: { model: EnvmapCarModelId; paintColor: string }) {
+  if (model === "porsche") {
+    return (
+      <Porsche911 paintColor={paintColor} scale={1} position={[-0.5, -0.2, 0]} rotation={[0, Math.PI / 5, 0]} />
+    );
+  }
+  return <Lamborghini paintColor={paintColor} rotation={[0, Math.PI / 1.5, 0]} scale={0.015} />;
+}
+
 type EnvmapPostEffectsProps = {
   enabled: boolean;
   bloomLuminanceThreshold: number;
@@ -176,6 +284,7 @@ function EnvmapPostEffects({
 }
 
 useGLTF.preload("/lambo.glb");
+useGLTF.preload("/porsche-911-930-turbo/scene.gltf");
 
 const AUTO_ROTATE_RESUME_MS = 1600;
 /** 낮을수록 느림(three 기본 2 대비). */
@@ -228,9 +337,10 @@ const OVERLAY_TOP_CLASS = "top-14";
 const LEVA_PANEL_MAX_H_CLASS = "max-h-[calc(100%-9.5rem)]";
 
 export function HomeHeroEnvmap3D({ className }: { className?: string }) {
-  const params = useControls("Effects", envmapEffectsSchema);
+  const params = useControls("Effects", envmapEffectsSchema, { collapsed: true });
   const vehicle = useControls("Vehicle", vehicleControlsSchema, { collapsed: true });
-  const [effectsPanelCollapsed, setEffectsPanelCollapsed] = useState(false);
+  /** 진입 시 오른쪽 패널은 접힌 상태(타이틀 바만). */
+  const [effectsPanelCollapsed, setEffectsPanelCollapsed] = useState(true);
   const statsParentRef = useRef<HTMLDivElement>(null);
 
   return (
@@ -281,11 +391,15 @@ export function HomeHeroEnvmap3D({ className }: { className?: string }) {
         <Stats
           showPanel={0}
           parent={statsParentRef as RefObject<HTMLElement>}
-          className="!absolute !left-0 !top-0 !z-[1]"
+          className="absolute! left-0! top-0! z-1!"
         />
         <color attach="background" args={["#15151a"]} />
         <Suspense fallback={null}>
-          <Lamborghini paintColor={vehicle.carBody} rotation={[0, Math.PI / 1.5, 0]} scale={0.015} />
+          <EnvmapVehicle
+            key={vehicle.model}
+            model={vehicle.model as EnvmapCarModelId}
+            paintColor={vehicle.carBody}
+          />
           <hemisphereLight intensity={0.5} />
           <ContactShadows
             resolution={1024}
