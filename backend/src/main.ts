@@ -4,7 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
-import type { Request } from 'express';
+import type { NextFunction, Request, Response } from 'express';
 import { markRequestSpanStart } from './common/logging/http-request-span.log';
 import { AppModule } from './app.module';
 import {
@@ -19,7 +19,7 @@ async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
 
   /** 모든 HTTP 요청에 id·시작 시각 부여 → 도메인 미들웨어 `[완료]` ms 가 진입~응답 전체에 가깝게 잡힘 */
-  app.use((req: Request, _res, next) => {
+  app.use((req: Request, _res: Response, next: NextFunction) => {
     markRequestSpanStart(req);
     next();
   });

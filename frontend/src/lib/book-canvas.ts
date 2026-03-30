@@ -244,6 +244,23 @@ export type BookCanvasElement =
       outlineColor?: string;
       visible?: boolean;
       locked?: boolean;
+    }
+  | {
+      id: string;
+      type: "drawing";
+      /** 바운딩 박스 중심(다른 위젯과 동일 피벗) */
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      /** 박스 좌상단 기준 로컬 좌표 [x1,y1,x2,y2, …] */
+      points: number[];
+      stroke: string;
+      strokeWidth: number;
+      opacity?: number;
+      rotation?: number;
+      visible?: boolean;
+      locked?: boolean;
     };
 
 /** 날씨 위젯 표시 플래그(저장용). `false` = 숨김. */
@@ -415,6 +432,7 @@ function parseStoredOutlineWidth(raw: unknown): number | undefined {
 
 /** 저장된 값 + 타입별 기본(텍스트·미디어 0, 날씨·시계 16). */
 export function resolveBookElementBorderRadius(el: BookCanvasElement): number {
+  if (el.type === "drawing") return 0;
   if (typeof el.borderRadius === "number" && Number.isFinite(el.borderRadius)) {
     return Math.min(BOOK_WIDGET_BORDER_RADIUS_MAX, Math.max(0, el.borderRadius));
   }
@@ -425,12 +443,14 @@ export function resolveBookElementBorderRadius(el: BookCanvasElement): number {
 }
 
 export function resolveBookElementOutlineWidth(el: BookCanvasElement): number {
+  if (el.type === "drawing") return 0;
   if (typeof el.outlineWidth !== "number" || !Number.isFinite(el.outlineWidth)) return 0;
   return Math.min(BOOK_WIDGET_OUTLINE_WIDTH_MAX, Math.max(0, el.outlineWidth));
 }
 
 /** outlineWidth가 0이면 의미 없음. */
 export function resolveBookElementOutlineColor(el: BookCanvasElement): string {
+  if (el.type === "drawing") return "transparent";
   if (resolveBookElementOutlineWidth(el) <= 0) return "transparent";
   const c = parseBookOutlineColor(el.outlineColor);
   return c ?? "rgba(148,163,184,0.95)";
@@ -520,16 +540,20 @@ export function sanitizePageBackgroundColor(raw: string): string {
 const BOOK_MEDIA_SRC_MAX = 500;
 
 /**
- * 서버는 미디어 `src`·`posterSrc`가 `/uploads/...` 형태일 것을 요구합니다.
- * 다른 오리진에서 연 경우 등 절대 URL이 들어와도 저장 전에 경로만 보냅니다.
+ * 저장 시 `src`·`posterSrc`: `/uploads/...`(업로드) 또는 템플릿용 `/cards/...`(프론트 public)만 유효합니다.
+ * 절대 URL이 들어오면 `/uploads/` 또는 `/cards/`가 포함된 부분만 잘라 냅니다.
  */
 export function bookMediaSrcForApi(src: string, maxLen = BOOK_MEDIA_SRC_MAX): string {
   const t = src.trim();
   if (!t) return t;
   const noQuery = t.includes("?") ? t.slice(0, t.indexOf("?")) : t;
-  const idx = noQuery.indexOf("/uploads/");
-  if (idx >= 0) {
-    return noQuery.slice(idx, idx + maxLen);
+  const uploadsIdx = noQuery.indexOf("/uploads/");
+  if (uploadsIdx >= 0) {
+    return noQuery.slice(uploadsIdx, uploadsIdx + maxLen);
+  }
+  const cardsIdx = noQuery.indexOf("/cards/");
+  if (cardsIdx >= 0) {
+    return noQuery.slice(cardsIdx, cardsIdx + maxLen);
   }
   return t.slice(0, maxLen);
 }
@@ -602,6 +626,31 @@ function normalizeBookElementsForSave(elements: BookCanvasElement[]): BookCanvas
         DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
       );
       return finalizeElementForApi({ ...el, ...xy, ...wh });
+    }
+    if (el.type === "drawing") {
+      const wh = finiteWH(el.width, el.height, 16, 16);
+      const ptsIn = Array.isArray(el.points) ? el.points : [];
+      const pts: number[] = [];
+      for (let i = 0; i < ptsIn.length && pts.length < 4096; i++) {
+        const n = Number(ptsIn[i]);
+        if (Number.isFinite(n)) pts.push(n);
+      }
+      if (pts.length % 2 === 1) pts.pop();
+      const sw = Number(el.strokeWidth);
+      const strokeW = Number.isFinite(sw) ? Math.min(32, Math.max(1, sw)) : 4;
+      const stroke =
+        typeof el.stroke === "string" && el.stroke.trim()
+          ? el.stroke.trim().slice(0, 40)
+          : "#1e293b";
+      return finalizeElementForApi({
+        ...el,
+        ...xy,
+        ...wh,
+        type: "drawing",
+        points: pts,
+        stroke,
+        strokeWidth: strokeW,
+      });
     }
     const fs = Number(el.fontSize);
     const fontSize = Number.isFinite(fs) && fs >= 8 && fs <= 200 ? fs : 24;
@@ -677,6 +726,9 @@ export function duplicateBookEditorPage(page: BookEditorPageState): BookEditorPa
         ...(el.outlineWidth !== undefined ? { outlineWidth: el.outlineWidth } : {}),
         ...(el.outlineColor !== undefined ? { outlineColor: el.outlineColor } : {}),
       };
+    }
+    if (el.type === "drawing") {
+      return { ...el, id, points: [...el.points] };
     }
     return { ...el, id };
   });
@@ -771,6 +823,27 @@ export function reorderElementsZ(
     return next;
   }
   return elements;
+}
+
+/**
+ * 레이어 패널 표시 순서(위가 앞·아래가 뒤)에서 `fromDisplay`를 `toDisplay`로 옮깁니다.
+ * 내부 배열은 [뒤→앞]이므로 역순으로 변환해 적용합니다.
+ */
+export function reorderBookElementsByDisplayIndex(
+  elements: BookCanvasElement[],
+  fromDisplay: number,
+  toDisplay: number,
+): BookCanvasElement[] {
+  const n = elements.length;
+  if (n <= 1 || fromDisplay === toDisplay) return elements;
+  if (fromDisplay < 0 || toDisplay < 0 || fromDisplay >= n || toDisplay >= n) {
+    return elements;
+  }
+  const rev = [...elements].reverse();
+  const moved = rev.splice(fromDisplay, 1)[0];
+  if (!moved) return elements;
+  rev.splice(toDisplay, 0, moved);
+  return rev.reverse();
 }
 
 function parseElementOpacity(raw: unknown): number | undefined {
@@ -943,7 +1016,109 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(o.visible === false ? { visible: false as const } : {}),
         ...(o.locked === true ? { locked: true as const } : {}),
       });
+    } else if (o.type === "drawing") {
+      const rawPts = o.points;
+      const points: number[] = [];
+      if (Array.isArray(rawPts)) {
+        for (const v of rawPts) {
+          const n = Number(v);
+          if (Number.isFinite(n)) points.push(n);
+          if (points.length >= 4096) break;
+        }
+      }
+      if (points.length >= 4 && points.length % 2 === 0) {
+        const sw = Number(o.strokeWidth);
+        const strokeW = Number.isFinite(sw) ? Math.min(32, Math.max(1, sw)) : 4;
+        const stroke =
+          typeof o.stroke === "string" && o.stroke.trim()
+            ? o.stroke.trim().slice(0, 40)
+            : "#1e293b";
+        out.push({
+          id: o.id,
+          type: "drawing",
+          x: Number(o.x) || 0,
+          y: Number(o.y) || 0,
+          width: Number(o.width) || 32,
+          height: Number(o.height) || 32,
+          points,
+          stroke,
+          strokeWidth: strokeW,
+          ...chrome,
+          ...(opacity !== undefined ? { opacity } : {}),
+          ...(rotation !== undefined ? { rotation } : {}),
+          ...(o.visible === false ? { visible: false as const } : {}),
+          ...(o.locked === true ? { locked: true as const } : {}),
+        });
+      }
     }
   }
   return out;
+}
+
+const BOOK_DRAWING_POINTS_CAP = 2048;
+
+function simplifyDrawingAbsPoints(
+  pts: { x: number; y: number }[],
+  minDist: number,
+): { x: number; y: number }[] {
+  if (pts.length === 0) return [];
+  const out: { x: number; y: number }[] = [pts[0]];
+  for (let i = 1; i < pts.length; i++) {
+    const a = out[out.length - 1];
+    const b = pts[i];
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    if (Math.hypot(dx, dy) >= minDist) out.push(b);
+  }
+  const last = pts[pts.length - 1];
+  if (out[out.length - 1] !== last) out.push(last);
+  return out;
+}
+
+/** 자유 곡선을 `drawing` 요소로 만듭니다. 점이 너무 적으면 null */
+export function buildBookDrawingElement(
+  absPtsRaw: { x: number; y: number }[],
+  stroke: string,
+  strokeWidth: number,
+): BookCanvasElement | null {
+  const absPts = simplifyDrawingAbsPoints(absPtsRaw, 1.5).slice(0, BOOK_DRAWING_POINTS_CAP);
+  if (absPts.length < 2) return null;
+  let minX = Infinity;
+  let minY = Infinity;
+  let maxX = -Infinity;
+  let maxY = -Infinity;
+  for (const p of absPts) {
+    minX = Math.min(minX, p.x);
+    minY = Math.min(minY, p.y);
+    maxX = Math.max(maxX, p.x);
+    maxY = Math.max(maxY, p.y);
+  }
+  const pad = Math.max(strokeWidth, 4);
+  minX -= pad;
+  minY -= pad;
+  maxX += pad;
+  maxY += pad;
+  let w = maxX - minX;
+  let h = maxY - minY;
+  if (w < 8) w = 8;
+  if (h < 8) h = 8;
+  const points: number[] = [];
+  for (const p of absPts) {
+    points.push(p.x - minX, p.y - minY);
+  }
+  const strokeSafe =
+    typeof stroke === "string" && stroke.trim() ? stroke.trim().slice(0, 40) : "#1e293b";
+  const sw = Math.min(24, Math.max(1, strokeWidth));
+  return {
+    id: crypto.randomUUID(),
+    type: "drawing",
+    /** 다른 위젯과 동일: 박스 좌상단(논리 좌표) */
+    x: minX,
+    y: minY,
+    width: w,
+    height: h,
+    points,
+    stroke: strokeSafe,
+    strokeWidth: sw,
+  };
 }

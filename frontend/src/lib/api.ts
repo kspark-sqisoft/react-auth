@@ -36,7 +36,8 @@ export function publicAssetUrl(path: string | null | undefined): string | null {
   if (!p) return null;
   if (p.startsWith("blob:") || p.startsWith("data:")) return p;
   if (p.startsWith("http://") || p.startsWith("https://")) return p;
-  if (API_BASE_URL && p.startsWith("/")) return `${API_BASE_URL}${p}`;
+  // 업로드 미디어만 API 오리진으로 붙임. `/cards/` 등은 Vite `public/` — 프론트와 동일 오리진이어야 함.
+  if (API_BASE_URL && p.startsWith("/uploads/")) return `${API_BASE_URL}${p}`;
   return p;
 }
 

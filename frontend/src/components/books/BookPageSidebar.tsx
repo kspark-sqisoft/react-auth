@@ -46,11 +46,14 @@ type BookPageSidebarProps = {
   canRemovePage?: boolean;
   /** 편집 모드: 우클릭 — 복사본을 해당 페이지 바로 아래에 삽입 */
   onDuplicatePageAtIndex?: (index: number) => void;
+  /** 왼쪽 툴레일 옆 열에 넣을 때 true — 전체 너비에 맞추고 옆 테두리 제거 */
+  fluid?: boolean;
 };
 
-function slideRowClass(active: boolean) {
+function slideRowClass(active: boolean, fluid?: boolean) {
   return cn(
-    "block min-w-0 w-full rounded-lg border p-1.5 text-left transition-colors",
+    "block min-w-0 w-full text-left transition-colors",
+    fluid ? "rounded-xl border-2 p-2.5" : "rounded-lg border p-1.5",
     active
       ? "border-primary bg-primary/10 font-medium text-foreground shadow-sm ring-1 ring-primary/15"
       : "border-border/50 bg-muted/25 text-muted-foreground hover:border-border hover:bg-muted/50 hover:text-foreground",
@@ -62,13 +65,22 @@ function SlideCardPreview({
   thumbUrl,
   index,
   label,
+  fluid,
 }: {
   thumbUrl?: string;
   index: number;
   label: string;
+  fluid?: boolean;
 }) {
   return (
-    <div className="relative aspect-video w-full shrink-0 overflow-hidden rounded-md bg-white shadow-sm ring-1 ring-border/80 dark:bg-black dark:ring-border">
+    <div
+      className={cn(
+        "relative aspect-video w-full shrink-0 overflow-hidden bg-white dark:bg-black",
+        fluid
+          ? "min-h-[100px] rounded-lg shadow-md ring-2 ring-border/70 dark:ring-border"
+          : "rounded-md shadow-sm ring-1 ring-border/80 dark:ring-border",
+      )}
+    >
       {thumbUrl ? (
         <img
           src={thumbUrl}
@@ -78,19 +90,32 @@ function SlideCardPreview({
           onContextMenu={(e) => e.preventDefault()}
         />
       ) : null}
-      <div className="pointer-events-none absolute inset-x-0 top-0 z-10 px-1.5 pb-6 pt-1">
+      <div
+        className={cn(
+          "pointer-events-none absolute inset-x-0 top-0 z-10",
+          fluid ? "px-2 pb-8 pt-1.5" : "px-1.5 pb-6 pt-1",
+        )}
+      >
         <span
           className={cn(
-            "line-clamp-2 max-w-full text-left text-[10px] font-semibold leading-tight",
+            "line-clamp-2 max-w-full text-left font-semibold leading-tight",
+            fluid ? "text-xs" : "text-[10px]",
             thumbUrl
-              ? "inline-block rounded bg-black/55 px-1 py-0.5 text-white"
+              ? "inline-block rounded bg-black/55 px-1.5 py-0.5 text-white"
               : "text-foreground",
           )}
         >
           {label}
         </span>
       </div>
-      <span className="absolute bottom-1 left-1 z-10 rounded bg-black/65 px-1 py-0.5 text-[10px] font-semibold tabular-nums text-white shadow-sm">
+      <span
+        className={cn(
+          "absolute z-10 rounded bg-black/65 font-semibold tabular-nums text-white shadow-sm",
+          fluid
+            ? "bottom-1.5 left-1.5 px-1.5 py-0.5 text-xs"
+            : "bottom-1 left-1 px-1 py-0.5 text-[10px]",
+        )}
+      >
         {index + 1}
       </span>
     </div>
@@ -103,6 +128,7 @@ function SortableSlideRow({
   activeIndex,
   label,
   thumbUrl,
+  fluid,
   onSelect,
   onRemovePageAtIndex,
   canRemovePage,
@@ -113,6 +139,7 @@ function SortableSlideRow({
   activeIndex: number;
   label: string;
   thumbUrl?: string;
+  fluid?: boolean;
   onSelect: (i: number) => void;
   onRemovePageAtIndex?: (i: number) => void;
   canRemovePage?: boolean;
@@ -152,7 +179,8 @@ function SortableSlideRow({
   };
 
   const rowClass = cn(
-    "flex min-w-0 items-stretch gap-0.5 rounded-md border border-transparent p-0.5",
+    "flex min-w-0 items-stretch rounded-md border border-transparent",
+    fluid ? "gap-1 p-1" : "gap-0.5 p-0.5",
     "cursor-grab touch-none active:cursor-grabbing",
     isDragging && "relative z-[1] opacity-[0.35]",
   );
@@ -236,8 +264,12 @@ function SortableSlideRow({
         {...attributes}
         {...listeners}
       >
-        <button type="button" onClick={() => onSelect(index)} className={slideRowClass(index === activeIndex)}>
-          <SlideCardPreview thumbUrl={thumbUrl} index={index} label={label} />
+        <button
+          type="button"
+          onClick={() => onSelect(index)}
+          className={slideRowClass(index === activeIndex, fluid)}
+        >
+          <SlideCardPreview fluid={fluid} thumbUrl={thumbUrl} index={index} label={label} />
         </button>
       </div>
       {menuPortal}
@@ -250,18 +282,29 @@ function StaticSlideRow({
   activeIndex,
   label,
   thumbUrl,
+  fluid,
   onSelect,
 }: {
   index: number;
   activeIndex: number;
   label: string;
   thumbUrl?: string;
+  fluid?: boolean;
   onSelect: (i: number) => void;
 }) {
   return (
-    <div className="flex min-w-0 items-stretch gap-0.5 rounded-md border border-transparent p-0.5">
-      <button type="button" onClick={() => onSelect(index)} className={slideRowClass(index === activeIndex)}>
-        <SlideCardPreview thumbUrl={thumbUrl} index={index} label={label} />
+    <div
+      className={cn(
+        "flex min-w-0 items-stretch rounded-md border border-transparent",
+        fluid ? "gap-1 p-1" : "gap-0.5 p-0.5",
+      )}
+    >
+      <button
+        type="button"
+        onClick={() => onSelect(index)}
+        className={slideRowClass(index === activeIndex, fluid)}
+      >
+        <SlideCardPreview fluid={fluid} thumbUrl={thumbUrl} index={index} label={label} />
       </button>
     </div>
   );
@@ -272,20 +315,28 @@ function DragOverlayRow({
   label,
   active,
   thumbUrl,
+  fluid,
 }: {
   index: number;
   label: string;
   active: boolean;
   thumbUrl?: string;
+  fluid?: boolean;
 }) {
   return (
     <div
       className={cn(
-        "flex min-w-0 cursor-grabbing items-stretch gap-0.5 rounded-md border border-primary/40 bg-card p-0.5 shadow-lg",
+        "flex min-w-0 cursor-grabbing items-stretch rounded-md border border-primary/40 bg-card shadow-lg",
+        fluid ? "gap-1 p-1" : "gap-0.5 p-0.5",
       )}
     >
-      <div className={cn(slideRowClass(active), "pointer-events-none min-w-0 w-full flex-1")}>
-        <SlideCardPreview thumbUrl={thumbUrl} index={index} label={label} />
+      <div
+        className={cn(
+          slideRowClass(active, fluid),
+          "pointer-events-none min-w-0 w-full flex-1",
+        )}
+      >
+        <SlideCardPreview fluid={fluid} thumbUrl={thumbUrl} index={index} label={label} />
       </div>
     </div>
   );
@@ -304,6 +355,7 @@ export function BookPageSidebar({
   onRemovePageAtIndex,
   canRemovePage,
   onDuplicatePageAtIndex,
+  fluid = false,
 }: BookPageSidebarProps) {
   const edit = mode === "edit";
   const reorder = Boolean(edit && onReorderPages);
@@ -352,6 +404,8 @@ export function BookPageSidebar({
     return thumbnailsByKey[k];
   };
 
+  const listGap = fluid ? "gap-3.5 p-3" : "gap-2.5 p-2";
+
   const listBody =
     reorder && sortableIds.length > 0 ? (
       <DndContext
@@ -362,11 +416,12 @@ export function BookPageSidebar({
         onDragCancel={handleDragCancel}
       >
         <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-          <div className="flex flex-col gap-2.5 p-2">
+          <div className={cn("flex flex-col", listGap)}>
             {sortableIds.map((id, i) => (
               <SortableSlideRow
                 key={id}
                 id={id}
+                fluid={fluid}
                 index={i}
                 activeIndex={activeIndex}
                 label={slideDisplayLabel(pageLabels?.[i], i)}
@@ -382,6 +437,7 @@ export function BookPageSidebar({
         <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.25, 1, 0.5, 1)" }}>
           {activeDragId != null && activeOverlayIndex >= 0 ? (
             <DragOverlayRow
+              fluid={fluid}
               index={activeOverlayIndex}
               label={overlayLabel}
               active={activeOverlayIndex === activeIndex}
@@ -391,10 +447,11 @@ export function BookPageSidebar({
         </DragOverlay>
       </DndContext>
     ) : (
-      <div className="flex flex-col gap-2.5 p-2">
+      <div className={cn("flex flex-col", listGap)}>
         {Array.from({ length: pageCount }, (_, i) => (
           <StaticSlideRow
             key={pageKeys?.[i] ?? `page-${i}`}
+            fluid={fluid}
             index={i}
             activeIndex={activeIndex}
             label={slideDisplayLabel(pageLabels?.[i], i)}
@@ -410,22 +467,42 @@ export function BookPageSidebar({
     );
 
   return (
-    <aside className="flex h-full min-h-0 w-[13.75rem] max-h-full shrink-0 flex-col overflow-hidden border-r border-border bg-card/50 sm:w-[15.5rem]">
+    <aside
+      className={cn(
+        "flex h-full min-h-0 max-h-full flex-col overflow-hidden bg-card/50",
+        fluid
+          ? "w-full min-w-0 shrink-0 border-0"
+          : "w-[13.75rem] shrink-0 border-r border-border sm:w-[15.5rem]",
+      )}
+    >
       <div
-        className="flex shrink-0 items-center gap-2 border-b border-border px-2 py-2"
+        className={cn(
+          "flex shrink-0 items-center gap-2 border-b border-border",
+          fluid ? "px-3 py-2.5" : "px-2 py-2",
+        )}
         title={reorder ? "슬라이드 줄 전체를 드래그해 순서를 바꿀 수 있습니다." : undefined}
       >
-        <FileStack className="size-4 shrink-0 text-muted-foreground" aria-hidden />
-        <span className="text-xs font-medium text-muted-foreground">페이지</span>
+        <FileStack
+          className={cn("shrink-0 text-muted-foreground", fluid ? "size-5" : "size-4")}
+          aria-hidden
+        />
+        <span className={cn("font-medium text-muted-foreground", fluid ? "text-sm" : "text-xs")}>
+          페이지
+        </span>
       </div>
       {/* basis-0: flex 자식이 콘텐츠 높이만큼 밀고 늘어나지 않게 — 목록만 스크롤, 하단 버튼 고정 */}
       <div className="min-h-0 flex-1 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
         {listBody}
       </div>
       {edit ? (
-        <div className="flex shrink-0 flex-col gap-1 border-t border-border bg-card/50 p-2">
+        <div
+          className={cn(
+            "flex shrink-0 flex-col border-t border-border bg-card/50",
+            fluid ? "gap-2 p-3" : "gap-1 p-2",
+          )}
+        >
           <Button type="button" variant="secondary" size="sm" className="w-full" onClick={onAddPage}>
-            <Plus className="mr-1 size-3.5" aria-hidden />
+            <Plus className={cn("mr-1", fluid ? "size-4" : "size-3.5")} aria-hidden />
             페이지 추가
           </Button>
           <Button
@@ -436,7 +513,7 @@ export function BookPageSidebar({
             disabled={!canRemovePage || !onRemovePageAtIndex}
             onClick={() => onRemovePageAtIndex?.(activeIndex)}
           >
-            <Trash2 className="mr-1 size-3.5" aria-hidden />
+            <Trash2 className={cn("mr-1", fluid ? "size-4" : "size-3.5")} aria-hidden />
             현재 삭제
           </Button>
         </div>

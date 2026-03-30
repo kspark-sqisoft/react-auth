@@ -1,3 +1,5 @@
+/* eslint-disable react-refresh/only-export-components --
+   Drag constants, types, and helpers are exported beside BookSlideCanvas for the editor. */
 import {
   useCallback,
   useEffect,
@@ -5,13 +7,12 @@ import {
   useRef,
   useState,
   type DragEvent,
-  type MutableRefObject,
 } from "react";
 import { getBookImageIfReady, loadBookImage } from "@/lib/book-image-cache";
 import { createPortal } from "react-dom";
-import { Group, Image as KonvaImage, Layer, Rect, Stage, Transformer } from "react-konva";
+import { Group, Image as KonvaImage, Layer, Line, Rect, Stage, Transformer } from "react-konva";
 import type Konva from "konva";
-import { Pause, Play, Square } from "lucide-react";
+import { FolderOpen, Library, Pause, Play, Square } from "lucide-react";
 import {
   ContextMenuFloatingItem,
   ContextMenuFloatingPanel,
@@ -30,6 +31,7 @@ import {
   resolveBookElementRotation,
   resolveBookMediaObjectFit,
   snapKonvaBookNodePositionToGrid,
+  buildBookDrawingElement,
   isBookElementLocked,
   isBookElementVisible,
   type BookCanvasElement,
@@ -82,10 +84,47 @@ function useBookImage(src: string) {
 /** 위젯 팔레트 HTML5 DnD와 동일한 값 */
 export const BOOK_WIDGET_DRAG_TYPE = "application/x-book-widget";
 
+/** 미디어 라이브러리에서 슬라이드로 드래그할 때 사용 */
+export const BOOK_LIBRARY_DRAG_TYPE = "application/x-book-library-media";
+
+export type BookLibraryDragPayload = {
+  kind: "image" | "video";
+  src: string;
+  posterSrc: string | null;
+};
+
+/** 이미지·동영상 위젯 우클릭 → 로컬 파일로 `src` 교체 요청 */
+export type BookReplaceMediaFromFileRequest = {
+  elementId: string;
+  kind: "image" | "video";
+};
+
+export function parseLibraryDropPayload(
+  e: DragEvent<HTMLElement>,
+): BookLibraryDragPayload | null {
+  try {
+    const raw = e.dataTransfer.getData(BOOK_LIBRARY_DRAG_TYPE);
+    if (!raw) return null;
+    const o = JSON.parse(raw) as unknown;
+    if (!o || typeof o !== "object") return null;
+    const r = o as Record<string, unknown>;
+    if (r.kind !== "image" && r.kind !== "video") return null;
+    if (typeof r.src !== "string" || r.src.length === 0) return null;
+    const posterSrc =
+      r.posterSrc === null || typeof r.posterSrc === "string" ? r.posterSrc : null;
+    return { kind: r.kind, src: r.src, posterSrc };
+  } catch {
+    return null;
+  }
+}
+
 /** 위젯 **중심**이 슬라이드 가로·세로 가운데에서 이 거리(논리 px) 안이면 기준선 표시 */
 export const DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX = 10;
 
 export type BookDropWidgetKind = "text" | "image" | "video" | "weather" | "digitalClock";
+
+/** `id: null` = 선택 해제. `shiftKey` = 기존 선택에 토글 추가 */
+export type BookCanvasSelectDetail = { id: string | null; shiftKey?: boolean };
 
 type BookSlideCanvasProps = {
   pageWidth: number;
@@ -96,11 +135,16 @@ type BookSlideCanvasProps = {
   scale: number;
   elements: BookCanvasElement[];
   mode: "edit" | "view";
-  selectedId: string | null;
-  onSelect: (id: string | null) => void;
+  selectedIds: readonly string[];
+  onSelect: (detail: BookCanvasSelectDetail) => void;
   onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
   /** 편집 모드에서 팔레트 위젯을 캔버스로 드롭 */
   onDropWidget?: (point: { x: number; y: number }, kind: BookDropWidgetKind) => void;
+  /** 편집 모드: 미디어 라이브러리에서 업로드된 URL을 슬라이드에 배치 */
+  onDropLibraryMedia?: (
+    point: { x: number; y: number },
+    payload: BookLibraryDragPayload,
+  ) => void;
   /** 편집 모드: 요소 배열 순서(앞=아래, 뒤=위) 조정 — 저장됨 */
   onReorderZ?: (elementId: string, op: ElementZOrderOp) => void;
   /** 편집 모드: 요소 우클릭 메뉴에서 삭제 */
@@ -109,10 +153,117 @@ type BookSlideCanvasProps = {
   centerGuideThresholdPx?: number;
   /** 드래그 스냅 그리드 간격(논리 px). 미지정 시 `BOOK_CANVAS_DRAG_GRID_PX` */
   dragGridPx?: number;
+  /** `draw`: 슬라이드에서 자유 곡선(그 외는 선택·드래그) */
+  editInteractionTool?: "default" | "draw";
+  drawingStrokeColor?: string;
+  drawingStrokeWidth?: number;
+  /** 새 요소 추가(자유 그리기 확정 시) */
+  onAppendElement?: (el: BookCanvasElement) => void;
+  /** 이미지·동영상: 우클릭 → 탐색기로 파일 선택 후 업로드·교체 */
+  onRequestReplaceMediaFromFile?: (req: BookReplaceMediaFromFileRequest) => void;
+  /** 이미지·동영상: 우클릭 → 미디어 라이브러리에서 선택해 교체 */
+  onRequestPickLibraryMediaForReplace?: (req: { elementId: string }) => void;
+  /** `false`면 라이브러리 교체 메뉴 숨김(예: `/books/new`) */
+  mediaLibraryReplaceEnabled?: boolean;
 };
 
 function clampSize(w: number, h: number, min = 24) {
   return { w: Math.max(min, w), h: Math.max(min, h) };
+}
+
+function BookFreehandDrawLayer({
+  scale,
+  pageWidth,
+  pageHeight,
+  strokeColor,
+  strokeWidth,
+  onCommit,
+}: {
+  scale: number;
+  pageWidth: number;
+  pageHeight: number;
+  strokeColor: string;
+  strokeWidth: number;
+  onCommit: (pts: { x: number; y: number }[]) => void;
+}) {
+  const rootRef = useRef<HTMLDivElement>(null);
+  const activeRef = useRef<{ pointerId: number; pts: { x: number; y: number }[] } | null>(
+    null,
+  );
+  const [preview, setPreview] = useState<{ x: number; y: number }[] | null>(null);
+
+  const toLogical = (clientX: number, clientY: number) => {
+    const el = rootRef.current;
+    if (!el) return { x: 0, y: 0 };
+    const r = el.getBoundingClientRect();
+    const x = (clientX - r.left) / scale;
+    const y = (clientY - r.top) / scale;
+    return {
+      x: Math.max(0, Math.min(pageWidth, x)),
+      y: Math.max(0, Math.min(pageHeight, y)),
+    };
+  };
+
+  return (
+    <div
+      ref={rootRef}
+      className="absolute inset-0 z-[8] touch-none"
+      style={{ cursor: "crosshair" }}
+      onPointerDown={(e) => {
+        if (e.button !== 0) return;
+        e.preventDefault();
+        e.stopPropagation();
+        (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
+        const p0 = toLogical(e.clientX, e.clientY);
+        activeRef.current = { pointerId: e.pointerId, pts: [p0] };
+        setPreview([p0]);
+      }}
+      onPointerMove={(e) => {
+        const a = activeRef.current;
+        if (!a || e.pointerId !== a.pointerId) return;
+        a.pts.push(toLogical(e.clientX, e.clientY));
+        setPreview([...a.pts]);
+      }}
+      onPointerUp={(e) => {
+        const a = activeRef.current;
+        if (!a || e.pointerId !== a.pointerId) return;
+        (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+        activeRef.current = null;
+        setPreview(null);
+        if (a.pts.length >= 2) onCommit(a.pts);
+      }}
+      onPointerCancel={(e) => {
+        const a = activeRef.current;
+        if (a && e.pointerId === a.pointerId) {
+          try {
+            (e.currentTarget as HTMLElement).releasePointerCapture(e.pointerId);
+          } catch {
+            /* ignore */
+          }
+          activeRef.current = null;
+          setPreview(null);
+        }
+      }}
+    >
+      {preview && preview.length > 1 ? (
+        <svg
+          className="pointer-events-none absolute left-0 top-0 overflow-visible"
+          width={pageWidth * scale}
+          height={pageHeight * scale}
+          aria-hidden
+        >
+          <polyline
+            fill="none"
+            stroke={strokeColor}
+            strokeWidth={strokeWidth * scale}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            points={preview.map((p) => `${p.x * scale},${p.y * scale}`).join(" ")}
+          />
+        </svg>
+      ) : null}
+    </div>
+  );
 }
 
 /**
@@ -150,6 +301,8 @@ type BookShapeLiveSync = {
   /** 드래그 중 논리 좌표 그리드 스냅 후 `dragLive` 갱신 */
   onDragMoveSnapGrid: (elementId: string, node: Konva.Node, logicalW: number, logicalH: number) => void;
   clearDragLive: () => void;
+  /** 드래그 종료: 다중 선택 시 함께 이동, 아니면 해당 요소만 */
+  commitDragEndPosition: (elementId: string, node: Konva.Node, logicalW: number, logicalH: number) => void;
   onTransformLiveStart: (elementId: string, node: Konva.Node) => void;
   onTransformLiveMove: (elementId: string, node: Konva.Node) => void;
   clearTransformLive: () => void;
@@ -409,17 +562,29 @@ export function BookSlideCanvas({
   scale,
   elements,
   mode,
-  selectedId,
+  selectedIds,
   onSelect,
   onElementChange,
   onDropWidget,
+  onDropLibraryMedia,
   onReorderZ,
   onDeleteElement,
   centerGuideThresholdPx = DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
   dragGridPx = BOOK_CANVAS_DRAG_GRID_PX,
+  editInteractionTool = "default",
+  drawingStrokeColor = "#0f172a",
+  drawingStrokeWidth = 4,
+  onAppendElement,
+  onRequestReplaceMediaFromFile,
+  onRequestPickLibraryMediaForReplace,
+  mediaLibraryReplaceEnabled = false,
 }: BookSlideCanvasProps) {
   const trRef = useRef<Konva.Transformer>(null);
-  const selectedNodeRef = useRef<Konva.Node>(null);
+  const konvaNodeByIdRef = useRef<Map<string, Konva.Node>>(new Map());
+  const groupDragSnapRef = useRef<{
+    leaderId: string;
+    origins: Map<string, { x: number; y: number }>;
+  } | null>(null);
   const videoBarHideTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
   const [videoBarVisible, setVideoBarVisible] = useState<Record<string, boolean>>({});
   const [zMenu, setZMenu] = useState<{ x: number; y: number; elementId: string } | null>(null);
@@ -431,6 +596,14 @@ export function BookSlideCanvas({
     () => elements.filter(isBookElementVisible),
     [elements],
   );
+
+  const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+
+  const registerKonvaNode = useCallback((elementId: string, node: Konva.Node | null) => {
+    const m = konvaNodeByIdRef.current;
+    if (node) m.set(elementId, node);
+    else m.delete(elementId);
+  }, []);
 
   const [dragLive, setDragLive] = useState<BookDragLive | null>(null);
   const [transformLive, setTransformLive] = useState<BookTransformLive | null>(null);
@@ -455,7 +628,7 @@ export function BookSlideCanvas({
     setTransformLive(null);
   }, []);
 
-  const onDragLiveStart = useCallback((elementId: string, node: Konva.Node) => {
+  const onDragLiveStartBase = useCallback((elementId: string, node: Konva.Node) => {
     if (dragLiveRafRef.current != null) {
       cancelAnimationFrame(dragLiveRafRef.current);
       dragLiveRafRef.current = null;
@@ -463,6 +636,27 @@ export function BookSlideCanvas({
     clearTransformLive();
     setDragLive({ id: elementId, cx: node.x(), cy: node.y() });
   }, [clearTransformLive]);
+
+  const onDragLiveStart = useCallback(
+    (elementId: string, node: Konva.Node) => {
+      onDragLiveStartBase(elementId, node);
+      const movable = selectedIds.filter((id) => {
+        const e = elements.find((x) => x.id === id);
+        return e && isBookElementVisible(e) && !isBookElementLocked(e);
+      });
+      if (movable.length > 1 && movable.includes(elementId)) {
+        const origins = new Map<string, { x: number; y: number }>();
+        for (const id of movable) {
+          const e = elements.find((x) => x.id === id);
+          if (e) origins.set(id, { x: e.x, y: e.y });
+        }
+        groupDragSnapRef.current = { leaderId: elementId, origins };
+      } else {
+        groupDragSnapRef.current = null;
+      }
+    },
+    [elements, onDragLiveStartBase, selectedIds],
+  );
 
   const onDragLiveMove = useCallback((elementId: string, node: Konva.Node) => {
     if (dragLiveRafRef.current != null) cancelAnimationFrame(dragLiveRafRef.current);
@@ -525,6 +719,42 @@ export function BookSlideCanvas({
     };
   }, []);
 
+  const commitDragEndPosition = useCallback(
+    (elementId: string, node: Konva.Node, logicalW: number, logicalH: number) => {
+      snapKonvaBookNodePositionToGrid(
+        node,
+        {
+          width: logicalW,
+          height: logicalH,
+          rotation: node.rotation(),
+        },
+        dragGridPx,
+      );
+      const tl = konvaBookTopLeftFromNode(node);
+      const g = groupDragSnapRef.current;
+      if (g && g.leaderId === elementId && g.origins.size > 1) {
+        const o0 = g.origins.get(elementId);
+        if (o0) {
+          const dx = tl.x - o0.x;
+          const dy = tl.y - o0.y;
+          for (const [id, pos] of g.origins) {
+            if (id === elementId) {
+              onElementChange(id, { x: tl.x, y: tl.y });
+            } else {
+              onElementChange(id, { x: pos.x + dx, y: pos.y + dy });
+            }
+          }
+        }
+        groupDragSnapRef.current = null;
+      } else {
+        onElementChange(elementId, { x: tl.x, y: tl.y });
+        groupDragSnapRef.current = null;
+      }
+      clearDragLive();
+    },
+    [clearDragLive, dragGridPx, onElementChange],
+  );
+
   const shapeLiveSync: BookShapeLiveSync = useMemo(
     () => ({
       dragLive,
@@ -545,6 +775,7 @@ export function BookSlideCanvas({
         onDragLiveMove(elementId, node);
       },
       clearDragLive,
+      commitDragEndPosition,
       onTransformLiveStart,
       onTransformLiveMove,
       clearTransformLive,
@@ -556,6 +787,7 @@ export function BookSlideCanvas({
       onDragLiveStart,
       onDragLiveMove,
       clearDragLive,
+      commitDragEndPosition,
       onTransformLiveStart,
       onTransformLiveMove,
       clearTransformLive,
@@ -637,7 +869,7 @@ export function BookSlideCanvas({
   }, [zMenu]);
 
   useEffect(() => {
-    if (mode !== "edit" || !selectedId || zMenu) return;
+    if (mode !== "edit" || selectedIds.length === 0 || zMenu) return;
     const onKeyDown = (e: KeyboardEvent) => {
       if (
         e.key !== "ArrowUp" &&
@@ -657,8 +889,13 @@ export function BookSlideCanvas({
       ) {
         return;
       }
-      const el = elements.find((x) => x.id === selectedId);
-      if (!el || isBookElementLocked(el)) return;
+      const movers = selectedIds
+        .map((id) => elements.find((x) => x.id === id))
+        .filter(
+          (el): el is BookCanvasElement =>
+            el != null && !isBookElementLocked(el) && isBookElementVisible(el),
+        );
+      if (movers.length === 0) return;
       e.preventDefault();
       const step = e.shiftKey ? 10 : 1;
       let dx = 0;
@@ -667,16 +904,18 @@ export function BookSlideCanvas({
       else if (e.key === "ArrowRight") dx = step;
       else if (e.key === "ArrowUp") dy = -step;
       else dy = step;
-      onElementChange(selectedId, { x: el.x + dx, y: el.y + dy });
+      for (const el of movers) {
+        onElementChange(el.id, { x: el.x + dx, y: el.y + dy });
+      }
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [mode, selectedId, zMenu, elements, onElementChange]);
+  }, [mode, selectedIds, zMenu, elements, onElementChange]);
 
   const openZMenu = useCallback(
     (elementId: string, clientX: number, clientY: number) => {
       if (mode !== "edit") return;
-      onSelect(elementId);
+      onSelect({ id: elementId });
       setZMenu({ x: clientX, y: clientY, elementId });
     },
     [mode, onSelect],
@@ -712,14 +951,18 @@ export function BookSlideCanvas({
 
   useEffect(() => {
     const tr = trRef.current;
-    const node = selectedNodeRef.current;
-    const sel = selectedId ? elements.find((e) => e.id === selectedId) : undefined;
+    const only =
+      selectedIds.length === 1 && selectedIds[0] != null ? selectedIds[0] : null;
+    const node = only ? konvaNodeByIdRef.current.get(only) : undefined;
+    const sel = only ? elements.find((e) => e.id === only) : undefined;
     const selectedOnCanvas =
-      Boolean(selectedId) &&
+      Boolean(only) &&
       sel != null &&
+      sel.type !== "drawing" &&
       isBookElementVisible(sel) &&
-      !isBookElementLocked(sel);
-    if (mode !== "edit" || !tr || !node || !selectedId || !selectedOnCanvas) {
+      !isBookElementLocked(sel) &&
+      node != null;
+    if (mode !== "edit" || !tr || !selectedOnCanvas) {
       tr?.nodes([]);
       tr?.getLayer()?.batchDraw();
       return;
@@ -728,7 +971,7 @@ export function BookSlideCanvas({
     if (isLiveInteracting) return;
     tr.nodes([node]);
     tr.getLayer()?.batchDraw();
-  }, [mode, selectedId, elements, visibleElements, pageWidth, pageHeight, isLiveInteracting]);
+  }, [mode, selectedIds, elements, visibleElements, pageWidth, pageHeight, isLiveInteracting]);
 
   const sw = pageWidth * scale;
   const sh = pageHeight * scale;
@@ -749,7 +992,10 @@ export function BookSlideCanvas({
     };
   }, [mode, dragLive, pageWidth, pageHeight, scale, centerGuideThresholdPx]);
 
-  const dropEnabled = mode === "edit" && Boolean(onDropWidget);
+  const dropEnabled =
+    mode === "edit" &&
+    editInteractionTool === "default" &&
+    (Boolean(onDropWidget) || Boolean(onDropLibraryMedia));
 
   const parseDropKind = (e: DragEvent): BookDropWidgetKind | null => {
     const raw =
@@ -767,7 +1013,19 @@ export function BookSlideCanvas({
   };
 
   const handleDrop = (e: DragEvent<HTMLDivElement>) => {
-    if (!dropEnabled || !onDropWidget) return;
+    if (!dropEnabled) return;
+    const lib = onDropLibraryMedia ? parseLibraryDropPayload(e) : null;
+    if (lib && onDropLibraryMedia) {
+      e.preventDefault();
+      const rect = e.currentTarget.getBoundingClientRect();
+      const lx = (e.clientX - rect.left) / scale;
+      const ly = (e.clientY - rect.top) / scale;
+      const x = Math.max(0, Math.min(lx, pageWidth - 24));
+      const y = Math.max(0, Math.min(ly, pageHeight - 24));
+      onDropLibraryMedia({ x, y }, lib);
+      return;
+    }
+    if (!onDropWidget) return;
     e.preventDefault();
     const kind = parseDropKind(e);
     if (!kind) return;
@@ -785,6 +1043,7 @@ export function BookSlideCanvas({
       className={cn(
         "relative inline-block ring-1 ring-border shadow-sm",
         dropEnabled && "ring-primary/40",
+        mode === "edit" && editInteractionTool === "draw" && "ring-2 ring-primary/45",
       )}
       onDragOver={
         dropEnabled
@@ -859,13 +1118,12 @@ export function BookSlideCanvas({
             onMouseDown={(e) => {
               if (mode !== "edit") return;
               e.cancelBubble = true;
-              onSelect(null);
+              onSelect({ id: null });
             }}
           />
           {visibleElements.map((el) => {
-            const isSelected = el.id === selectedId;
+            const isSelected = selectedIdSet.has(el.id);
             const locked = isBookElementLocked(el);
-            const attachRef = isSelected && mode === "edit" && !locked;
             if (el.type === "text") {
               return (
                 <BookTextHitShape
@@ -873,8 +1131,7 @@ export function BookSlideCanvas({
                   el={el}
                   locked={locked}
                   liveSync={shapeLiveSync}
-                  attachRef={attachRef}
-                  selectedRef={selectedNodeRef}
+                  registerKonvaNode={registerKonvaNode}
                   mode={mode}
                   onSelect={onSelect}
                   onElementChange={onElementChange}
@@ -890,8 +1147,7 @@ export function BookSlideCanvas({
                   el={el}
                   locked={locked}
                   liveSync={shapeLiveSync}
-                  attachRef={attachRef}
-                  selectedRef={selectedNodeRef}
+                  registerKonvaNode={registerKonvaNode}
                   mode={mode}
                   onSelect={onSelect}
                   onElementChange={onElementChange}
@@ -907,8 +1163,7 @@ export function BookSlideCanvas({
                   el={el}
                   locked={locked}
                   liveSync={shapeLiveSync}
-                  attachRef={attachRef}
-                  selectedRef={selectedNodeRef}
+                  registerKonvaNode={registerKonvaNode}
                   mode={mode}
                   onSelect={onSelect}
                   onElementChange={onElementChange}
@@ -920,12 +1175,11 @@ export function BookSlideCanvas({
             if (el.type === "image") {
               return (
                 <BookImageShape
-                  key={el.id}
+                  key={`${el.id}:${el.src}`}
                   el={el}
                   locked={locked}
                   liveSync={shapeLiveSync}
-                  attachRef={attachRef}
-                  selectedRef={selectedNodeRef}
+                  registerKonvaNode={registerKonvaNode}
                   mode={mode}
                   onSelect={onSelect}
                   onElementChange={onElementChange}
@@ -934,14 +1188,29 @@ export function BookSlideCanvas({
                 />
               );
             }
+            if (el.type === "drawing") {
+              return (
+                <BookDrawingHitShape
+                  key={el.id}
+                  el={el}
+                  locked={locked}
+                  liveSync={shapeLiveSync}
+                  registerKonvaNode={registerKonvaNode}
+                  mode={mode}
+                  isSelected={isSelected}
+                  onSelect={onSelect}
+                  zMenuEnabled={elementContextMenuEnabled && !locked}
+                  onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                />
+              );
+            }
             return (
               <BookVideoBox
-                key={el.id}
+                key={`${el.id}:${el.src}`}
                 el={el}
                 locked={locked}
                 liveSync={shapeLiveSync}
-                attachRef={attachRef}
-                selectedRef={selectedNodeRef}
+                registerKonvaNode={registerKonvaNode}
                 mode={mode}
                 onSelect={onSelect}
                 onElementChange={onElementChange}
@@ -952,7 +1221,7 @@ export function BookSlideCanvas({
               />
             );
           })}
-          {mode === "edit" && selectedId ? (
+          {mode === "edit" && selectedIds.length === 1 ? (
             <Transformer
               ref={trRef}
               rotateEnabled
@@ -971,7 +1240,20 @@ export function BookSlideCanvas({
         </Layer>
         </Stage>
       </div>
-      {mode === "edit" && elements.length === 0 ? (
+      {mode === "edit" && editInteractionTool === "draw" && onAppendElement ? (
+        <BookFreehandDrawLayer
+          scale={scale}
+          pageWidth={pageWidth}
+          pageHeight={pageHeight}
+          strokeColor={drawingStrokeColor}
+          strokeWidth={drawingStrokeWidth}
+          onCommit={(pts) => {
+            const el = buildBookDrawingElement(pts, drawingStrokeColor, drawingStrokeWidth);
+            if (el) onAppendElement(el);
+          }}
+        />
+      ) : null}
+      {mode === "edit" && elements.length === 0 && editInteractionTool !== "draw" ? (
         <div
           className="pointer-events-none absolute inset-0 z-[6] flex items-center justify-center px-4"
           aria-hidden
@@ -1002,7 +1284,7 @@ export function BookSlideCanvas({
                   el={el}
                   scale={scale}
                   mode={mode}
-                  isSelected={el.id === selectedId}
+                  isSelected={selectedIdSet.has(el.id)}
                   liveFrame={textLive}
                   onReportLogicalHeight={
                     mode === "edit"
@@ -1032,7 +1314,7 @@ export function BookSlideCanvas({
                   el={el}
                   scale={scale}
                   mode={mode}
-                  isSelected={el.id === selectedId}
+                  isSelected={selectedIdSet.has(el.id)}
                   liveFrame={frameLive}
                 />
               );
@@ -1043,7 +1325,7 @@ export function BookSlideCanvas({
                 el={el}
                 scale={scale}
                 mode={mode}
-                isSelected={el.id === selectedId}
+                isSelected={selectedIdSet.has(el.id)}
                 liveFrame={frameLive}
               />
             );
@@ -1071,6 +1353,57 @@ export function BookSlideCanvas({
                   슬라이드 전체(0,0)로 맞추기
                 </ContextMenuFloatingItem>
               </div>
+              {(() => {
+                const zTarget = elements.find((e) => e.id === zMenu.elementId);
+                const mk =
+                  zTarget?.type === "image"
+                    ? ("image" as const)
+                    : zTarget?.type === "video"
+                      ? ("video" as const)
+                      : null;
+                const showFile = mk && onRequestReplaceMediaFromFile;
+                const showLib =
+                  mk && mediaLibraryReplaceEnabled && onRequestPickLibraryMediaForReplace;
+                if (!showFile && !showLib) return null;
+                return (
+                  <>
+                    <div
+                      className="-mx-1 my-0.5 h-px shrink-0 bg-border"
+                      role="separator"
+                      aria-hidden="true"
+                    />
+                    <div className="flex flex-col gap-0.5" role="group" aria-label="미디어 교체">
+                      {showFile ? (
+                        <ContextMenuFloatingItem
+                          onClick={() => {
+                            onRequestReplaceMediaFromFile?.({
+                              elementId: zMenu.elementId,
+                              kind: mk,
+                            });
+                            setZMenu(null);
+                          }}
+                        >
+                          <FolderOpen className="opacity-70" aria-hidden />
+                          파일에서 바꾸기…
+                        </ContextMenuFloatingItem>
+                      ) : null}
+                      {showLib ? (
+                        <ContextMenuFloatingItem
+                          onClick={() => {
+                            onRequestPickLibraryMediaForReplace?.({
+                              elementId: zMenu.elementId,
+                            });
+                            setZMenu(null);
+                          }}
+                        >
+                          <Library className="opacity-70" aria-hidden />
+                          미디어 라이브러리에서 바꾸기…
+                        </ContextMenuFloatingItem>
+                      ) : null}
+                    </div>
+                  </>
+                );
+              })()}
               {onReorderZ || onDeleteElement ? (
                 <div
                   className="-mx-1 my-0.5 h-px shrink-0 bg-border"
@@ -1134,13 +1467,115 @@ export function BookSlideCanvas({
   );
 }
 
+function BookDrawingHitShape({
+  el,
+  locked,
+  liveSync,
+  registerKonvaNode,
+  mode,
+  isSelected,
+  onSelect,
+  zMenuEnabled,
+  onZMenu,
+}: {
+  el: Extract<BookCanvasElement, { type: "drawing" }>;
+  locked: boolean;
+  liveSync: BookShapeLiveSync;
+  registerKonvaNode: (elementId: string, node: Konva.Node | null) => void;
+  mode: "edit" | "view";
+  isSelected: boolean;
+  onSelect: (detail: BookCanvasSelectDetail) => void;
+  zMenuEnabled: boolean;
+  onZMenu: (clientX: number, clientY: number) => void;
+}) {
+  const w = el.width;
+  const h = el.height;
+  const dOpacity = resolveBookElementOpacity(el.opacity);
+  const basePivot = bookElementPivotKonva(el);
+  const tf = liveSync.transformLive?.id === el.id ? liveSync.transformLive : null;
+  const dg = liveSync.dragLive?.id === el.id ? liveSync.dragLive : null;
+  let fw = w;
+  let fh = h;
+  let pivot = basePivot;
+  if (tf) {
+    fw = tf.width;
+    fh = tf.height;
+    pivot = {
+      cx: tf.cx,
+      cy: tf.cy,
+      offsetX: fw / 2,
+      offsetY: fh / 2,
+      rotation: tf.rotation,
+    };
+  } else if (dg) {
+    pivot = { ...basePivot, cx: dg.cx, cy: dg.cy };
+  }
+
+  return (
+    <Group
+      ref={(node) => {
+        registerKonvaNode(el.id, node);
+      }}
+      x={pivot.cx}
+      y={pivot.cy}
+      offsetX={pivot.offsetX}
+      offsetY={pivot.offsetY}
+      rotation={pivot.rotation}
+      opacity={dOpacity}
+      draggable={mode === "edit" && !locked}
+      onMouseDown={(e) => {
+        if (mode !== "edit") return;
+        e.cancelBubble = true;
+        onSelect({ id: el.id, shiftKey: e.evt.shiftKey });
+      }}
+      onContextMenu={
+        zMenuEnabled
+          ? (e) => {
+              e.cancelBubble = true;
+              e.evt.preventDefault();
+              onZMenu(e.evt.clientX, e.evt.clientY);
+            }
+          : undefined
+      }
+      onDragStart={
+        locked ? undefined : (e) => liveSync.onDragLiveStart(el.id, e.target)
+      }
+      onDragMove={
+        locked ? undefined : (e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)
+      }
+      onDragEnd={
+        locked
+          ? undefined
+          : (e) => {
+              liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
+            }
+      }
+    >
+      <Rect
+        width={fw}
+        height={fh}
+        fill="rgba(0,0,0,0.001)"
+        stroke={isSelected && mode === "edit" ? "#3b82f6" : "transparent"}
+        strokeWidth={2}
+      />
+      <Line
+        points={el.points}
+        stroke={el.stroke}
+        strokeWidth={el.strokeWidth}
+        lineCap="round"
+        lineJoin="round"
+        listening={false}
+      />
+    </Group>
+  );
+}
+
 /** 리치 텍스트는 HTML 오버레이로 그리고, Konva Rect는 조작·히트만 담당합니다. */
 function BookTextHitShape({
   el,
   locked,
   liveSync,
-  attachRef,
-  selectedRef,
+  registerKonvaNode,
   mode,
   onSelect,
   onElementChange,
@@ -1150,10 +1585,9 @@ function BookTextHitShape({
   el: Extract<BookCanvasElement, { type: "text" }>;
   locked: boolean;
   liveSync: BookShapeLiveSync;
-  attachRef: boolean;
-  selectedRef: MutableRefObject<Konva.Node | null>;
+  registerKonvaNode: (elementId: string, node: Konva.Node | null) => void;
   mode: "edit" | "view";
-  onSelect: (id: string | null) => void;
+  onSelect: (detail: BookCanvasSelectDetail) => void;
   onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
   zMenuEnabled: boolean;
   onZMenu: (clientX: number, clientY: number) => void;
@@ -1186,8 +1620,7 @@ function BookTextHitShape({
   return (
     <Rect
       ref={(node) => {
-        if (attachRef) selectedRef.current = node;
-        else if (selectedRef.current === node) selectedRef.current = null;
+        registerKonvaNode(el.id, node);
       }}
       x={pivot.cx}
       y={pivot.cy}
@@ -1207,7 +1640,7 @@ function BookTextHitShape({
       onMouseDown={(e) => {
         if (mode !== "edit") return;
         e.cancelBubble = true;
-        onSelect(el.id);
+        onSelect({ id: el.id, shiftKey: e.evt.shiftKey });
       }}
       onContextMenu={
         zMenuEnabled
@@ -1236,19 +1669,7 @@ function BookTextHitShape({
         locked
           ? undefined
           : (e) => {
-              const n = e.target;
-              snapKonvaBookNodePositionToGrid(
-                n,
-                {
-                  width: fw,
-                  height: fh,
-                  rotation: n.rotation(),
-                },
-                liveSync.dragGridPx,
-              );
-              const tl = konvaBookTopLeftFromNode(n);
-              onElementChange(el.id, { x: tl.x, y: tl.y });
-              liveSync.clearDragLive();
+              liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
             }
       }
       onTransformStart={
@@ -1295,8 +1716,7 @@ function BookDigitalClockHitShape({
   el,
   locked,
   liveSync,
-  attachRef,
-  selectedRef,
+  registerKonvaNode,
   mode,
   onSelect,
   onElementChange,
@@ -1306,10 +1726,9 @@ function BookDigitalClockHitShape({
   el: Extract<BookCanvasElement, { type: "digitalClock" }>;
   locked: boolean;
   liveSync: BookShapeLiveSync;
-  attachRef: boolean;
-  selectedRef: MutableRefObject<Konva.Node | null>;
+  registerKonvaNode: (elementId: string, node: Konva.Node | null) => void;
   mode: "edit" | "view";
-  onSelect: (id: string | null) => void;
+  onSelect: (detail: BookCanvasSelectDetail) => void;
   onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
   zMenuEnabled: boolean;
   onZMenu: (clientX: number, clientY: number) => void;
@@ -1342,8 +1761,7 @@ function BookDigitalClockHitShape({
   return (
     <Rect
       ref={(node) => {
-        if (attachRef) selectedRef.current = node;
-        else if (selectedRef.current === node) selectedRef.current = null;
+        registerKonvaNode(el.id, node);
       }}
       x={pivot.cx}
       y={pivot.cy}
@@ -1363,7 +1781,7 @@ function BookDigitalClockHitShape({
       onMouseDown={(e) => {
         if (mode !== "edit") return;
         e.cancelBubble = true;
-        onSelect(el.id);
+        onSelect({ id: el.id, shiftKey: e.evt.shiftKey });
       }}
       onContextMenu={
         zMenuEnabled
@@ -1384,19 +1802,7 @@ function BookDigitalClockHitShape({
         locked
           ? undefined
           : (e) => {
-              const n = e.target;
-              snapKonvaBookNodePositionToGrid(
-                n,
-                {
-                  width: fw,
-                  height: fh,
-                  rotation: n.rotation(),
-                },
-                liveSync.dragGridPx,
-              );
-              const tl = konvaBookTopLeftFromNode(n);
-              onElementChange(el.id, { x: tl.x, y: tl.y });
-              liveSync.clearDragLive();
+              liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
             }
       }
       onTransformStart={
@@ -1439,8 +1845,7 @@ function BookWeatherHitShape({
   el,
   locked,
   liveSync,
-  attachRef,
-  selectedRef,
+  registerKonvaNode,
   mode,
   onSelect,
   onElementChange,
@@ -1450,10 +1855,9 @@ function BookWeatherHitShape({
   el: Extract<BookCanvasElement, { type: "weather" }>;
   locked: boolean;
   liveSync: BookShapeLiveSync;
-  attachRef: boolean;
-  selectedRef: MutableRefObject<Konva.Node | null>;
+  registerKonvaNode: (elementId: string, node: Konva.Node | null) => void;
   mode: "edit" | "view";
-  onSelect: (id: string | null) => void;
+  onSelect: (detail: BookCanvasSelectDetail) => void;
   onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
   zMenuEnabled: boolean;
   onZMenu: (clientX: number, clientY: number) => void;
@@ -1486,8 +1890,7 @@ function BookWeatherHitShape({
   return (
     <Rect
       ref={(node) => {
-        if (attachRef) selectedRef.current = node;
-        else if (selectedRef.current === node) selectedRef.current = null;
+        registerKonvaNode(el.id, node);
       }}
       x={pivot.cx}
       y={pivot.cy}
@@ -1507,7 +1910,7 @@ function BookWeatherHitShape({
       onMouseDown={(e) => {
         if (mode !== "edit") return;
         e.cancelBubble = true;
-        onSelect(el.id);
+        onSelect({ id: el.id, shiftKey: e.evt.shiftKey });
       }}
       onContextMenu={
         zMenuEnabled
@@ -1528,19 +1931,7 @@ function BookWeatherHitShape({
         locked
           ? undefined
           : (e) => {
-              const n = e.target;
-              snapKonvaBookNodePositionToGrid(
-                n,
-                {
-                  width: fw,
-                  height: fh,
-                  rotation: n.rotation(),
-                },
-                liveSync.dragGridPx,
-              );
-              const tl = konvaBookTopLeftFromNode(n);
-              onElementChange(el.id, { x: tl.x, y: tl.y });
-              liveSync.clearDragLive();
+              liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
             }
       }
       onTransformStart={
@@ -1583,8 +1974,7 @@ function BookImageShape({
   el,
   locked,
   liveSync,
-  attachRef,
-  selectedRef,
+  registerKonvaNode,
   mode,
   onSelect,
   onElementChange,
@@ -1594,10 +1984,9 @@ function BookImageShape({
   el: Extract<BookCanvasElement, { type: "image" }>;
   locked: boolean;
   liveSync: BookShapeLiveSync;
-  attachRef: boolean;
-  selectedRef: MutableRefObject<Konva.Node | null>;
+  registerKonvaNode: (elementId: string, node: Konva.Node | null) => void;
   mode: "edit" | "view";
-  onSelect: (id: string | null) => void;
+  onSelect: (detail: BookCanvasSelectDetail) => void;
   onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
   zMenuEnabled: boolean;
   onZMenu: (clientX: number, clientY: number) => void;
@@ -1635,8 +2024,7 @@ function BookImageShape({
   return (
     <Group
       ref={(node) => {
-        if (attachRef) selectedRef.current = node;
-        else if (selectedRef.current === node) selectedRef.current = null;
+        registerKonvaNode(el.id, node);
       }}
       x={pivot.cx}
       y={pivot.cy}
@@ -1655,7 +2043,7 @@ function BookImageShape({
       onMouseDown={(e) => {
         if (mode !== "edit") return;
         e.cancelBubble = true;
-        onSelect(el.id);
+        onSelect({ id: el.id, shiftKey: e.evt.shiftKey });
       }}
       onContextMenu={
         zMenuEnabled
@@ -1676,19 +2064,7 @@ function BookImageShape({
         locked
           ? undefined
           : (e) => {
-              const n = e.target as Konva.Group;
-              snapKonvaBookNodePositionToGrid(
-                n,
-                {
-                  width: fw,
-                  height: fh,
-                  rotation: n.rotation(),
-                },
-                liveSync.dragGridPx,
-              );
-              const tl = konvaBookTopLeftFromNode(n);
-              onElementChange(el.id, { x: tl.x, y: tl.y });
-              liveSync.clearDragLive();
+              liveSync.commitDragEndPosition(el.id, e.target as Konva.Node, fw, fh);
             }
       }
       onTransformStart={
@@ -1776,8 +2152,7 @@ function BookVideoBox({
   el,
   locked,
   liveSync,
-  attachRef,
-  selectedRef,
+  registerKonvaNode,
   mode,
   onSelect,
   onElementChange,
@@ -1789,10 +2164,9 @@ function BookVideoBox({
   el: Extract<BookCanvasElement, { type: "video" }>;
   locked: boolean;
   liveSync: BookShapeLiveSync;
-  attachRef: boolean;
-  selectedRef: MutableRefObject<Konva.Node | null>;
+  registerKonvaNode: (elementId: string, node: Konva.Node | null) => void;
   mode: "edit" | "view";
-  onSelect: (id: string | null) => void;
+  onSelect: (detail: BookCanvasSelectDetail) => void;
   onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
   onVideoHoverEnter: () => void;
   onVideoHoverLeave: () => void;
@@ -1824,8 +2198,7 @@ function BookVideoBox({
   return (
     <Rect
       ref={(node) => {
-        if (attachRef) selectedRef.current = node;
-        else if (selectedRef.current === node) selectedRef.current = null;
+        registerKonvaNode(el.id, node);
       }}
       x={pivot.cx}
       y={pivot.cy}
@@ -1847,7 +2220,7 @@ function BookVideoBox({
       onMouseDown={(e) => {
         if (mode !== "edit") return;
         e.cancelBubble = true;
-        onSelect(el.id);
+        onSelect({ id: el.id, shiftKey: e.evt.shiftKey });
       }}
       onContextMenu={
         zMenuEnabled
@@ -1868,19 +2241,7 @@ function BookVideoBox({
         locked
           ? undefined
           : (e) => {
-              const n = e.target;
-              snapKonvaBookNodePositionToGrid(
-                n,
-                {
-                  width: fw,
-                  height: fh,
-                  rotation: n.rotation(),
-                },
-                liveSync.dragGridPx,
-              );
-              const tl = konvaBookTopLeftFromNode(n);
-              onElementChange(el.id, { x: tl.x, y: tl.y });
-              liveSync.clearDragLive();
+              liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
             }
       }
       onTransformStart={

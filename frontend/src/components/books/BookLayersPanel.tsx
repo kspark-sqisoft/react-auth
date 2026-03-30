@@ -1,4 +1,22 @@
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
+import {
+  DndContext,
+  DragOverlay,
+  type DragEndEvent,
+  type DragStartEvent,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import {
   ChevronDown,
   ChevronUp,
@@ -6,8 +24,10 @@ import {
   ChevronsUp,
   Clock,
   CloudSun,
+  Pencil,
   Eye,
   EyeOff,
+  GripVertical,
   Image as ImageIcon,
   Layers,
   Lock,
@@ -40,6 +60,8 @@ function bookElementLayerLabel(el: BookCanvasElement): string {
       return "날씨";
     case "digitalClock":
       return "디지털 시계";
+    case "drawing":
+      return "그리기";
     default:
       return "요소";
   }
@@ -58,25 +80,316 @@ function LayerTypeIcon({ el }: { el: BookCanvasElement }) {
       return <CloudSun className={cls} aria-hidden />;
     case "digitalClock":
       return <Clock className={cls} aria-hidden />;
+    case "drawing":
+      return <Pencil className={cls} aria-hidden />;
     default:
       return <Layers className={cls} aria-hidden />;
   }
 }
 
+function layerRowShellClass(
+  selected: boolean,
+  showing: boolean,
+  locked: boolean,
+  isDragging?: boolean,
+) {
+  return cn(
+    "flex min-w-0 w-full items-center gap-0.5 rounded-md border border-transparent px-1 py-0.5 transition-colors",
+    selected ? "border-primary/35 bg-primary/10" : "hover:bg-muted/60",
+    !showing && "opacity-[0.72]",
+    locked && "ring-1 ring-amber-500/25",
+    isDragging && "opacity-[0.45]",
+  );
+}
+
+type LayerRowActionsProps = {
+  el: BookCanvasElement;
+  displayIndex: number;
+  revLength: number;
+  showing: boolean;
+  locked: boolean;
+  readOnly: boolean;
+  onSelect: (id: string, shiftKey?: boolean) => void;
+  onVisibilityChange?: (elementId: string, visible: boolean) => void;
+  onLockChange?: (elementId: string, locked: boolean) => void;
+  onRequestDelete?: (elementId: string) => void;
+  onReorderZ?: (elementId: string, op: ElementZOrderOp) => void;
+  canReorder: boolean;
+};
+
+type LayerPanelRowProps = LayerRowActionsProps & { selected: boolean };
+
+function LayerRowActions({
+  el,
+  displayIndex,
+  revLength,
+  showing,
+  locked,
+  readOnly,
+  onSelect,
+  onVisibilityChange,
+  onLockChange,
+  onRequestDelete,
+  onReorderZ,
+  canReorder,
+}: LayerRowActionsProps) {
+  const isFront = displayIndex === 0;
+  const isBack = displayIndex === revLength - 1;
+  const label = bookElementLayerLabel(el);
+
+  return (
+    <>
+      {readOnly ? (
+        <span
+          className="flex size-7 shrink-0 items-center justify-center text-muted-foreground"
+          title={showing ? "보이는 레이어" : "숨긴 레이어"}
+          aria-hidden
+        >
+          {showing ? <Eye className="size-3.5" /> : <EyeOff className="size-3.5" />}
+        </span>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0"
+          title={showing ? "슬라이드에서 숨기기" : "다시 보이기"}
+          aria-label={
+            showing ? `${label} 슬라이드에서 숨기기` : `${label} 다시 보이기`
+          }
+          onClick={(e) => {
+            e.stopPropagation();
+            onVisibilityChange?.(el.id, !showing);
+          }}
+        >
+          {showing ? (
+            <Eye className="size-3.5" aria-hidden />
+          ) : (
+            <EyeOff className="size-3.5 opacity-80" aria-hidden />
+          )}
+        </Button>
+      )}
+      {readOnly ? (
+        <span
+          className="flex size-7 shrink-0 items-center justify-center text-muted-foreground"
+          title={locked ? "잠긴 레이어" : "잠금 없음"}
+          aria-hidden
+        >
+          {locked ? <Lock className="size-3.5" /> : <Unlock className="size-3.5 opacity-40" />}
+        </span>
+      ) : (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0"
+          title={locked ? "잠금 해제" : "잠그기"}
+          aria-label={locked ? `${label} 잠금 해제` : `${label} 잠그기`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onLockChange?.(el.id, !locked);
+          }}
+        >
+          {locked ? (
+            <Lock className="size-3.5 text-amber-700 dark:text-amber-400" aria-hidden />
+          ) : (
+            <Unlock className="size-3.5 opacity-70" aria-hidden />
+          )}
+        </Button>
+      )}
+      {readOnly ? (
+        <div className="flex min-w-0 flex-1 basis-0 items-center gap-2 px-1 py-1 text-xs">
+          <LayerTypeIcon el={el} />
+          <span className="min-w-0 flex-1 truncate font-medium text-foreground">{label}</span>
+        </div>
+      ) : (
+        <button
+          type="button"
+          className="flex min-w-0 flex-1 basis-0 items-center gap-2 rounded px-1 py-1 text-left text-xs"
+          onClick={(e) => onSelect(el.id, e.shiftKey)}
+        >
+          <LayerTypeIcon el={el} />
+          <span
+            className={cn(
+              "min-w-0 flex-1 truncate font-medium text-foreground",
+              !showing && "line-through decoration-muted-foreground/70",
+              locked && "text-amber-900/90 dark:text-amber-100/90",
+            )}
+          >
+            {label}
+          </span>
+        </button>
+      )}
+      {!readOnly && onRequestDelete ? (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          className="size-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
+          title="이 슬라이드에서 삭제"
+          aria-label={`${label} 삭제`}
+          onClick={(e) => {
+            e.stopPropagation();
+            onRequestDelete(el.id);
+          }}
+        >
+          <Trash2 className="size-3.5" aria-hidden />
+        </Button>
+      ) : null}
+      {canReorder && onReorderZ ? (
+        <div className="flex shrink-0 items-center gap-px pr-0.5">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-6 shrink-0"
+            title="한 단계 앞으로"
+            aria-label={`${label} 한 단계 앞으로`}
+            disabled={isFront || locked}
+            onClick={(e) => {
+              e.stopPropagation();
+              onReorderZ(el.id, "forward");
+            }}
+          >
+            <ChevronUp className="size-3" aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-6 shrink-0"
+            title="한 단계 뒤로"
+            aria-label={`${label} 한 단계 뒤로`}
+            disabled={isBack || locked}
+            onClick={(e) => {
+              e.stopPropagation();
+              onReorderZ(el.id, "backward");
+            }}
+          >
+            <ChevronDown className="size-3" aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-6 shrink-0"
+            title="맨 앞으로"
+            aria-label={`${label} 맨 앞으로`}
+            disabled={isFront || locked}
+            onClick={(e) => {
+              e.stopPropagation();
+              onReorderZ(el.id, "front");
+            }}
+          >
+            <ChevronsUp className="size-3" aria-hidden />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className="size-6 shrink-0"
+            title="맨 뒤로"
+            aria-label={`${label} 맨 뒤로`}
+            disabled={isBack || locked}
+            onClick={(e) => {
+              e.stopPropagation();
+              onReorderZ(el.id, "back");
+            }}
+          >
+            <ChevronsDown className="size-3" aria-hidden />
+          </Button>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function SortableLayerRow(props: LayerPanelRowProps) {
+  const { selected, ...actionsProps } = props;
+  const { el, locked, readOnly, showing } = actionsProps;
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: el.id,
+    disabled: locked || readOnly,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <li
+      ref={setNodeRef}
+      style={style}
+      className={cn("min-w-0", isDragging && "relative z-[1]")}
+    >
+      <div
+        className={layerRowShellClass(selected, showing, locked, isDragging)}
+      >
+        {!readOnly ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "size-7 shrink-0 touch-none",
+              locked
+                ? "cursor-not-allowed opacity-40"
+                : "cursor-grab active:cursor-grabbing",
+            )}
+            disabled={locked}
+            aria-label={`${bookElementLayerLabel(el)} 순서 이동`}
+            title={locked ? "잠긴 레이어는 순서를 바꿀 수 없습니다" : "드래그해 위·아래로 순서 변경"}
+            {...attributes}
+            {...listeners}
+          >
+            <GripVertical className="size-3.5 text-muted-foreground" aria-hidden />
+          </Button>
+        ) : null}
+        <LayerRowActions {...actionsProps} />
+      </div>
+    </li>
+  );
+}
+
+function StaticLayerRow(props: LayerPanelRowProps) {
+  const { selected, ...actionsProps } = props;
+  const { showing, locked } = actionsProps;
+  return (
+    <li className="min-w-0">
+      <div className={layerRowShellClass(selected, showing, locked, false)}>
+        <LayerRowActions {...actionsProps} />
+      </div>
+    </li>
+  );
+}
+
+function LayerDragOverlay({ el }: { el: BookCanvasElement }) {
+  const label = bookElementLayerLabel(el);
+  return (
+    <div
+      className={cn(
+        "flex min-w-[200px] max-w-[min(100vw-2rem,18rem)] items-center gap-2 rounded-md border border-primary/40 bg-card px-2 py-1.5 shadow-lg",
+      )}
+    >
+      <GripVertical className="size-3.5 shrink-0 text-muted-foreground" aria-hidden />
+      <LayerTypeIcon el={el} />
+      <span className="min-w-0 truncate text-xs font-medium text-foreground">{label}</span>
+    </div>
+  );
+}
+
 export type BookLayersPanelProps = {
   elements: BookCanvasElement[];
-  selectedId: string | null;
-  onSelect: (id: string) => void;
+  selectedIds: readonly string[];
+  onSelect: (id: string, shiftKey?: boolean) => void;
   onReorderZ?: (elementId: string, op: ElementZOrderOp) => void;
-  /** 편집: 눈 아이콘으로 캔버스 표시 여부(저장됨) */
+  /** 편집: 패널 표시 순서(위=앞) 기준으로 드래그 이동 */
+  onLayerDragReorder?: (fromDisplayIndex: number, toDisplayIndex: number) => void;
   onVisibilityChange?: (elementId: string, visible: boolean) => void;
-  /** 편집: 자물쇠로 이동·변형·캔버스 삭제 막기(저장됨) */
   onLockChange?: (elementId: string, locked: boolean) => void;
-  /** 편집: 확인 대화상자 후 슬라이드에서 제거 */
   onRequestDelete?: (elementId: string) => void;
-  /** 보기 전용(게스트): 선택·순서 변경 없음 */
   readOnly?: boolean;
-  /** 오른쪽 열 전체를 레이어만 쓸 때 스크롤 영역을 세로로 채움 */
   expandVertical?: boolean;
   className?: string;
 };
@@ -87,9 +400,10 @@ export type BookLayersPanelProps = {
  */
 export function BookLayersPanel({
   elements,
-  selectedId,
+  selectedIds,
   onSelect,
   onReorderZ,
+  onLayerDragReorder,
   onVisibilityChange,
   onLockChange,
   onRequestDelete,
@@ -99,6 +413,70 @@ export function BookLayersPanel({
 }: BookLayersPanelProps) {
   const rev = useMemo(() => [...elements].reverse(), [elements]);
   const canReorder = Boolean(onReorderZ) && !readOnly;
+  const dragSortEnabled = canReorder && Boolean(onLayerDragReorder);
+
+  const sortableIds = useMemo(() => rev.map((e) => e.id), [rev]);
+  const [activeDragId, setActiveDragId] = useState<string | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  const handleDragStart = (event: DragStartEvent) => {
+    setActiveDragId(String(event.active.id));
+  };
+
+  const handleDragEnd = (event: DragEndEvent) => {
+    setActiveDragId(null);
+    const { active, over } = event;
+    if (!over || !onLayerDragReorder) return;
+    if (active.id === over.id) return;
+    const from = sortableIds.indexOf(String(active.id));
+    const to = sortableIds.indexOf(String(over.id));
+    if (from === -1 || to === -1) return;
+    onLayerDragReorder(from, to);
+  };
+
+  const handleDragCancel = () => {
+    setActiveDragId(null);
+  };
+
+  const activeOverlayEl = activeDragId ? rev.find((e) => e.id === activeDragId) : null;
+
+  const rowPropsBase = {
+    revLength: rev.length,
+    onSelect,
+    onVisibilityChange,
+    onLockChange,
+    onRequestDelete,
+    onReorderZ,
+    canReorder,
+    readOnly: Boolean(readOnly),
+  };
+
+  const listUl = (
+    <ul className="flex min-w-0 flex-col gap-px p-1.5" role="list">
+      {rev.map((el, displayIndex) => {
+        const selected = selectedIds.includes(el.id);
+        const showing = isBookElementVisible(el);
+        const locked = isBookElementLocked(el);
+        const rowProps = {
+          ...rowPropsBase,
+          el,
+          displayIndex,
+          selected,
+          showing,
+          locked,
+        };
+        return dragSortEnabled ? (
+          <SortableLayerRow key={el.id} {...rowProps} />
+        ) : (
+          <StaticLayerRow key={el.id} {...rowProps} />
+        );
+      })}
+    </ul>
+  );
 
   return (
     <div
@@ -125,210 +503,31 @@ export function BookLayersPanel({
           <p className="px-3 py-4 text-center text-xs text-muted-foreground">
             이 슬라이드에 위젯이 없습니다.
           </p>
+        ) : dragSortEnabled ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
+          >
+            <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
+              {listUl}
+            </SortableContext>
+            <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.25, 1, 0.5, 1)" }}>
+              {activeOverlayEl ? <LayerDragOverlay el={activeOverlayEl} /> : null}
+            </DragOverlay>
+          </DndContext>
         ) : (
-          <ul className="flex flex-col gap-px p-1.5" role="list">
-            {rev.map((el, displayIndex) => {
-              const isFront = displayIndex === 0;
-              const isBack = displayIndex === rev.length - 1;
-              const selected = el.id === selectedId;
-              const showing = isBookElementVisible(el);
-              const locked = isBookElementLocked(el);
-              return (
-                <li key={el.id}>
-                  <div
-                    className={cn(
-                      "flex items-center gap-0.5 rounded-md border border-transparent px-1 py-0.5 transition-colors",
-                      selected
-                        ? "border-primary/35 bg-primary/10"
-                        : "hover:bg-muted/60",
-                      !showing && "opacity-[0.72]",
-                      locked && "ring-1 ring-amber-500/25",
-                    )}
-                  >
-                    {readOnly ? (
-                      <span
-                        className="flex size-7 shrink-0 items-center justify-center text-muted-foreground"
-                        title={showing ? "보이는 레이어" : "숨긴 레이어"}
-                        aria-hidden
-                      >
-                        {showing ? (
-                          <Eye className="size-3.5" />
-                        ) : (
-                          <EyeOff className="size-3.5" />
-                        )}
-                      </span>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 shrink-0"
-                        title={showing ? "슬라이드에서 숨기기" : "다시 보이기"}
-                        aria-label={
-                          showing
-                            ? `${bookElementLayerLabel(el)} 슬라이드에서 숨기기`
-                            : `${bookElementLayerLabel(el)} 다시 보이기`
-                        }
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onVisibilityChange?.(el.id, !showing);
-                        }}
-                      >
-                        {showing ? (
-                          <Eye className="size-3.5" aria-hidden />
-                        ) : (
-                          <EyeOff className="size-3.5 opacity-80" aria-hidden />
-                        )}
-                      </Button>
-                    )}
-                    {readOnly ? (
-                      <span
-                        className="flex size-7 shrink-0 items-center justify-center text-muted-foreground"
-                        title={locked ? "잠긴 레이어" : "잠금 없음"}
-                        aria-hidden
-                      >
-                        {locked ? <Lock className="size-3.5" /> : <Unlock className="size-3.5 opacity-40" />}
-                      </span>
-                    ) : (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 shrink-0"
-                        title={locked ? "잠금 해제" : "잠그기"}
-                        aria-label={
-                          locked
-                            ? `${bookElementLayerLabel(el)} 잠금 해제`
-                            : `${bookElementLayerLabel(el)} 잠그기`
-                        }
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onLockChange?.(el.id, !locked);
-                        }}
-                      >
-                        {locked ? (
-                          <Lock className="size-3.5 text-amber-700 dark:text-amber-400" aria-hidden />
-                        ) : (
-                          <Unlock className="size-3.5 opacity-70" aria-hidden />
-                        )}
-                      </Button>
-                    )}
-                    {readOnly ? (
-                      <div className="flex min-w-0 flex-1 items-center gap-2 px-1 py-1 text-xs">
-                        <LayerTypeIcon el={el} />
-                        <span className="min-w-0 truncate font-medium text-foreground">
-                          {bookElementLayerLabel(el)}
-                        </span>
-                      </div>
-                    ) : (
-                      <button
-                        type="button"
-                        className="flex min-w-0 flex-1 items-center gap-2 rounded px-1.5 py-1 text-left text-xs"
-                        onClick={() => onSelect(el.id)}
-                      >
-                        <LayerTypeIcon el={el} />
-                        <span
-                          className={cn(
-                            "min-w-0 truncate font-medium text-foreground",
-                            !showing && "line-through decoration-muted-foreground/70",
-                          locked && "text-amber-900/90 dark:text-amber-100/90",
-                          )}
-                        >
-                          {bookElementLayerLabel(el)}
-                        </span>
-                      </button>
-                    )}
-                    {!readOnly && onRequestDelete ? (
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        className="size-7 shrink-0 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                        title="이 슬라이드에서 삭제"
-                        aria-label={`${bookElementLayerLabel(el)} 삭제`}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onRequestDelete(el.id);
-                        }}
-                      >
-                        <Trash2 className="size-3.5" aria-hidden />
-                      </Button>
-                    ) : null}
-                    {canReorder && onReorderZ ? (
-                      <div className="flex shrink-0 items-center gap-0.5 pr-0.5">
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7"
-                          title="한 단계 앞으로"
-                          aria-label={`${bookElementLayerLabel(el)} 한 단계 앞으로`}
-                          disabled={isFront || locked}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onReorderZ(el.id, "forward");
-                          }}
-                        >
-                          <ChevronUp className="size-3.5" aria-hidden />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7"
-                          title="한 단계 뒤로"
-                          aria-label={`${bookElementLayerLabel(el)} 한 단계 뒤로`}
-                          disabled={isBack || locked}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onReorderZ(el.id, "backward");
-                          }}
-                        >
-                          <ChevronDown className="size-3.5" aria-hidden />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7"
-                          title="맨 앞으로"
-                          aria-label={`${bookElementLayerLabel(el)} 맨 앞으로`}
-                          disabled={isFront || locked}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onReorderZ(el.id, "front");
-                          }}
-                        >
-                          <ChevronsUp className="size-3.5" aria-hidden />
-                        </Button>
-                        <Button
-                          type="button"
-                          variant="ghost"
-                          size="icon"
-                          className="size-7"
-                          title="맨 뒤로"
-                          aria-label={`${bookElementLayerLabel(el)} 맨 뒤로`}
-                          disabled={isBack || locked}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onReorderZ(el.id, "back");
-                          }}
-                        >
-                          <ChevronsDown className="size-3.5" aria-hidden />
-                        </Button>
-                      </div>
-                    ) : null}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
+          listUl
         )}
       </div>
       <p className="shrink-0 border-t border-border/60 px-3 py-1.5 text-[10px] leading-snug text-muted-foreground">
         {readOnly
           ? "위쪽이 화면 앞 순서입니다. 눈·자물쇠 아이콘은 숨김·잠금 상태를 뜻합니다."
-          : "위쪽이 앞 순서입니다. 눈=표시, 자물쇠=편집 잠금, 휴지통=삭제(저장 시 반영). 잠긴 레이어는 캔버스에서 옮기거나 지울 수 없습니다."}
+          : dragSortEnabled
+            ? "위쪽이 앞 순서입니다. 왼쪽 손잡이로 드래그해 순서를 바꿀 수 있습니다. 잠긴 레이어는 이동할 수 없습니다."
+            : "위쪽이 앞 순서입니다. 눈=표시, 자물쇠=편집 잠금, 휴지통=삭제(저장 시 반영). 잠긴 레이어는 캔버스에서 옮기거나 지울 수 없습니다."}
       </p>
     </div>
   );

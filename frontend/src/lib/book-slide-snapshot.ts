@@ -589,6 +589,37 @@ export async function captureBookSlideToDataURL(
             opacity: elOp,
           }),
         );
+      } else if (el.type === "drawing") {
+        const dw = sx(el.width);
+        const dh = sx(el.height);
+        const dp = bookElementPivotKonva({
+          x: sx(el.x),
+          y: sx(el.y),
+          width: dw,
+          height: dh,
+          rotation: el.rotation,
+        });
+        const scaledPts = el.points.map((v) => v * scale);
+        if (scaledPts.length >= 4) {
+          const g = new Konva.Group({
+            x: dp.cx,
+            y: dp.cy,
+            offsetX: dp.offsetX,
+            offsetY: dp.offsetY,
+            rotation: dp.rotation,
+            opacity: elOp,
+          });
+          g.add(
+            new Konva.Line({
+              points: scaledPts,
+              stroke: el.stroke,
+              strokeWidth: Math.max(0.5, sx(el.strokeWidth)),
+              lineCap: "round",
+              lineJoin: "round",
+            }),
+          );
+          layer.add(g);
+        }
       }
     }
 

@@ -1,4 +1,4 @@
-import { Expand, SlidersHorizontal, Trash2 } from "lucide-react";
+import { Expand, FolderOpen, Library, SlidersHorizontal, Trash2 } from "lucide-react";
 import {
   BOOK_MEDIA_OBJECT_FIT_VALUES,
   BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS,
@@ -28,6 +28,7 @@ import { BookTextRichEditor } from "@/components/books/BookTextRichEditor";
 import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -42,6 +43,8 @@ import {
 
 type BookInspectorPanelProps = {
   selected: BookCanvasElement | null;
+  /** 2 이상이면 여러 개 선택 상태(속성 폼 대신 안내만) */
+  multiSelectionCount?: number;
   /** 슬라이드 논리 크기 — 전체 맞춤 버튼에 사용 */
   slideWidth: number;
   slideHeight: number;
@@ -50,12 +53,110 @@ type BookInspectorPanelProps = {
   mediaHint?: string | null;
   /** 오른쪽 컬럼 안(레이어 패널 아래)에 넣을 때: 테두리·고정 너비 제거 */
   embedded?: boolean;
+  /** 이미지·동영상: 로컬 파일로 `src` 교체(부모가 파일 input과 연결) */
+  onReplaceMediaFromFile?: () => void;
+  /** 이미지·동영상: 미디어 라이브러리 선택 다이얼로그 */
+  onPickMediaFromLibrary?: () => void;
+  /** `false`면 라이브러리 버튼 숨김 */
+  mediaLibraryReplaceEnabled?: boolean;
 };
 
 function num(v: string, fallback: number, min: number, max: number) {
   const n = Number(v);
   if (!Number.isFinite(n)) return fallback;
   return Math.min(max, Math.max(min, n));
+}
+
+function InspectorMediaSourceSection({
+  kind,
+  src,
+  posterSrc,
+  onReplaceFile,
+  onPickLibrary,
+  libraryEnabled,
+}: {
+  kind: "image" | "video";
+  src: string;
+  posterSrc?: string | null;
+  onReplaceFile?: () => void;
+  onPickLibrary?: () => void;
+  libraryEnabled?: boolean;
+}) {
+  const showActions =
+    Boolean(onReplaceFile) || (Boolean(libraryEnabled) && Boolean(onPickLibrary));
+
+  if (!showActions) {
+    return (
+      <div className="space-y-1 rounded-md border border-border/70 bg-muted/20 px-2.5 py-2">
+        <p className="text-[10px] font-medium text-muted-foreground">현재 주소</p>
+        <p className="break-all font-mono text-[11px] leading-snug text-foreground/90">{src}</p>
+        {kind === "video" && posterSrc ? (
+          <p className="break-all font-mono text-[10px] leading-snug text-muted-foreground">
+            포스터: {posterSrc}
+          </p>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <section
+      className="space-y-3 rounded-lg border-2 border-primary/25 bg-primary/6 p-3 shadow-sm dark:border-primary/30 dark:bg-primary/9"
+      aria-labelledby="insp-media-source-heading"
+    >
+      <div className="space-y-1">
+        <h3
+          id="insp-media-source-heading"
+          className="text-xs font-semibold tracking-wide text-primary"
+        >
+          미디어 소스
+        </h3>
+        <p className="text-[10px] leading-snug text-muted-foreground">
+          아래 경로가 캔버스에 표시됩니다. 파일 또는 이 북의 미디어 라이브러리로 바꿀 수 있습니다.
+        </p>
+      </div>
+      <div className="rounded-md border border-border bg-background/90 px-2 py-1.5">
+        <p className="text-[9px] font-medium uppercase tracking-wider text-muted-foreground">
+          {kind === "image" ? "이미지 URL" : "동영상 URL"}
+        </p>
+        <p className="mt-0.5 break-all font-mono text-[11px] leading-snug text-foreground">{src}</p>
+      </div>
+      {kind === "video" ? (
+        <div className="rounded-md border border-dashed border-border/90 bg-muted/20 px-2 py-1.5">
+          <p className="text-[9px] font-medium text-muted-foreground">포스터(썸네일)</p>
+          <p className="mt-0.5 break-all font-mono text-[10px] leading-snug text-foreground/85">
+            {posterSrc?.trim() ? posterSrc : "— 없음 —"}
+          </p>
+        </div>
+      ) : null}
+      <div className="flex flex-col gap-2">
+        {onReplaceFile ? (
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-9 w-full justify-start gap-2 border-primary/20 bg-background/80 hover:bg-background"
+            onClick={onReplaceFile}
+          >
+            <FolderOpen className="size-4 shrink-0 opacity-80" aria-hidden />
+            파일에서 바꾸기…
+          </Button>
+        ) : null}
+        {libraryEnabled && onPickLibrary ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            className="h-9 w-full justify-start gap-2"
+            onClick={onPickLibrary}
+          >
+            <Library className="size-4 shrink-0 opacity-80" aria-hidden />
+            미디어 라이브러리에서 선택…
+          </Button>
+        ) : null}
+      </div>
+    </section>
+  );
 }
 
 const WEATHER_INSPECTOR_FIELDS: { key: keyof BookWeatherDisplayResolved; label: string }[] = [
@@ -472,12 +573,16 @@ function MediaObjectFitFields({
 
 export function BookInspectorPanel({
   selected,
+  multiSelectionCount = 0,
   slideWidth,
   slideHeight,
   onChange,
   onDelete,
   mediaHint,
   embedded = false,
+  onReplaceMediaFromFile,
+  onPickMediaFromLibrary,
+  mediaLibraryReplaceEnabled = false,
 }: BookInspectorPanelProps) {
   const Root = embedded ? "div" : "aside";
   return (
@@ -493,7 +598,20 @@ export function BookInspectorPanel({
       </div>
       <div className="min-h-0 flex-1 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">
         <div className="space-y-4 p-3">
-          {!selected ? (
+          {multiSelectionCount >= 2 ? (
+            <div className="space-y-3 rounded-lg border border-border bg-muted/20 p-3">
+              <p className="text-sm font-medium text-foreground">
+                위젯 {multiSelectionCount}개 선택됨
+              </p>
+              <p className="text-xs leading-relaxed text-muted-foreground">
+                한 번에 하나만 속성을 편집할 수 있습니다. Shift+클릭으로 선택을 추가하거나 빼거나, 캔버스 빈 곳을
+                눌러 모두 해제할 수 있습니다. Delete 키로 선택한 항목을 함께 삭제할 수 있습니다.
+              </p>
+              <Button type="button" variant="destructive" size="sm" className="w-full" onClick={onDelete}>
+                선택 항목 모두 삭제…
+              </Button>
+            </div>
+          ) : !selected ? (
             <p className="text-sm text-muted-foreground">
               캔버스에서 위젯을 선택하면 여기서 글자·위치·크기를 바꿀 수 있습니다.
             </p>
@@ -757,62 +875,145 @@ export function BookInspectorPanel({
               <ElementShapeChromeFields el={selected} onChange={onChange} />
               <PositionSizeFields el={selected} onChange={onChange} />
             </>
+          ) : selected.type === "drawing" ? (
+            <>
+              <p className="text-[11px] leading-snug text-muted-foreground">
+                자유 곡선입니다. 선 좌표는 박스 안에서 상대 위치로 저장되며, 박스를 옮기거나 크기를 바꿔도 모양이
+                함께 이동합니다.
+              </p>
+              <div className="space-y-2">
+                <Label className="text-xs text-muted-foreground">선 색</Label>
+                <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/25 p-1">
+                  {BOOK_HEX_COLOR_PRESETS.map((c) => {
+                    const strokeNorm = selected.stroke.trim().replace(/\s/g, "").toLowerCase();
+                    const active = strokeNorm === c.toLowerCase();
+                    return (
+                      <button
+                        key={c}
+                        type="button"
+                        title={c}
+                        aria-label={`선 색 ${c}`}
+                        aria-pressed={active}
+                        className={cn(
+                          "size-7 shrink-0 rounded-md border border-border shadow-sm ring-offset-background hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
+                          active && "ring-2 ring-primary ring-offset-2",
+                        )}
+                        style={{ backgroundColor: c }}
+                        onClick={() => onChange(selected.id, { stroke: c })}
+                      />
+                    );
+                  })}
+                </div>
+                <Input
+                  type="color"
+                  className="h-9 w-14 shrink-0 cursor-pointer px-1"
+                  value={
+                    selected.stroke.startsWith("#") && selected.stroke.length >= 7
+                      ? selected.stroke.slice(0, 7)
+                      : "#000000"
+                  }
+                  onChange={(e) => onChange(selected.id, { stroke: e.target.value })}
+                  aria-label="선 색 직접 선택"
+                />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="insp-draw-sw">선 굵기 (px)</Label>
+                <Input
+                  id="insp-draw-sw"
+                  type="number"
+                  min={1}
+                  max={48}
+                  value={Math.round(selected.strokeWidth)}
+                  onChange={(e) =>
+                    onChange(selected.id, {
+                      strokeWidth: num(e.target.value, selected.strokeWidth, 1, 48),
+                    })
+                  }
+                />
+              </div>
+              <ElementOpacitySlider
+                elementId={selected.id}
+                opacity={selected.opacity}
+                onChange={onChange}
+              />
+              <PositionSizeFields el={selected} onChange={onChange} />
+            </>
           ) : selected.type === "image" ? (
             <>
-              <p className="text-xs text-muted-foreground break-all">이미지: {selected.src}</p>
-              <MediaObjectFitFields
-                elementId={selected.id}
-                value={selected.objectFit}
-                onChange={onChange}
+              <InspectorMediaSourceSection
+                kind="image"
+                src={selected.src}
+                onReplaceFile={onReplaceMediaFromFile}
+                onPickLibrary={onPickMediaFromLibrary}
+                libraryEnabled={mediaLibraryReplaceEnabled}
               />
-              <ElementOpacitySlider
-                elementId={selected.id}
-                opacity={selected.opacity}
-                onChange={onChange}
-              />
-              <ElementShapeChromeFields el={selected} onChange={onChange} />
-              <PositionSizeFields el={selected} onChange={onChange} />
+              <Separator className="my-1 bg-border/80" />
+              <div className="space-y-3">
+                <p className="text-[10px] font-medium text-muted-foreground">표시</p>
+                <MediaObjectFitFields
+                  elementId={selected.id}
+                  value={selected.objectFit}
+                  onChange={onChange}
+                />
+                <ElementOpacitySlider
+                  elementId={selected.id}
+                  opacity={selected.opacity}
+                  onChange={onChange}
+                />
+                <ElementShapeChromeFields el={selected} onChange={onChange} />
+                <PositionSizeFields el={selected} onChange={onChange} />
+              </div>
             </>
-          ) : (
+          ) : selected.type === "video" ? (
             <>
-              <p className="text-xs text-muted-foreground break-all">동영상: {selected.src}</p>
-              {selected.posterSrc ? (
-                <p className="text-xs text-muted-foreground break-all">포스터: {selected.posterSrc}</p>
-              ) : null}
-              <MediaObjectFitFields
-                elementId={selected.id}
-                value={selected.objectFit}
-                onChange={onChange}
+              <InspectorMediaSourceSection
+                kind="video"
+                src={selected.src}
+                posterSrc={selected.posterSrc}
+                onReplaceFile={onReplaceMediaFromFile}
+                onPickLibrary={onPickMediaFromLibrary}
+                libraryEnabled={mediaLibraryReplaceEnabled}
               />
-              <ElementOpacitySlider
-                elementId={selected.id}
-                opacity={selected.opacity}
-                onChange={onChange}
-              />
-              <ElementShapeChromeFields el={selected} onChange={onChange} />
-              <PositionSizeFields el={selected} onChange={onChange} />
+              <Separator className="my-1 bg-border/80" />
+              <div className="space-y-3">
+                <p className="text-[10px] font-medium text-muted-foreground">표시</p>
+                <MediaObjectFitFields
+                  elementId={selected.id}
+                  value={selected.objectFit}
+                  onChange={onChange}
+                />
+                <ElementOpacitySlider
+                  elementId={selected.id}
+                  opacity={selected.opacity}
+                  onChange={onChange}
+                />
+                <ElementShapeChromeFields el={selected} onChange={onChange} />
+                <PositionSizeFields el={selected} onChange={onChange} />
+              </div>
             </>
-          )}
+          ) : null}
 
                 {selected ? (
                   <div className="flex flex-col gap-2">
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      className="w-full"
-                      onClick={() =>
-                        onChange(selected.id, {
-                          x: 0,
-                          y: 0,
-                          width: slideWidth,
-                          height: slideHeight,
-                        })
-                      }
-                    >
-                      <Expand className="mr-1.5 size-3.5" aria-hidden />
-                      슬라이드 전체(0,0)로 맞추기
-                    </Button>
+                    {selected.type !== "drawing" ? (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() =>
+                          onChange(selected.id, {
+                            x: 0,
+                            y: 0,
+                            width: slideWidth,
+                            height: slideHeight,
+                          })
+                        }
+                      >
+                        <Expand className="mr-1.5 size-3.5" aria-hidden />
+                        슬라이드 전체(0,0)로 맞추기
+                      </Button>
+                    ) : null}
                     <Button
                       type="button"
                       variant="destructive"

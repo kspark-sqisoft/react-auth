@@ -128,6 +128,21 @@ export type BookCanvasElementPublic =
       outlineColor?: string;
       visible?: boolean;
       locked?: boolean;
+    }
+  | {
+      id: string;
+      type: 'drawing';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      points: number[];
+      stroke: string;
+      strokeWidth: number;
+      opacity?: number;
+      rotation?: number;
+      visible?: boolean;
+      locked?: boolean;
     };
 
 export type BookPagePublic = {
@@ -211,7 +226,10 @@ export class BooksService {
     };
   }
 
-  /** 저장·응답은 `/uploads/...` 경로만 쓰도록 맞춤(절대 URL·쿼리 제거). */
+  /**
+   * 이미지·비디오 `src` 정규화: 업로드(`/uploads/...`) 또는 프론트 정적 샘플(`/cards/...`, 템플릿용).
+   * 절대 URL·쿼리는 제거한 뒤 pathname만 반환.
+   */
   private normalizeBookMediaUploadsPath(
     raw: unknown,
     maxLen = 500,
@@ -225,15 +243,36 @@ export class BooksService {
       const path = noQuery.slice(idx);
       return path.length > maxLen ? path.slice(0, maxLen) : path;
     }
+    const cardsIdx = noQuery.indexOf('/cards/');
+    if (cardsIdx >= 0) {
+      const path = noQuery.slice(cardsIdx);
+      if (!this.isSafeBookCardsStaticPath(path)) return null;
+      return path.length > maxLen ? path.slice(0, maxLen) : path;
+    }
     try {
       const p = new URL(noQuery).pathname;
       if (p.startsWith('/uploads/')) {
+        return p.length > maxLen ? p.slice(0, maxLen) : p;
+      }
+      if (p.startsWith('/cards/') && this.isSafeBookCardsStaticPath(p)) {
         return p.length > maxLen ? p.slice(0, maxLen) : p;
       }
     } catch {
       return null;
     }
     return null;
+  }
+
+  /** `/cards/img1.jpg` 등 — path traversal·이상한 확장자 차단 */
+  private isSafeBookCardsStaticPath(path: string): boolean {
+    if (!path.startsWith('/cards/')) return false;
+    const rest = path.slice('/cards/'.length);
+    if (!rest || rest.length > 240) return false;
+    if (rest.includes('..') || rest.includes('//') || rest.includes('\\')) {
+      return false;
+    }
+    if (rest.startsWith('/')) return false;
+    return /^[\w][\w.-]*\.(jpe?g|png|gif|webp)$/i.test(rest);
   }
 
   private parseElementsJson(raw: string): BookCanvasElementPublic[] {
@@ -269,7 +308,8 @@ export class BooksService {
         o.type !== 'image' &&
         o.type !== 'video' &&
         o.type !== 'weather' &&
-        o.type !== 'digitalClock'
+        o.type !== 'digitalClock' &&
+        o.type !== 'drawing'
       ) {
         throw new BadRequestException('지원하지 않는 요소 타입입니다.');
       }
@@ -476,6 +516,56 @@ export class BooksService {
               '디지털 시계 글자색에 허용되지 않는 문자가 있습니다.',
             );
           }
+        }
+      } else if (o.type === 'drawing') {
+        const w = o.width;
+        const h = o.height;
+        if (
+          typeof w !== 'number' ||
+          typeof h !== 'number' ||
+          w < 8 ||
+          h < 8 ||
+          w > 4000 ||
+          h > 4000
+        ) {
+          throw new BadRequestException(
+            '그리기 요소 크기가 올바르지 않습니다.',
+          );
+        }
+        const pts = o.points;
+        if (!Array.isArray(pts)) {
+          throw new BadRequestException('그리기 points가 올바르지 않습니다.');
+        }
+        if (pts.length < 4 || pts.length > 4096 || pts.length % 2 !== 0) {
+          throw new BadRequestException(
+            '그리기 points 길이가 올바르지 않습니다.',
+          );
+        }
+        for (const v of pts) {
+          if (typeof v !== 'number' || !Number.isFinite(v)) {
+            throw new BadRequestException('그리기 좌표가 올바르지 않습니다.');
+          }
+        }
+        if (typeof o.stroke !== 'string' || o.stroke.length > 40) {
+          throw new BadRequestException(
+            '그리기 stroke 색이 올바르지 않습니다.',
+          );
+        }
+        if (/[<>]/.test(o.stroke) || /url\s*\(/i.test(o.stroke)) {
+          throw new BadRequestException(
+            '그리기 stroke에 허용되지 않는 문자가 있습니다.',
+          );
+        }
+        const sw = o.strokeWidth;
+        if (
+          typeof sw !== 'number' ||
+          sw < 1 ||
+          sw > 32 ||
+          !Number.isFinite(sw)
+        ) {
+          throw new BadRequestException(
+            '그리기 strokeWidth가 올바르지 않습니다.',
+          );
         }
       } else {
         const w = o.width;

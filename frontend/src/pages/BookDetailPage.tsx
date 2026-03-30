@@ -34,12 +34,25 @@ import {
   duplicateBookEditorPage,
   pageIndexAfterRemove,
   pageIndexAfterReorder,
+  reorderBookElementsByDisplayIndex,
   reorderElementsZ,
   reorderPagesArray,
   toBookPagePayloads,
   type BookEditorPageState,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
+import { appendBookMediaLibraryItem } from "@/lib/book-media-library";
+import {
+  readFloatingMediaLibraryVisible,
+  readFloatingWidgetPaletteVisible,
+  writeFloatingMediaLibraryVisible,
+  writeFloatingWidgetPaletteVisible,
+} from "@/lib/book-floating-ui-prefs";
+import type { BookEditorLeftTab } from "@/lib/book-editor-panel-events";
+import {
+  instantiateBookSlideTemplate,
+  type BookSlideTemplateId,
+} from "@/lib/book-slide-templates";
 import { defaultTextWidgetBoxHeight } from "@/lib/book-text-widget";
 import { warmBookCanvasImagesForNeighborPages } from "@/lib/book-image-cache";
 import { bookKeys } from "@/lib/query-keys";
@@ -53,12 +66,20 @@ import { BookInspectorPanel } from "@/components/books/BookInspectorPanel";
 import { BookLayersPanel } from "@/components/books/BookLayersPanel";
 import { BookPagePropertiesPanel } from "@/components/books/BookPagePropertiesPanel";
 import { BookPageSidebar } from "@/components/books/BookPageSidebar";
+import { BookEditorToolRail } from "@/components/books/BookEditorToolRail";
+import { BookWidgetPalette } from "@/components/books/BookWidgetPalette";
+import { BookMediaLibraryPanel } from "@/components/books/BookMediaLibraryPanel";
+import { BookSlideDrawingPanel } from "@/components/books/BookSlideDrawingPanel";
+import { BookSlideTemplatesPanel } from "@/components/books/BookSlideTemplatesPanel";
+import { BookMediaLibraryPickDialog } from "@/components/books/BookMediaLibraryPickDialog";
 import {
   BookSlideCanvas,
   DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
+  type BookCanvasSelectDetail,
   type BookDropWidgetKind,
+  type BookLibraryDragPayload,
+  type BookReplaceMediaFromFileRequest,
 } from "@/components/books/BookSlideCanvas";
-import { BookWidgetPalette } from "@/components/books/BookWidgetPalette";
 import { BookWorkspaceShell } from "@/components/books/BookWorkspaceShell";
 import {
   AlertDialog,
@@ -102,7 +123,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   const [bookTitle, setBookTitle] = useState(serverBook.title);
   const [pageIndex, setPageIndex] = useState(0);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const {
     pages: localPages,
     updatePages,
@@ -116,10 +137,14 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   const videoInputRef = useRef<HTMLInputElement>(null);
   const pendingMediaKindRef = useRef<"image" | "video" | null>(null);
   const pendingPlacementRef = useRef<{ x: number; y: number } | null>(null);
+  const replaceMediaElementIdRef = useRef<string | null>(null);
+  const [libraryPickElementId, setLibraryPickElementId] = useState<string | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [widgetDeleteOpen, setWidgetDeleteOpen] = useState(false);
-  const [widgetDeleteId, setWidgetDeleteId] = useState<string | null>(null);
+  const [widgetDeleteIds, setWidgetDeleteIds] = useState<string[]>([]);
+  const [pageDeleteOpen, setPageDeleteOpen] = useState(false);
+  const [pageDeleteIndex, setPageDeleteIndex] = useState<number | null>(null);
   const [slideWidth, setSlideWidth] = useState(
     () => serverBook.slideWidth ?? DEFAULT_SLIDE_WIDTH,
   );
@@ -130,14 +155,103 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
   );
   const [dragGridPx, setDragGridPx] = useState(BOOK_CANVAS_DRAG_GRID_PX);
+  const [leftDockTab, setLeftDockTab] = useState<BookEditorLeftTab>("page");
+  const [drawingStrokeColor, setDrawingStrokeColor] = useState("#0f172a");
+  const [drawingStrokeWidth, setDrawingStrokeWidth] = useState(4);
+  const [floatingWidgetPaletteOpen, setFloatingWidgetPaletteOpen] = useState(
+    readFloatingWidgetPaletteVisible,
+  );
+  const [floatingMediaLibraryOpen, setFloatingMediaLibraryOpen] = useState(
+    readFloatingMediaLibraryVisible,
+  );
+  const persistWidgetFloatingOpen = useCallback((open: boolean) => {
+    writeFloatingWidgetPaletteVisible(open);
+    setFloatingWidgetPaletteOpen(open);
+  }, []);
+  const persistMediaFloatingOpen = useCallback((open: boolean) => {
+    writeFloatingMediaLibraryVisible(open);
+    setFloatingMediaLibraryOpen(open);
+  }, []);
+  const [floatingPanelZ, setFloatingPanelZ] = useState(() => ({
+    widget: 220,
+    media: 219,
+  }));
+  const raiseFloatingWidgetStack = useCallback(() => {
+    setFloatingPanelZ((prev) => {
+      const top = Math.max(prev.widget, prev.media) + 1;
+      return { ...prev, widget: top };
+    });
+  }, []);
+  const raiseFloatingMediaStack = useCallback(() => {
+    setFloatingPanelZ((prev) => {
+      const top = Math.max(prev.widget, prev.media) + 1;
+      return { ...prev, media: top };
+    });
+  }, []);
 
   const maxPageIdx = Math.max(0, localPages.length - 1);
   const activePageIndex = Math.min(pageIndex, maxPageIdx);
   const activePage = localPages[activePageIndex];
-  const canvasSelectedId =
-    selectedId && activePage?.elements.some((e) => e.id === selectedId)
-      ? selectedId
-      : null;
+  const canvasSelectedIds = useMemo(() => {
+    if (!activePage) return [];
+    const onPage = new Set(activePage.elements.map((e) => e.id));
+    return selectedIds.filter((id) => onPage.has(id));
+  }, [selectedIds, activePage]);
+
+  const handleCanvasSelect = useCallback((d: BookCanvasSelectDetail) => {
+    if (d.id === null) {
+      setSelectedIds([]);
+      return;
+    }
+    const nextId = d.id;
+    setSelectedIds((prev) => {
+      if (d.shiftKey) {
+        const nex = new Set(prev);
+        if (nex.has(nextId)) nex.delete(nextId);
+        else nex.add(nextId);
+        return Array.from(nex);
+      }
+      return [nextId];
+    });
+  }, []);
+
+  const handleLayerSelect = useCallback((id: string, shiftKey?: boolean) => {
+    setSelectedIds((prev) => {
+      if (shiftKey) {
+        const nex = new Set(prev);
+        if (nex.has(id)) nex.delete(id);
+        else nex.add(id);
+        return Array.from(nex);
+      }
+      return [id];
+    });
+  }, []);
+
+  const libraryPickKind = useMemo((): "image" | "video" | null => {
+    if (!libraryPickElementId || !activePage) return null;
+    const el = activePage.elements.find((e) => e.id === libraryPickElementId);
+    if (el?.type === "image") return "image";
+    if (el?.type === "video") return "video";
+    return null;
+  }, [libraryPickElementId, activePage]);
+
+  useEffect(() => {
+    if (libraryPickElementId && !libraryPickKind) {
+      setLibraryPickElementId(null);
+    }
+  }, [libraryPickElementId, libraryPickKind]);
+
+  useEffect(() => {
+    if (!activePage) return;
+    const onPage = new Set(activePage.elements.map((e) => e.id));
+    queueMicrotask(() => {
+      setSelectedIds((prev) => {
+        const next = prev.filter((id) => onPage.has(id));
+        if (next.length === prev.length && next.every((id, i) => id === prev[i])) return prev;
+        return next;
+      });
+    });
+  }, [activePage]);
 
   const {
     displayScale,
@@ -168,6 +282,17 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         return;
       }
       if (widgetDeleteOpen || deleteConfirmOpen) return;
+      if ((e.ctrlKey || e.metaKey) && e.key === "a") {
+        e.preventDefault();
+        if (!activePage) return;
+        setSelectedIds(activePage.elements.map((el) => el.id));
+        return;
+      }
+      if (e.key === "Escape" && canvasSelectedIds.length > 0) {
+        e.preventDefault();
+        setSelectedIds([]);
+        return;
+      }
       if ((e.ctrlKey || e.metaKey) && e.key === "z" && !e.shiftKey) {
         e.preventDefault();
         if (canUndo) undo();
@@ -177,21 +302,30 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       ) {
         e.preventDefault();
         if (canRedo) redo();
-      } else if (e.key === "Delete" && !canvasSelectedId) {
+      } else if (e.key === "Delete" && canvasSelectedIds.length === 0) {
         e.preventDefault();
         setDeleteConfirmOpen(true);
       } else if (
         (e.key === "Delete" || e.key === "Backspace") &&
-        canvasSelectedId
+        canvasSelectedIds.length > 0
       ) {
         e.preventDefault();
-        setWidgetDeleteId(canvasSelectedId);
+        setWidgetDeleteIds([...canvasSelectedIds]);
         setWidgetDeleteOpen(true);
       }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canUndo, canRedo, undo, redo, canvasSelectedId, widgetDeleteOpen, deleteConfirmOpen]);
+  }, [
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    canvasSelectedIds,
+    activePage,
+    widgetDeleteOpen,
+    deleteConfirmOpen,
+  ]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -272,15 +406,28 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     [activePageIndex, updatePages],
   );
 
+  const onLayerDragReorder = useCallback(
+    (fromDisplay: number, toDisplay: number) => {
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (!p) return;
+        p.elements = reorderBookElementsByDisplayIndex(p.elements, fromDisplay, toDisplay);
+      });
+    },
+    [activePageIndex, updatePages],
+  );
+
   const onLayerVisibilityChange = useCallback(
     (elementId: string, visible: boolean) => {
       onElementChange(
         elementId,
         visible ? ({ visible: undefined } as Partial<BookCanvasElement>) : { visible: false },
       );
-      if (!visible && canvasSelectedId === elementId) setSelectedId(null);
+      if (!visible) {
+        setSelectedIds((prev) => prev.filter((id) => id !== elementId));
+      }
     },
-    [onElementChange, canvasSelectedId],
+    [onElementChange],
   );
 
   const onLayerLockChange = useCallback(
@@ -291,6 +438,36 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       );
     },
     [onElementChange],
+  );
+
+  const applySlideTemplate = useCallback(
+    (templateId: BookSlideTemplateId) => {
+      if (!activePage) {
+        toast.error("먼저 페이지를 추가하세요.");
+        return;
+      }
+      const nextElements = instantiateBookSlideTemplate(templateId, slideWidth, slideHeight);
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (!p) return;
+        p.elements = nextElements;
+      });
+      setSelectedIds([]);
+      toast.success("슬라이드 내용을 비우고 템플릿을 적용했습니다.");
+    },
+    [activePage, activePageIndex, slideHeight, slideWidth, setSelectedIds, updatePages],
+  );
+
+  const onAppendDrawingElement = useCallback(
+    (el: BookCanvasElement) => {
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (!p) return;
+        p.elements.push(el);
+      });
+      setSelectedIds([el.id]);
+    },
+    [activePageIndex, updatePages],
   );
 
   const updateCurrentPageName = useCallback(
@@ -332,7 +509,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         const p = draft[activePageIndex];
         if (p) p.elements.push(el);
       });
-      setSelectedId(id);
+      setSelectedIds([id]);
     },
     [activePageIndex, updatePages],
   );
@@ -352,7 +529,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         const p = draft[activePageIndex];
         if (p) p.elements.push(el);
       });
-      setSelectedId(id);
+      setSelectedIds([id]);
     },
     [activePageIndex, updatePages],
   );
@@ -372,13 +549,15 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         const p = draft[activePageIndex];
         if (p) p.elements.push(el);
       });
-      setSelectedId(id);
+      setSelectedIds([id]);
     },
     [activePageIndex, updatePages],
   );
 
   const handleMediaFile = async (file: File, kind: "image" | "video") => {
     setUploadError(null);
+    const replaceElementId = replaceMediaElementIdRef.current;
+    replaceMediaElementIdRef.current = null;
     const pos = pendingPlacementRef.current ?? { x: 100, y: 100 };
     const idx = activePageIndex;
     pendingPlacementRef.current = null;
@@ -390,6 +569,29 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       }
       if (kind === "video" && res.kind !== "video") {
         throw new Error("동영상 파일이 아닙니다.");
+      }
+      if (replaceElementId) {
+        updatePages((draft) => {
+          const p = draft[idx];
+          if (!p) return;
+          const el = p.elements.find((e) => e.id === replaceElementId);
+          if (!el) return;
+          if (el.type === "image" && res.kind === "image") {
+            Object.assign(el, { src: res.url });
+          } else if (el.type === "video" && res.kind === "video") {
+            Object.assign(el, {
+              src: res.url,
+              posterSrc: res.posterUrl ?? null,
+            });
+          }
+        });
+        appendBookMediaLibraryItem(bookId, {
+          kind: res.kind,
+          src: res.url,
+          posterUrl: res.posterUrl,
+        });
+        toast.success("미디어를 바꿨습니다.");
+        return;
       }
       const id = crypto.randomUUID();
       const w = kind === "image" ? 400 : 480;
@@ -419,12 +621,47 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         const p = draft[idx];
         if (p) p.elements.push(el);
       });
-      setSelectedId(id);
+      setSelectedIds([id]);
+      appendBookMediaLibraryItem(bookId, {
+        kind: res.kind,
+        src: res.url,
+        posterUrl: res.posterUrl,
+      });
       toast.success(kind === "image" ? "이미지를 넣었습니다." : "동영상을 넣었습니다.");
     } catch (e) {
       setUploadError((e as Error).message);
     }
   };
+
+  const onRequestReplaceMediaFromFile = useCallback((req: BookReplaceMediaFromFileRequest) => {
+    replaceMediaElementIdRef.current = req.elementId;
+    pendingMediaKindRef.current = req.kind;
+    if (req.kind === "image") {
+      imageInputRef.current?.click();
+    } else {
+      videoInputRef.current?.click();
+    }
+  }, []);
+
+  const onRequestPickLibraryMediaForReplace = useCallback((req: { elementId: string }) => {
+    setLibraryPickElementId(req.elementId);
+    raiseFloatingMediaStack();
+  }, [raiseFloatingMediaStack]);
+
+  useEffect(() => {
+    const onCancel = () => {
+      replaceMediaElementIdRef.current = null;
+      pendingMediaKindRef.current = null;
+    };
+    const img = imageInputRef.current;
+    const vid = videoInputRef.current;
+    img?.addEventListener("cancel", onCancel);
+    vid?.addEventListener("cancel", onCancel);
+    return () => {
+      img?.removeEventListener("cancel", onCancel);
+      vid?.removeEventListener("cancel", onCancel);
+    };
+  }, []);
 
   const onDropWidget = useCallback(
     (point: { x: number; y: number }, kind: BookDropWidgetKind) => {
@@ -451,12 +688,50 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     [addDigitalClockAt, addTextAt, addWeatherAt],
   );
 
+  const onDropLibraryMedia = useCallback(
+    (point: { x: number; y: number }, payload: BookLibraryDragPayload) => {
+      const id = crypto.randomUUID();
+      const w = payload.kind === "image" ? 400 : 480;
+      const h = payload.kind === "image" ? 260 : 270;
+      const el: BookCanvasElement =
+        payload.kind === "image"
+          ? {
+              id,
+              type: "image",
+              x: point.x,
+              y: point.y,
+              width: w,
+              height: h,
+              src: payload.src,
+            }
+          : {
+              id,
+              type: "video",
+              x: point.x,
+              y: point.y,
+              width: w,
+              height: h,
+              src: payload.src,
+              posterSrc: payload.posterSrc,
+            };
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.elements.push(el);
+      });
+      setSelectedIds([id]);
+      toast.success(
+        payload.kind === "image" ? "이미지를 배치했습니다." : "동영상을 배치했습니다.",
+      );
+    },
+    [activePageIndex, updatePages],
+  );
+
   const addPage = useCallback(() => {
     commitPages((prev) =>
       applyAutoSlideNamesByIndex([...prev, createEmptyEditorPage(prev.length)]),
     );
     setPageIndex(localPages.length);
-    setSelectedId(null);
+    setSelectedIds([]);
   }, [commitPages, localPages.length]);
 
   const removePageAt = useCallback(
@@ -469,10 +744,21 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         return applyAutoSlideNamesByIndex(next);
       });
       setPageIndex(nextIdx);
-      setSelectedId(null);
+      setSelectedIds([]);
     },
     [activePageIndex, commitPages],
   );
+
+  const requestRemovePageAt = useCallback((index: number) => {
+    setPageDeleteIndex(index);
+    setPageDeleteOpen(true);
+  }, []);
+
+  const confirmRemovePageAt = useCallback(() => {
+    if (pageDeleteIndex != null) removePageAt(pageDeleteIndex);
+    setPageDeleteOpen(false);
+    setPageDeleteIndex(null);
+  }, [pageDeleteIndex, removePageAt]);
 
   const duplicatePageAt = useCallback(
     (index: number) => {
@@ -483,38 +769,46 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         return applyAutoSlideNamesByIndex(next.map((p, i) => ({ ...p, sortOrder: i })));
       });
       setPageIndex(index + 1);
-      setSelectedId(null);
+      setSelectedIds([]);
     },
     [commitPages],
   );
 
-  const removeElementById = useCallback(
-    (elementId: string) => {
+  const removeElementsByIds = useCallback(
+    (ids: string[]) => {
+      if (ids.length === 0) return;
+      const idSet = new Set(ids);
       updatePages((draft) => {
         const p = draft[activePageIndex];
         if (!p) return;
-        p.elements = p.elements.filter((e) => e.id !== elementId);
+        p.elements = p.elements.filter((e) => !idSet.has(e.id));
       });
-      setSelectedId((cur) => (cur === elementId ? null : cur));
+      setSelectedIds((prev) => prev.filter((id) => !idSet.has(id)));
     },
     [activePageIndex, updatePages],
   );
 
   const requestRemoveWidget = useCallback((elementId: string) => {
-    setWidgetDeleteId(elementId);
+    setWidgetDeleteIds([elementId]);
     setWidgetDeleteOpen(true);
   }, []);
 
   const confirmRemoveWidget = useCallback(() => {
-    if (widgetDeleteId) removeElementById(widgetDeleteId);
+    if (widgetDeleteIds.length > 0) removeElementsByIds(widgetDeleteIds);
     setWidgetDeleteOpen(false);
-    setWidgetDeleteId(null);
-  }, [widgetDeleteId, removeElementById]);
+    setWidgetDeleteIds([]);
+  }, [widgetDeleteIds, removeElementsByIds]);
 
   const removeSelected = useCallback(() => {
-    if (!canvasSelectedId) return;
-    requestRemoveWidget(canvasSelectedId);
-  }, [canvasSelectedId, requestRemoveWidget]);
+    if (canvasSelectedIds.length !== 1) return;
+    requestRemoveWidget(canvasSelectedIds[0]!);
+  }, [canvasSelectedIds, requestRemoveWidget]);
+
+  const removeSelectedBulk = useCallback(() => {
+    if (canvasSelectedIds.length === 0) return;
+    setWidgetDeleteIds([...canvasSelectedIds]);
+    setWidgetDeleteOpen(true);
+  }, [canvasSelectedIds]);
 
   const reorderPages = useCallback(
     (from: number, to: number) => {
@@ -531,21 +825,37 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   );
 
   const selectedEl = useMemo(() => {
-    if (!canvasSelectedId || !activePage) return null;
-    return activePage.elements.find((e) => e.id === canvasSelectedId) ?? null;
-  }, [canvasSelectedId, activePage]);
+    if (canvasSelectedIds.length !== 1 || !activePage) return null;
+    const id = canvasSelectedIds[0];
+    return activePage.elements.find((e) => e.id === id) ?? null;
+  }, [canvasSelectedIds, activePage]);
+
+  const onInspectorReplaceMediaFromFile = useCallback(() => {
+    if (!selectedEl || (selectedEl.type !== "image" && selectedEl.type !== "video")) return;
+    onRequestReplaceMediaFromFile({
+      elementId: selectedEl.id,
+      kind: selectedEl.type,
+    });
+  }, [selectedEl, onRequestReplaceMediaFromFile]);
+
+  const onInspectorPickMediaFromLibrary = useCallback(() => {
+    if (!selectedEl || (selectedEl.type !== "image" && selectedEl.type !== "video")) return;
+    onRequestPickLibraryMediaForReplace({ elementId: selectedEl.id });
+  }, [selectedEl, onRequestPickLibraryMediaForReplace]);
 
   const widgetDeleteKindLabel = useMemo(() => {
-    if (!widgetDeleteId || !activePage) return "위젯";
-    const el = activePage.elements.find((e) => e.id === widgetDeleteId);
+    if (widgetDeleteIds.length === 0 || !activePage) return "위젯";
+    if (widgetDeleteIds.length > 1) return `${widgetDeleteIds.length}개 위젯`;
+    const el = activePage.elements.find((e) => e.id === widgetDeleteIds[0]);
     if (!el) return "위젯";
     if (el.type === "text") return "텍스트 위젯";
     if (el.type === "image") return "이미지 위젯";
     if (el.type === "video") return "동영상 위젯";
     if (el.type === "weather") return "날씨 위젯";
     if (el.type === "digitalClock") return "디지털 시계 위젯";
+    if (el.type === "drawing") return "그리기";
     return "위젯";
-  }, [widgetDeleteId, activePage]);
+  }, [widgetDeleteIds, activePage]);
 
   const mediaHint = useMemo(() => uploadError, [uploadError]);
 
@@ -554,20 +864,54 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       open={widgetDeleteOpen}
       onOpenChange={(open) => {
         setWidgetDeleteOpen(open);
-        if (!open) setWidgetDeleteId(null);
+        if (!open) setWidgetDeleteIds([]);
       }}
     >
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>위젯을 삭제할까요?</AlertDialogTitle>
           <AlertDialogDescription>
-            이 슬라이드에서 「{widgetDeleteKindLabel}」을(를) 제거합니다. 실행 후에는 되돌리기(Ctrl+Z)로 복구할 수
-            있습니다.
+            이 슬라이드에서 「{widgetDeleteKindLabel}」을(를) 제거합니다.
+            {widgetDeleteIds.length > 1
+              ? " 선택한 위젯이 모두 삭제됩니다."
+              : ""}{" "}
+            실행 후에는 되돌리기(Ctrl+Z)로 복구할 수 있습니다.
           </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel type="button">취소</AlertDialogCancel>
           <Button type="button" variant="destructive" onClick={() => confirmRemoveWidget()}>
+            삭제
+          </Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  );
+
+  const pageDeleteTargetLabel =
+    pageDeleteIndex != null && localPages[pageDeleteIndex]
+      ? localPages[pageDeleteIndex].name.trim() || `슬라이드 ${pageDeleteIndex + 1}`
+      : "이 슬라이드";
+
+  const pageDeleteDialog = (
+    <AlertDialog
+      open={pageDeleteOpen}
+      onOpenChange={(open) => {
+        setPageDeleteOpen(open);
+        if (!open) setPageDeleteIndex(null);
+      }}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>슬라이드를 삭제할까요?</AlertDialogTitle>
+          <AlertDialogDescription>
+            「{pageDeleteTargetLabel}」와 이 페이지에 있는 모든 위젯이 제거됩니다. 되돌리기(Ctrl+Z)로 복구할 수
+            있습니다.
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel type="button">취소</AlertDialogCancel>
+          <Button type="button" variant="destructive" onClick={() => confirmRemovePageAt()}>
             삭제
           </Button>
         </AlertDialogFooter>
@@ -646,22 +990,83 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
           </>
         }
         left={
-          <BookPageSidebar
-            pageCount={0}
-            activeIndex={0}
-            onSelectPage={() => undefined}
-            mode="edit"
-            onAddPage={addPage}
-            canRemovePage={false}
-          />
+          <div className="flex h-full min-h-0 w-full min-w-0 flex-row">
+            <BookEditorToolRail
+              activeTab={leftDockTab}
+              onActiveTabChange={setLeftDockTab}
+              mediaLibraryEnabled
+            />
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-border/60 bg-card/30 sm:max-w-[24rem]">
+              {leftDockTab === "page" ? (
+                <BookPageSidebar
+                  fluid
+                  pageCount={0}
+                  activeIndex={0}
+                  onSelectPage={() => undefined}
+                  mode="edit"
+                  onAddPage={addPage}
+                  canRemovePage={false}
+                />
+              ) : null}
+              {leftDockTab === "widgets" ? (
+                <BookWidgetPalette
+                  variant="docked"
+                  className="min-h-0 flex-1"
+                  onRequestFloat={() => persistWidgetFloatingOpen(true)}
+                />
+              ) : null}
+              {leftDockTab === "media" ? (
+                <BookMediaLibraryPanel
+                  variant="docked"
+                  bookId={bookId}
+                  className="min-h-0 flex-1"
+                  onRequestFloat={() => persistMediaFloatingOpen(true)}
+                />
+              ) : null}
+              {leftDockTab === "templates" ? (
+                <BookSlideTemplatesPanel
+                  className="min-h-0 flex-1"
+                  onApplyTemplate={applySlideTemplate}
+                />
+              ) : null}
+              {leftDockTab === "drawing" ? (
+                <BookSlideDrawingPanel
+                  className="min-h-0 flex-1"
+                  strokeColor={drawingStrokeColor}
+                  strokeWidth={drawingStrokeWidth}
+                  onStrokeColorChange={setDrawingStrokeColor}
+                  onStrokeWidthChange={setDrawingStrokeWidth}
+                />
+              ) : null}
+            </div>
+          </div>
         }
         center={
-          <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
-            <p className="text-sm text-muted-foreground">페이지가 없습니다. 왼쪽에서 페이지를 추가하세요.</p>
-            <Button type="button" onClick={addPage}>
-              첫 페이지 추가
-            </Button>
-          </div>
+          <>
+            <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
+              <p className="text-sm text-muted-foreground">페이지가 없습니다. 왼쪽에서 페이지를 추가하세요.</p>
+              <Button type="button" onClick={addPage}>
+                첫 페이지 추가
+              </Button>
+            </div>
+            {floatingWidgetPaletteOpen ? (
+              <BookWidgetPalette
+                variant="floating"
+                floatingStackZIndex={floatingPanelZ.widget}
+                onRaiseFloatingStack={raiseFloatingWidgetStack}
+                onClose={() => persistWidgetFloatingOpen(false)}
+              />
+            ) : null}
+            {floatingMediaLibraryOpen ? (
+              <BookMediaLibraryPanel
+                bookId={bookId}
+                variant="floating"
+                floatingStackZIndex={floatingPanelZ.media}
+                onRaiseFloatingStack={raiseFloatingMediaStack}
+                onClose={() => persistMediaFloatingOpen(false)}
+              />
+            ) : null}
+          </>
         }
         right={
           <aside className="flex w-80 shrink-0 flex-col border-l border-border bg-card/50 p-3">
@@ -673,6 +1078,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       />
       {deleteBookDialog}
       {widgetDeleteDialog}
+      {pageDeleteDialog}
       </>
     );
   }
@@ -729,28 +1135,72 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         </>
       }
       left={
-        <BookPageSidebar
-          pageCount={localPages.length}
-          pageKeys={pageKeys}
-          thumbnailsByKey={slideThumbnails}
-          activeIndex={activePageIndex}
-          pageLabels={pageLabels}
-          onSelectPage={(i) => {
-            setPageIndex(i);
-            setSelectedId(null);
-          }}
-          mode="edit"
-          onReorderPages={reorderPages}
-          onAddPage={addPage}
-          onRemovePageAtIndex={removePageAt}
-          onDuplicatePageAtIndex={duplicatePageAt}
-          canRemovePage={localPages.length > 1}
-        />
+        <div className="flex h-full min-h-0 w-full min-w-0 flex-row">
+          <BookEditorToolRail
+            activeTab={leftDockTab}
+            onActiveTabChange={setLeftDockTab}
+            mediaLibraryEnabled
+          />
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-border/60 bg-card/30 sm:max-w-[24rem]">
+            {leftDockTab === "page" ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                <BookPageSidebar
+                  fluid
+                  pageCount={localPages.length}
+                  pageKeys={pageKeys}
+                  thumbnailsByKey={slideThumbnails}
+                  activeIndex={activePageIndex}
+                  pageLabels={pageLabels}
+                  onSelectPage={(i) => {
+                    setPageIndex(i);
+                    setSelectedIds([]);
+                  }}
+                  mode="edit"
+                  onReorderPages={reorderPages}
+                  onAddPage={addPage}
+                  onRemovePageAtIndex={requestRemovePageAt}
+                  onDuplicatePageAtIndex={duplicatePageAt}
+                  canRemovePage={localPages.length > 1}
+                />
+              </div>
+            ) : null}
+            {leftDockTab === "widgets" ? (
+              <BookWidgetPalette
+                variant="docked"
+                className="min-h-0 flex-1"
+                onRequestFloat={() => persistWidgetFloatingOpen(true)}
+              />
+            ) : null}
+            {leftDockTab === "media" ? (
+              <BookMediaLibraryPanel
+                variant="docked"
+                bookId={bookId}
+                className="min-h-0 flex-1"
+                onRequestFloat={() => persistMediaFloatingOpen(true)}
+              />
+            ) : null}
+            {leftDockTab === "templates" ? (
+              <BookSlideTemplatesPanel
+                className="min-h-0 flex-1"
+                onApplyTemplate={applySlideTemplate}
+              />
+            ) : null}
+            {leftDockTab === "drawing" ? (
+              <BookSlideDrawingPanel
+                className="min-h-0 flex-1"
+                strokeColor={drawingStrokeColor}
+                strokeWidth={drawingStrokeWidth}
+                onStrokeColorChange={setDrawingStrokeColor}
+                onStrokeWidthChange={setDrawingStrokeWidth}
+              />
+            ) : null}
+          </div>
+        </div>
       }
       center={
         <>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex shrink-0 justify-center border-b border-border/60 bg-muted/15 px-2 py-2">
+            <div className="flex shrink-0 justify-start border-b border-border/60 bg-muted/15 px-2 py-2 sm:px-3">
               <BookCanvasToolbar
                 zoomPercent={zoomPercent}
                 onZoomIn={zoomIn}
@@ -772,9 +1222,11 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
               className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 pb-24"
               onWheel={handleWheel}
               onPointerDown={(e) => {
-                const slide = (e.currentTarget as HTMLElement).querySelector("[data-book-slide-root]");
+                const slide = (e.currentTarget as HTMLElement).querySelector(
+                  "[data-book-slide-root]",
+                );
                 if (slide?.contains(e.target as Node)) return;
-                setSelectedId(null);
+                setSelectedIds([]);
               }}
             >
               <BookSlideCanvas
@@ -786,18 +1238,42 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 scale={displayScale}
                 elements={activePage.elements}
                 mode="edit"
-                selectedId={canvasSelectedId}
-                onSelect={setSelectedId}
+                selectedIds={canvasSelectedIds}
+                onSelect={handleCanvasSelect}
                 onElementChange={onElementChange}
                 onDropWidget={onDropWidget}
+                onDropLibraryMedia={onDropLibraryMedia}
                 onReorderZ={onReorderZ}
                 onDeleteElement={requestRemoveWidget}
                 centerGuideThresholdPx={centerGuideThresholdPx}
                 dragGridPx={dragGridPx}
+                editInteractionTool={leftDockTab === "drawing" ? "draw" : "default"}
+                drawingStrokeColor={drawingStrokeColor}
+                drawingStrokeWidth={drawingStrokeWidth}
+                onAppendElement={onAppendDrawingElement}
+                onRequestReplaceMediaFromFile={onRequestReplaceMediaFromFile}
+                onRequestPickLibraryMediaForReplace={onRequestPickLibraryMediaForReplace}
+                mediaLibraryReplaceEnabled
               />
             </div>
           </div>
-          <BookWidgetPalette />
+          {floatingWidgetPaletteOpen ? (
+            <BookWidgetPalette
+              variant="floating"
+              floatingStackZIndex={floatingPanelZ.widget}
+              onRaiseFloatingStack={raiseFloatingWidgetStack}
+              onClose={() => persistWidgetFloatingOpen(false)}
+            />
+          ) : null}
+          {floatingMediaLibraryOpen ? (
+            <BookMediaLibraryPanel
+              bookId={bookId}
+              variant="floating"
+              floatingStackZIndex={floatingPanelZ.media}
+              onRaiseFloatingStack={raiseFloatingMediaStack}
+              onClose={() => persistMediaFloatingOpen(false)}
+            />
+          ) : null}
           <input
             ref={imageInputRef}
             type="file"
@@ -806,9 +1282,13 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
             onChange={(e) => {
               const f = e.target.files?.[0];
               e.target.value = "";
-              if (f && pendingMediaKindRef.current === "image") {
-                void handleMediaFile(f, "image");
+              if (pendingMediaKindRef.current !== "image") return;
+              if (!f) {
+                replaceMediaElementIdRef.current = null;
+                pendingMediaKindRef.current = null;
+                return;
               }
+              void handleMediaFile(f, "image");
             }}
           />
           <input
@@ -819,26 +1299,42 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
             onChange={(e) => {
               const f = e.target.files?.[0];
               e.target.value = "";
-              if (f && pendingMediaKindRef.current === "video") {
-                void handleMediaFile(f, "video");
+              if (pendingMediaKindRef.current !== "video") return;
+              if (!f) {
+                replaceMediaElementIdRef.current = null;
+                pendingMediaKindRef.current = null;
+                return;
               }
+              void handleMediaFile(f, "video");
             }}
           />
         </>
       }
       right={
-        <aside className="flex h-full min-h-0 w-80 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
+        <aside className="flex h-full min-h-0 w-96 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
           <BookLayersPanel
             elements={activePage.elements}
-            selectedId={canvasSelectedId}
-            onSelect={setSelectedId}
+            selectedIds={canvasSelectedIds}
+            onSelect={handleLayerSelect}
             onReorderZ={onReorderZ}
+            onLayerDragReorder={onLayerDragReorder}
             onVisibilityChange={onLayerVisibilityChange}
             onLockChange={onLayerLockChange}
             onRequestDelete={requestRemoveWidget}
           />
           <div className="min-h-0 flex-1 overflow-hidden">
-            {canvasSelectedId ? (
+            {canvasSelectedIds.length >= 2 ? (
+              <BookInspectorPanel
+                embedded
+                selected={null}
+                multiSelectionCount={canvasSelectedIds.length}
+                slideWidth={slideWidth}
+                slideHeight={slideHeight}
+                onChange={onElementChange}
+                onDelete={removeSelectedBulk}
+                mediaHint={mediaHint}
+              />
+            ) : canvasSelectedIds.length === 1 ? (
               <BookInspectorPanel
                 embedded
                 selected={selectedEl}
@@ -847,6 +1343,9 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 onChange={onElementChange}
                 onDelete={removeSelected}
                 mediaHint={mediaHint}
+                onReplaceMediaFromFile={onInspectorReplaceMediaFromFile}
+                onPickMediaFromLibrary={onInspectorPickMediaFromLibrary}
+                mediaLibraryReplaceEnabled
               />
             ) : (
               <BookPagePropertiesPanel
@@ -867,6 +1366,30 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     />
     {deleteBookDialog}
     {widgetDeleteDialog}
+    {pageDeleteDialog}
+    {libraryPickKind ? (
+      <BookMediaLibraryPickDialog
+        open={libraryPickElementId != null}
+        onOpenChange={(o) => {
+          if (!o) setLibraryPickElementId(null);
+        }}
+        bookId={bookId}
+        acceptKind={libraryPickKind}
+        onPick={(item) => {
+          if (!libraryPickElementId) return;
+          if (item.kind === "image") {
+            onElementChange(libraryPickElementId, { src: item.src });
+          } else {
+            onElementChange(libraryPickElementId, {
+              src: item.src,
+              posterSrc: item.posterSrc,
+            });
+          }
+          setLibraryPickElementId(null);
+          toast.success("미디어를 바꿨습니다.");
+        }}
+      />
+    ) : null}
     </>
   );
 }
@@ -944,7 +1467,7 @@ function BookDetailGuestBookView({
       }
       center={
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 justify-center border-b border-border/60 bg-muted/15 px-2 py-2">
+          <div className="flex shrink-0 justify-start border-b border-border/60 bg-muted/15 px-2 py-2 sm:px-3">
             <BookCanvasToolbar
               zoomPercent={guestCanvasScale.zoomPercent}
               onZoomIn={guestCanvasScale.zoomIn}
@@ -969,7 +1492,7 @@ function BookDetailGuestBookView({
               scale={guestCanvasScale.displayScale}
               elements={viewPage.elements}
               mode="view"
-              selectedId={null}
+              selectedIds={[]}
               onSelect={() => undefined}
               onElementChange={() => undefined}
             />
@@ -981,7 +1504,7 @@ function BookDetailGuestBookView({
           <BookLayersPanel
             expandVertical
             elements={viewPage.elements}
-            selectedId={null}
+            selectedIds={[]}
             onSelect={() => undefined}
             readOnly
           />
