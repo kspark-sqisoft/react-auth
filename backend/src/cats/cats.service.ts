@@ -29,27 +29,27 @@ export class CatsService {
   ) {}
 
   findAll(): Promise<Cat[]> {
-    this.logger.log(`[CATS-10-SVC] findAll() | DB 조회 시작`);
+    this.logger.log(`[CATS·서비스] findAll() | DB 조회 시작`);
     return this.cats.find({ order: { id: 'ASC' } }).then((rows) => {
-      this.logger.log(`[CATS-10-SVC] findAll() | 완료 ${rows.length}건`);
+      this.logger.log(`[CATS·서비스] findAll() | 완료 ${rows.length}건`);
       return rows;
     });
   }
 
   async findOne(id: number): Promise<Cat> {
-    this.logger.log(`[CATS-10-SVC] findOne(${id}) | DB 조회`);
+    this.logger.log(`[CATS·서비스] findOne(${id}) | DB 조회`);
     const cat = await this.cats.findOne({ where: { id } });
     if (!cat) {
-      this.logger.warn(`[CATS-10-SVC] findOne(${id}) | 없음 → 404 예외`);
+      this.logger.warn(`[CATS·서비스] findOne(${id}) | 없음 → 404 예외`);
       throw new CatNotFoundException(id);
     }
-    this.logger.log(`[CATS-10-SVC] findOne(${id}) | 조회 성공`);
+    this.logger.log(`[CATS·서비스] findOne(${id}) | 조회 성공`);
     return cat;
   }
 
   async create(dto: CreateCatDto): Promise<Cat> {
     this.logger.log(
-      `[CATS-10-SVC] create() | name=${dto.name} age=${dto.age} breed=${dto.breed}`,
+      `[CATS·서비스] create() | name=${dto.name} age=${dto.age} breed=${dto.breed}`,
     );
     const row = this.cats.create({
       name: dto.name,
@@ -57,14 +57,14 @@ export class CatsService {
       breed: dto.breed ?? 'mixed',
     });
     const saved = await this.cats.save(row);
-    this.logger.log(`[CATS-10-SVC] create() | 완료 id=${saved.id}`);
+    this.logger.log(`[CATS·서비스] create() | 완료 id=${saved.id}`);
     return saved;
   }
 
   async remove(id: number): Promise<void> {
-    this.logger.log(`[CATS-10-SVC] remove(${id}) | 존재 확인 후 삭제`);
+    this.logger.log(`[CATS·서비스] remove(${id}) | 존재 확인 후 삭제`);
     await this.findOne(id);
     await this.cats.delete(id);
-    this.logger.log(`[CATS-10-SVC] remove(${id}) | 완료`);
+    this.logger.log(`[CATS·서비스] remove(${id}) | 완료`);
   }
 }

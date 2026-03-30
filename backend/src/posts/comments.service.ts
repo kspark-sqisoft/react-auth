@@ -103,7 +103,7 @@ export class CommentsService {
     body: { content: string; parentId?: number },
   ): Promise<CommentPublic> {
     this.logger.log(
-      `[POSTS-11-CMT] create | postId=${postId} authorId=${authorId}`,
+      `[POSTS·댓글] create | postId=${postId} authorId=${authorId}`,
     );
     const postExists = await this.postRepo.exist({ where: { id: postId } });
     if (!postExists) {
@@ -145,7 +145,7 @@ export class CommentsService {
       relations: ['author'],
     });
     this.logger.log(
-      `[POSTS-11-CMT] create 완료 | postId=${postId} commentId=${saved.id} parentId=${body.parentId ?? '—'}`,
+      `[POSTS·댓글] create 완료 | postId=${postId} commentId=${saved.id} parentId=${body.parentId ?? '—'}`,
     );
     return this.toPublic(withAuthor, []);
   }
@@ -156,7 +156,7 @@ export class CommentsService {
     userId: number,
   ): Promise<void> {
     this.logger.log(
-      `[POSTS-11-CMT] remove | postId=${postId} commentId=${commentId} userId=${userId}`,
+      `[POSTS·댓글] remove | postId=${postId} commentId=${commentId} userId=${userId}`,
     );
     const c = await this.commentRepo.findOne({
       where: { id: commentId, post: { id: postId } },
@@ -170,7 +170,7 @@ export class CommentsService {
     }
     await this.commentRepo.remove(c);
     this.logger.log(
-      `[POSTS-11-CMT] remove 완료 | postId=${postId} commentId=${commentId}`,
+      `[POSTS·댓글] remove 완료 | postId=${postId} commentId=${commentId}`,
     );
   }
 }

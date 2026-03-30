@@ -17,7 +17,7 @@ export class CatsAfterJwtLogGuard implements CanActivate {
     const req = context.switchToHttp().getRequest<Request>();
     const user = (req as Request & { user?: { sub?: number } }).user;
     this.logger.log(
-      `[CATS-04-G2] Guard 뒤 | JWT 통과 user.sub=${user?.sub ?? '?'} | 다음: 05-IXIN→Pipe→CTRL`,
+      `[CATS·가드·JWT이후] JWT 통과 user.sub=${user?.sub ?? '?'} │ 다음: 인터셉터→파이프→컨트롤러`,
     );
     return true;
   }

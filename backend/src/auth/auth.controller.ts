@@ -30,7 +30,7 @@ export class AuthController {
   @Post('signup')
   @ApiOperation({ summary: '회원가입' })
   async signup(@Body() body: SignUpDto) {
-    this.logger.log('[AUTH-09-CTRL] signup() 핸들러 진입');
+    this.logger.log('[AUTH·컨트롤러] signup() 핸들러 진입');
     const user = await this.authService.signup(
       body.email,
       body.password,
@@ -53,7 +53,7 @@ export class AuthController {
     @Body() body: SignInDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    this.logger.log('[AUTH-09-CTRL] signin() 핸들러 진입');
+    this.logger.log('[AUTH·컨트롤러] signin() 핸들러 진입');
     const { access_token, refresh_token } = await this.authService.signin(
       body.email,
       body.password,
@@ -84,11 +84,11 @@ export class AuthController {
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    this.logger.log('[AUTH-09-CTRL] refresh() 핸들러 진입');
+    this.logger.log('[AUTH·컨트롤러] refresh() 핸들러 진입');
     const cookies = req.cookies as Record<string, string> | undefined;
     const token = cookies?.[REFRESH_TOKEN_COOKIE];
     if (!token) {
-      this.logger.warn('[AUTH-09-CTRL] refresh 거절 | 리프레시 쿠키 없음');
+      this.logger.warn('[AUTH·컨트롤러] refresh 거절 | 리프레시 쿠키 없음');
       throw new UnauthorizedException();
     }
     const { access_token, refresh_token } =
@@ -112,13 +112,13 @@ export class AuthController {
     ].join('\n'),
   })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    this.logger.log('[AUTH-09-CTRL] logout() 핸들러 진입');
+    this.logger.log('[AUTH·컨트롤러] logout() 핸들러 진입');
     const cookies = req.cookies as Record<string, string> | undefined;
     const token = cookies?.[REFRESH_TOKEN_COOKIE];
     if (token) {
       await this.authService.revokeRefreshToken(token);
     }
-    this.logger.log('[AUTH-09-CTRL] logout | 리프레시 쿠키 제거·DB 폐기');
+    this.logger.log('[AUTH·컨트롤러] logout | 리프레시 쿠키 제거·DB 폐기');
     res.clearCookie(REFRESH_TOKEN_COOKIE, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',

@@ -28,24 +28,24 @@ export class AuthService {
 
   async signup(email: string, password: string, name: string) {
     const emailNorm = email.trim();
-    this.logger.log(`[AUTH-10-SVC] signup 시도 | email=${emailNorm}`);
+    this.logger.log(`[AUTH·서비스] signup 시도 | email=${emailNorm}`);
     if (!name?.trim()) {
       this.logger.warn(
-        `[AUTH-10-SVC] signup 거절 | 이름 없음 email=${emailNorm}`,
+        `[AUTH·서비스] signup 거절 | 이름 없음 email=${emailNorm}`,
       );
       throw new BadRequestException('이름을 입력해 주세요.');
     }
     const existing = await this.usersService.findByEmail(emailNorm);
     if (existing) {
       this.logger.warn(
-        `[AUTH-10-SVC] signup 거절 | 이메일 중복 email=${emailNorm}`,
+        `[AUTH·서비스] signup 거절 | 이메일 중복 email=${emailNorm}`,
       );
       throw new ConflictException('이미 가입된 이메일입니다.');
     }
     const hashed = await bcrypt.hash(password, 10);
     const user = await this.usersService.create(emailNorm, hashed, name);
     this.logger.log(
-      `[AUTH-10-SVC] signup 완료 | userId=${user.id} email=${user.email} name=${user.name}`,
+      `[AUTH·서비스] signup 완료 | userId=${user.id} email=${user.email} name=${user.name}`,
     );
     return user;
   }
@@ -99,18 +99,18 @@ export class AuthService {
   }
 
   async signin(email: string, password: string) {
-    this.logger.log(`[AUTH-10-SVC] signin 시도 | email=${email}`);
+    this.logger.log(`[AUTH·서비스] signin 시도 | email=${email}`);
     const user = await this.usersService.findByEmail(email);
 
     if (!user) {
-      this.logger.warn(`[AUTH-10-SVC] signin 실패 | 계정 없음 email=${email}`);
+      this.logger.warn(`[AUTH·서비스] signin 실패 | 계정 없음 email=${email}`);
       throw new UnauthorizedException();
     }
 
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) {
       this.logger.warn(
-        `[AUTH-10-SVC] signin 실패 | 비밀번호 불일치 userId=${user.id}`,
+        `[AUTH·서비스] signin 실패 | 비밀번호 불일치 userId=${user.id}`,
       );
       throw new UnauthorizedException();
     }
@@ -126,7 +126,7 @@ export class AuthService {
     await this.persistRefreshToken(user.id, refresh_token);
 
     this.logger.log(
-      `[AUTH-10-SVC] signin 성공 | userId=${user.id} email=${user.email}`,
+      `[AUTH·서비스] signin 성공 | userId=${user.id} email=${user.email}`,
     );
     return {
       access_token,
@@ -135,7 +135,7 @@ export class AuthService {
   }
 
   async refresh(refreshToken: string) {
-    this.logger.log('[AUTH-10-SVC] refresh | 리프레시 검증 시도');
+    this.logger.log('[AUTH·서비스] refresh | 리프레시 검증 시도');
     let payload: JwtPayload;
     try {
       payload = await this.jwtService.verifyAsync<JwtPayload>(refreshToken, {
@@ -153,7 +153,7 @@ export class AuthService {
         : Number(payload.sub);
     if (!user || !Number.isFinite(subId) || user.id !== subId) {
       this.logger.warn(
-        `[AUTH-10-SVC] refresh 실패 | 사용자 불일치 또는 없음 sub=${payload.sub}`,
+        `[AUTH·서비스] refresh 실패 | 사용자 불일치 또는 없음 sub=${payload.sub}`,
       );
       throw new UnauthorizedException();
     }
@@ -194,14 +194,14 @@ export class AuthService {
     } catch (e) {
       if (e instanceof UnauthorizedException) {
         this.logger.warn(
-          '[AUTH-10-SVC] refresh 실패 | DB 없음·만료(로테이션 토큰 재사용 불가)',
+          '[AUTH·서비스] refresh 실패 | DB 없음·만료(로테이션 토큰 재사용 불가)',
         );
       }
       throw e;
     }
 
     this.logger.log(
-      `[AUTH-10-SVC] refresh 성공 | userId=${user.id} (로테이션)`,
+      `[AUTH·서비스] refresh 성공 | userId=${user.id} (로테이션)`,
     );
     return {
       access_token: this.signAccessToken({

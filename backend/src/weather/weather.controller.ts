@@ -22,14 +22,14 @@ export class WeatherController {
   @Get('current')
   @ApiOperation({ summary: '현재 날씨(q 생략 시 서울)' })
   getCurrent(@Query('q') q?: string): Promise<SeoulWeatherDto> {
-    this.logger.log('[WEATHER-09-CTRL] getCurrent() 핸들러 진입');
+    this.logger.log('[WEATHER·컨트롤러] getCurrent() 핸들러 진입');
     return this.weather.getWeather(q);
   }
 
   @Get('seoul')
   @ApiOperation({ summary: '서울 날씨(하위 호환)' })
   getSeoul(): Promise<SeoulWeatherDto> {
-    this.logger.log('[WEATHER-09-CTRL] getSeoul() 핸들러 진입');
+    this.logger.log('[WEATHER·컨트롤러] getSeoul() 핸들러 진입');
     return this.weather.getSeoulWeather();
   }
 }

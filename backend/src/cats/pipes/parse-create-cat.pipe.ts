@@ -31,7 +31,7 @@ export class ParseCreateCatPipe implements PipeTransform<
 
   transform(value: unknown, _metadata: ArgumentMetadata): CreateCatDto {
     this.logger.log(
-      `[CATS-07-PBD] Pipe body | ParseCreateCatPipe 검증·정규화 시작`,
+      `[CATS·파이프·요청본문] 검증·정규화 시작`,
     );
     if (value === null || typeof value !== 'object') {
       throw new BadRequestException('JSON body 가 필요합니다.');
@@ -57,7 +57,7 @@ export class ParseCreateCatPipe implements PipeTransform<
         : 'mixed';
     const dto = { name: nameRaw.trim(), age, breed };
     this.logger.log(
-      `[CATS-07-PBD] Pipe body | 완료 → CreateCatDto(name,age,breed)`,
+      `[CATS·파이프·요청본문] 완료 → CreateCatDto(name, age, breed)`,
     );
     return dto;
   }

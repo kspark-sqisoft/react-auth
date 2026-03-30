@@ -26,7 +26,7 @@ export class CatNotFoundFilter implements ExceptionFilter {
     const res = ctx.getResponse<Response>();
     const status = exception.getStatus();
     this.logger.warn(
-      `[CATS-13-FLT] ExceptionFilter | CatNotFound | HTTP ${status} | ${exception.message}`,
+      `[CATS·예외필터] CatNotFound → HTTP ${status} │ ${exception.message}`,
     );
     res.status(status).json({
       statusCode: status,

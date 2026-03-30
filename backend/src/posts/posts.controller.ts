@@ -138,7 +138,7 @@ export class PostsController {
     @Query('take', new DefaultValuePipe(12), ParseIntPipe) takeRaw: number,
     @Query('search') search?: string,
   ) {
-    this.logger.log('[POSTS-09-CTRL] findPage() 핸들러 진입');
+    this.logger.log('[POSTS·컨트롤러] findPage() 핸들러 진입');
     const skip = Math.max(0, skipRaw);
     const take = Math.min(50, Math.max(1, takeRaw));
     return this.postsService.findPage(skip, take, req.user?.sub, search);
@@ -147,7 +147,7 @@ export class PostsController {
   @Get(':id/comments')
   @ApiOperation({ summary: '글 댓글(계층 트리)' })
   findComments(@Param('id', ParseIntPipe) id: number) {
-    this.logger.log(`[POSTS-09-CTRL] findComments(${id}) 핸들러 진입`);
+    this.logger.log(`[POSTS·컨트롤러] findComments(${id}) 핸들러 진입`);
     return this.commentsService.findTreeByPostId(id);
   }
 
@@ -158,7 +158,7 @@ export class PostsController {
     @Req() req: Request & { user?: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
   ) {
-    this.logger.log(`[POSTS-09-CTRL] findOne(${id}) 핸들러 진입`);
+    this.logger.log(`[POSTS·컨트롤러] findOne(${id}) 핸들러 진입`);
     return this.postsService.findOne(id, req.user?.sub);
   }
 
@@ -181,7 +181,7 @@ export class PostsController {
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
   ) {
-    this.logger.log(`[POSTS-09-CTRL] removeLike(${id}) 핸들러 진입`);
+    this.logger.log(`[POSTS·컨트롤러] removeLike(${id}) 핸들러 진입`);
     return this.postsService.removeLike(req.user.sub, id);
   }
 
@@ -195,7 +195,7 @@ export class PostsController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: CreateCommentDto,
   ) {
-    this.logger.log(`[POSTS-09-CTRL] createComment(post ${id}) 핸들러 진입`);
+    this.logger.log(`[POSTS·컨트롤러] createComment(post ${id}) 핸들러 진입`);
     return this.commentsService.create(id, req.user.sub, {
       content: body.content ?? '',
       parentId: body.parentId ?? undefined,
@@ -212,7 +212,7 @@ export class PostsController {
     @Param('commentId', ParseIntPipe) commentId: number,
   ) {
     this.logger.log(
-      `[POSTS-09-CTRL] removeComment(post ${id}, comment ${commentId}) 핸들러 진입`,
+      `[POSTS·컨트롤러] removeComment(post ${id}, comment ${commentId}) 핸들러 진입`,
     );
     await this.commentsService.remove(id, commentId, req.user.sub);
     return { ok: true };
@@ -245,7 +245,7 @@ export class PostsController {
     const attachmentFiles = files?.attachments ?? [];
     const posterFiles = files?.posters ?? [];
 
-    this.logger.log('[POSTS-09-CTRL] create() 핸들러 진입');
+    this.logger.log('[POSTS·컨트롤러] create() 핸들러 진입');
     try {
       return await this.postsService.createWithAttachments(
         req.user.sub,
@@ -352,7 +352,7 @@ export class PostsController {
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
   ) {
-    this.logger.log(`[POSTS-09-CTRL] remove(${id}) 핸들러 진입`);
+    this.logger.log(`[POSTS·컨트롤러] remove(${id}) 핸들러 진입`);
     await this.postsService.remove(req.user.sub, id);
     return { ok: true };
   }

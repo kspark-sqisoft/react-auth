@@ -63,13 +63,13 @@ export class UsersService {
   }
 
   create(email: string, password: string, name: string) {
-    this.logger.log(`[USERS-10-SVC] create | email=${email}`);
+    this.logger.log(`[USERS·서비스] create | email=${email}`);
     const user = this.repo.create({ email, password, name: name.trim() });
     return this.repo.save(user);
   }
 
   async getMeProfile(userId: number): Promise<MePublic> {
-    this.logger.log(`[USERS-10-SVC] getMeProfile | userId=${userId}`);
+    this.logger.log(`[USERS·서비스] getMeProfile | userId=${userId}`);
     const user = await this.findByIdOrFail(userId);
     return this.toMePublic(user);
   }
@@ -113,7 +113,7 @@ export class UsersService {
     }
 
     await this.repo.save(user);
-    this.logger.log(`[USERS-10-SVC] updateMyProfile 완료 | userId=${userId}`);
+    this.logger.log(`[USERS·서비스] updateMyProfile 완료 | userId=${userId}`);
     return this.toMePublic(user);
   }
 }

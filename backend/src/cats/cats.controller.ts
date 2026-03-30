@@ -59,7 +59,7 @@ export class CatsController {
    * ExecutionContext → HTTP Request에서 ip, user-agent를 꺼내 한 객체로 주입합니다.
    */
   findAll(@CatsClientMeta() meta: CatsClientSnapshot) {
-    this.logger.log(`[CATS-09-CTRL] findAll() 핸들러 진입`);
+    this.logger.log(`[CATS·컨트롤러] findAll() 핸들러 진입`);
     return this.catsService.findAll().then((cats) => ({
       cats,
       _study: { decoratorCatsClientMeta: meta },
@@ -76,7 +76,7 @@ export class CatsController {
    * 서비스에서 데이터가 없으면 CatNotFoundException → CatNotFoundFilter.
    */
   findOne(@Param('id', CatsParseIntIdPipe) id: number) {
-    this.logger.log(`[CATS-09-CTRL] findOne(${id}) 핸들러 진입`);
+    this.logger.log(`[CATS·컨트롤러] findOne(${id}) 핸들러 진입`);
     return this.catsService.findOne(id);
   }
 
@@ -94,7 +94,7 @@ export class CatsController {
    * Guard들이 먼저 실행되므로, 비로그인이면 Pipe·핸들러까지 오지 않습니다.
    */
   create(@Body(ParseCreateCatPipe) dto: CreateCatDto) {
-    this.logger.log(`[CATS-09-CTRL] create() 핸들러 진입 | DTO로 SVC 호출`);
+    this.logger.log(`[CATS·컨트롤러] create() 핸들러 진입 | DTO로 서비스 호출`);
     return this.catsService.create(dto);
   }
 
@@ -103,7 +103,7 @@ export class CatsController {
   @ApiBearerAuth('JWT-auth')
   @ApiOperation({ summary: '[학습] 삭제 (로그인 필요)' })
   remove(@Param('id', CatsParseIntIdPipe) id: number) {
-    this.logger.log(`[CATS-09-CTRL] remove(${id}) 핸들러 진입`);
+    this.logger.log(`[CATS·컨트롤러] remove(${id}) 핸들러 진입`);
     return this.catsService.remove(id).then(() => ({ deletedId: id }));
   }
 }

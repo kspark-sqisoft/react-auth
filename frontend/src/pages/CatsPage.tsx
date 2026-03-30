@@ -243,14 +243,14 @@ export function CatsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
-                  <TableHead className="w-[4rem]">ID</TableHead>
+                  <TableHead className="w-16">ID</TableHead>
                   <TableHead>이름</TableHead>
-                  <TableHead className="w-[4rem]">나이</TableHead>
+                  <TableHead className="w-16">나이</TableHead>
                   <TableHead>품종</TableHead>
                   <TableHead className="hidden sm:table-cell">
                     등록일
                   </TableHead>
-                  <TableHead className="w-[8rem] text-right">
+                  <TableHead className="w-32 text-right">
                     동작
                   </TableHead>
                 </TableRow>

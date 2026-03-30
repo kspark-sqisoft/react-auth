@@ -11,7 +11,7 @@ export class CatsJwtLogGuard extends JwtAuthGuard {
 
   canActivate(context: ExecutionContext) {
     this.logger.log(
-      `[CATS-03-GJWT] JwtAuthGuard | Bearer 검증 시도 | 실패 시 401·이후 단계 생략`,
+      `[CATS·가드·JWT검증] JwtAuthGuard │ Bearer 토큰 검증 (실패 시 401, 이후 단계 생략)`,
     );
     return super.canActivate(context);
   }

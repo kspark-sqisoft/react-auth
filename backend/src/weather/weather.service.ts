@@ -119,7 +119,7 @@ export class WeatherService {
         ? `"${qTrim.slice(0, 60)}…"`
         : `"${qTrim}"`
       : '(기본 서울)';
-    this.logger.log(`[WEATHER-10-SVC] getWeather | q=${qLabel}`);
+    this.logger.log(`[WEATHER·서비스] getWeather | q=${qLabel}`);
     const key = this.apiKey();
     const { lat, lon, locationLabel } = await this.resolveLatLon(q, key);
 
@@ -178,7 +178,7 @@ export class WeatherService {
     }
 
     this.logger.log(
-      `[WEATHER-10-SVC] getWeather 완료 | ${locationLabel} tempC=${tempC}`,
+      `[WEATHER·서비스] getWeather 완료 | ${locationLabel} tempC=${tempC}`,
     );
     return {
       locationLabel,

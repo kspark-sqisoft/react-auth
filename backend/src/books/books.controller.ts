@@ -68,7 +68,7 @@ export class BooksController {
   @Get(':id')
   @ApiOperation({ summary: '북 상세(페이지·캔버스 요소 포함)' })
   findOne(@Param('id', ParseIntPipe) id: number) {
-    this.logger.log(`[BOOKS-09-CTRL] findOne(${id}) 핸들러 진입`);
+    this.logger.log(`[BOOKS·컨트롤러] findOne(${id}) 핸들러 진입`);
     return this.booksService.findOne(id);
   }
 
@@ -99,7 +99,7 @@ export class BooksController {
     @Param('id', ParseIntPipe) id: number,
     @Body() body: UpdateBookDto,
   ) {
-    this.logger.log(`[BOOKS-09-CTRL] update(${id}) 핸들러 진입`);
+    this.logger.log(`[BOOKS·컨트롤러] update(${id}) 핸들러 진입`);
     return this.booksService.update(id, req.user.sub, body);
   }
 
@@ -111,7 +111,7 @@ export class BooksController {
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
   ) {
-    this.logger.log(`[BOOKS-09-CTRL] remove(${id}) 핸들러 진입`);
+    this.logger.log(`[BOOKS·컨트롤러] remove(${id}) 핸들러 진입`);
     await this.booksService.remove(id, req.user.sub);
     return { ok: true };
   }
@@ -154,7 +154,7 @@ export class BooksController {
     @UploadedFiles()
     files?: { file?: Express.Multer.File[]; poster?: Express.Multer.File[] },
   ) {
-    this.logger.log(`[BOOKS-09-CTRL] uploadMedia(${id}) 핸들러 진입`);
+    this.logger.log(`[BOOKS·컨트롤러] uploadMedia(${id}) 핸들러 진입`);
     await this.booksService.assertBookOwner(id, req.user.sub);
     const file = files?.file?.[0];
     if (!file?.path) {

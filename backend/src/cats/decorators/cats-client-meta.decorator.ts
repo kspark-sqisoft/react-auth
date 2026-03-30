@@ -23,7 +23,7 @@ export type CatsClientSnapshot = {
 export const CatsClientMeta = createParamDecorator(
   (_data: unknown, ctx: ExecutionContext): CatsClientSnapshot => {
     decoratorLog.log(
-      `[CATS-08-DEC] ParamDecorator | CatsClientMeta | meta 객체 주입`,
+      `[CATS·데코레이터·파라미터] CatsClientMeta → meta 객체 주입`,
     );
     const req = ctx.switchToHttp().getRequest<Request>();
     return {

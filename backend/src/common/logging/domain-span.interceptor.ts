@@ -9,6 +9,7 @@ import {
 import type { Observable } from 'rxjs';
 import { throwError } from 'rxjs';
 import { catchError, tap } from 'rxjs/operators';
+import type { Request } from 'express';
 
 export type DomainSpanInterceptorOptions = {
   reqTag: string;
@@ -33,16 +34,17 @@ export function createDomainSpanInterceptor(
     ): Observable<unknown> {
       const req = context
         .switchToHttp()
-        .getRequest<{ method: string; url: string }>();
+        .getRequest<Request & { method: string; url: string }>();
       const started = Date.now();
+      const id = req.requestLogId ?? '—';
       this.logger.log(
-        `[${reqTag}-05-IXIN] Interceptor 전 | next.handle() 호출 | 내부: Pipe→CTRL→SVC`,
+        `[${reqTag}·인터셉터·직전] ${req.method} ${req.url} │ id=${id} │ 파이프·컨트롤러·서비스 직전`,
       );
       return next.handle().pipe(
         tap(() => {
           const ms = Date.now() - started;
           this.logger.log(
-            `[${reqTag}-11-IXOUT] Interceptor 후 | ${req.method} ${req.url} | OK ${ms}ms`,
+            `[${reqTag}·인터셉터·완료] ${req.method} ${req.url} │ id=${id} │ 핸들러 ${ms}ms`,
           );
         }),
         catchError((err: unknown) => {
@@ -50,7 +52,7 @@ export function createDomainSpanInterceptor(
           const name = err instanceof Error ? err.constructor.name : typeof err;
           const msg = err instanceof Error ? err.message : String(err);
           this.logger.warn(
-            `[${reqTag}-12-IXERR] Interceptor 에러 재전파 | ${name}: ${msg} | ${ms}ms | Filter/Exception 계층이 처리`,
+            `[${reqTag}·인터셉터·에러] ${req.method} ${req.url} │ id=${id} │ ${name}: ${msg} │ 핸들러 ${ms}ms → 예외필터`,
           );
           return throwError(() => err);
         }),

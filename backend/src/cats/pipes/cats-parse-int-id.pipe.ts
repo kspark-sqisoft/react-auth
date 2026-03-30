@@ -20,7 +20,7 @@ export class CatsParseIntIdPipe implements PipeTransform<
 
   async transform(value: string, metadata: ArgumentMetadata): Promise<number> {
     this.logger.log(
-      `[CATS-06-PID] Pipe :id | "${value}" → number | 실패 시 400`,
+      `[CATS·파이프·경로ID] :id "${value}" → 숫자 변환 (실패 시 400)`,
     );
     return inner.transform(value, metadata);
   }

@@ -42,7 +42,7 @@ export class AppController {
   @Get()
   @ApiOperation({ summary: '헬스 체크용 인사' })
   getHello(): string {
-    this.logger.log('[APP-09-CTRL] getHello() 핸들러 진입');
+    this.logger.log('[APP·컨트롤러] getHello() 핸들러 진입');
     return this.appService.getHello();
   }
 }

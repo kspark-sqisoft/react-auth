@@ -32,42 +32,37 @@ import { ParseCreateCatPipe } from './pipes/parse-create-cat.pipe';
  *   예: `consumer.apply(CatsLoggerMiddleware).forRoutes(CatsController)`
  *
  * ┌─────────────────────────────────────────────────────────────────
- * │ Cats HTTP 요청 처리 순서 (위 → 아래, 학습용 로그 태그와 대응)
+ * │ Cats HTTP 요청 처리 순서 (위 → 아래, 콘솔 로그 접두사와 대응)
  * └─────────────────────────────────────────────────────────────────
  *
  *                    클라이언트 HTTP 요청
  *                            │
  *                            ▼
  *    ┌──────────────────────────────────────────────────────────┐
- *    │  [CATS REQ START] ═══════ (요청 단위 시작 구분선)          │
- *    │  CATS-01-MW  CatsLoggerMiddleware                        │
+ *    │  `[진입] CATS …` / `[완료] CATS …`  (CatsLoggerMiddleware) │
  *    └───────────────────────────┬──────────────────────────────┘
  *                                │
  *              ┌─────────────────┴─────────────────┐
  *              │ POST /cats  또는 DELETE /cats/:id │     GET /cats , GET /cats/:id
  *              ▼                                   │              │
  *    ┌─────────────────────┐                     │              │
- *    │ CATS-02-G1          │                     │              │
- *    │ CatsBeforeJwtLogGuard│                     │              │
+ *    │ [CATS·가드·JWT이전]  CatsBeforeJwtLogGuard │              │
  *    ├─────────────────────┤                     │              │
- *    │ CATS-03-GJWT        │                     │   (JWT 가드 없음, 바로 아래로)
- *    │ CatsJwtLogGuard     │                     │              │
+ *    │ [CATS·가드·JWT검증]  CatsJwtLogGuard       │   (JWT 없음 → 바로 아래)
  *    ├─────────────────────┤                     │              │
- *    │ CATS-04-G2          │                     │              │
- *    │ CatsAfterJwtLogGuard│                     │              │
+ *    │ [CATS·가드·JWT이후]  CatsAfterJwtLogGuard  │              │
  *    └──────────┬──────────┘                     │              │
  *               └─────────────────┬─────────────┴──────────────┘
  *                                 ▼
  *    ┌──────────────────────────────────────────────────────────┐
- *    │ CATS-05-IXIN   CatsLoggingInterceptor (전)               │
- *    │               next.handle() 안으로 들어감 ▼               │
+ *    │ [CATS·인터셉터·직전] CatsLoggingInterceptor → next.handle() │
  *    └───────────────────────────┬──────────────────────────────┘
  *                                │
  *         라우트별 파라미터 해석 (해당하는 것만 실행)
  *                                │
  *         ┌──────────────────────┼──────────────────────┐
  *         ▼                      ▼                      ▼
- *   CATS-06-PID            CATS-07-PBD            CATS-08-DEC
+ *   [CATS·파이프·경로ID]   [CATS·파이프·요청본문]   [CATS·데코레이터·파라미터]
  *   CatsParseIntIdPipe     ParseCreateCatPipe     @CatsClientMeta()
  *   (:id 경로)             (POST body)            (GET 목록 meta)
  *         │                      │                      │
@@ -75,42 +70,39 @@ import { ParseCreateCatPipe } from './pipes/parse-create-cat.pipe';
  *                                │
  *                                ▼
  *    ┌──────────────────────────────────────────────────────────┐
- *    │ CATS-09-CTRL   CatsController  (findAll / findOne / …)    │
+ *    │ [CATS·컨트롤러]  CatsController  (findAll / findOne / …)  │
  *    └───────────────────────────┬──────────────────────────────┘
  *                                │
  *                                ▼
  *    ┌──────────────────────────────────────────────────────────┐
- *    │ CATS-10-SVC    CatsService   (DB 접근·도메인 로직)         │
+ *    │ [CATS·서비스]  CatsService  (DB·도메인 로직)               │
  *    └───────────────────────────┬──────────────────────────────┘
  *                                │
  *              ┌─────────────────┴─────────────────┐
  *              │ 정상 응답                          │  CatNotFoundException 등
  *              ▼                                   ▼
  *    ┌─────────────────────┐           ┌─────────────────────┐
- *    │ CATS-11-IXOUT       │           │ CATS-12-IXERR       │
- *    │ CatsLoggingInterceptor tap      │ CatsLoggingInterceptor catchError
- *    │ (소요 시간 로그)     │           │ (재전파)            │
+ *    │ [CATS·인터셉터·완료]  tap        │ [CATS·인터셉터·에러] catchError
+ *    │ (소요 시간)           │           │ (재전파)            │
  *    └──────────┬──────────┘           └──────────┬──────────┘
  *               │                               │
  *               │                               ▼
  *               │                    ┌─────────────────────┐
- *               │                    │ CATS-13-FLT          │
- *               │                    │ CatNotFoundFilter    │
- *               │                    │ [CatsExceptionFilter]│
- *               │                    │ → JSON 404           │
+ *               │                    │ [CATS·예외필터]      │
+ *               │                    │ CatNotFoundFilter   │
+ *               │                    │ → JSON 404          │
  *               │                    └─────────────────────┘
  *               │
  *               ▼
  *    ┌──────────────────────────────────────────────────────────┐
- *    │  res.on('finish')  →  [CATS REQ END] ═════ (요청 단위 끝) │
+ *    │  res.on('finish') → `[완료] CATS …` (요청 단위 끝)        │
  *    └──────────────────────────────────────────────────────────┘
  *
- * Nest 로그 대괄호(레이어별 필터): CatsLoggerMiddleware | CatsGuardBeforeJwt |
- *   CatsGuardJwt | CatsGuardAfterJwt | CatsLoggingInterceptor | CatsPipeParamId |
- *   CatsPipeBody | CatsParamDecorator | CatsController | CatsService |
- *   CatsExceptionFilter
+ * 콘솔 Logger 컨텍스트: CatsLoggerMiddleware, CatsGuard…, CatsLoggingInterceptor,
+ *   CatsParseIntIdPipe, ParseCreateCatPipe, CatsClientMeta 데코레이터,
+ *   CatsController, CatsService, CatNotFoundFilter
  *
- * 콘솔 검색: `[CATS-` 또는 `[CATS REQ`. 프론트는 `[CATS-C01]`~`C08`, `CATS-CERR`.
+ * 콘솔 검색: `[진입]`·`[완료]`·`id=` 또는 `[CATS·`. 프론트는 `[CATS-C01]`~`C08`, `CATS-CERR`.
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Module({

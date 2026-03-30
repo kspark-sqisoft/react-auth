@@ -16,7 +16,7 @@ export class CatsBeforeJwtLogGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
     const req = context.switchToHttp().getRequest<Request>();
     this.logger.log(
-      `[CATS-02-G1] Guard 앞 | ${req.method} ${req.originalUrl} | 다음: 03-GJWT Bearer 검증`,
+      `[CATS·가드·JWT이전] ${req.method} ${req.originalUrl} │ 다음: Bearer(JWT) 검증`,
     );
     return true;
   }

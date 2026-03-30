@@ -61,10 +61,10 @@ export class UsersController {
   @Get('me')
   @ApiOperation({ summary: '내 프로필(sub·이메일·이름·프로필 이미지 URL)' })
   async getMe(@Req() req: Request & { user: JwtPayload }): Promise<MePublic> {
-    this.logger.log('[USERS-09-CTRL] getMe() 핸들러 진입');
+    this.logger.log('[USERS·컨트롤러] getMe() 핸들러 진입');
     const me: MePublic = await this.usersService.getMeProfile(req.user.sub);
     this.logger.log(
-      `[USERS-09-CTRL] getMe 응답 | sub=${me.sub} email=${me.email} name=${me.name}`,
+      `[USERS·컨트롤러] getMe 응답 | sub=${me.sub} email=${me.email} name=${me.name}`,
     );
     return me;
   }
@@ -99,7 +99,7 @@ export class UsersController {
       removeImage: remove,
       ...(hasName ? { name: nameTrimmed } : {}),
     });
-    this.logger.log(`[USERS-09-CTRL] patchMe 완료 | sub=${me.sub}`);
+    this.logger.log(`[USERS·컨트롤러] patchMe 완료 | sub=${me.sub}`);
     return me;
   }
 }

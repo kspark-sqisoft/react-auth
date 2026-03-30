@@ -25,7 +25,7 @@ export class ChatService {
     body: string,
   ): Promise<ChatMessage> {
     this.logger.log(
-      `[CHAT-10-SVC] append | roomId=${roomId} authorId=${authorId} len=${body.length}`,
+      `[CHAT·서비스] append | roomId=${roomId} authorId=${authorId} len=${body.length}`,
     );
     const row = this.msgRepo.create({
       roomId,
@@ -133,7 +133,7 @@ export class ChatService {
   }
 
   async deleteRoomFully(roomId: string): Promise<void> {
-    this.logger.log(`[CHAT-10-SVC] deleteRoomFully | roomId=${roomId}`);
+    this.logger.log(`[CHAT·서비스] deleteRoomFully | roomId=${roomId}`);
     await this.msgRepo.delete({ roomId });
     await this.roomRepo.delete({ roomId });
   }
