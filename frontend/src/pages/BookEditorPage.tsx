@@ -469,6 +469,20 @@ export function BookEditorPage() {
     setSelectedIds([]);
   };
 
+  const addPageAtInsertIndex = useCallback(
+    (insertIndex: number) => {
+      commitPages((prev) => {
+        const idx = Math.max(0, Math.min(insertIndex, prev.length));
+        const newPage = createEmptyEditorPage(0);
+        const next = [...prev.slice(0, idx), newPage, ...prev.slice(idx)];
+        return applyAutoSlideNamesByIndex(next.map((p, i) => ({ ...p, sortOrder: i })));
+      });
+      setPageIndex(insertIndex);
+      setSelectedIds([]);
+    },
+    [commitPages],
+  );
+
   const removePageAt = useCallback(
     (index: number) => {
       let nextIdx = activePageIndex;
@@ -627,6 +641,7 @@ export function BookEditorPage() {
                   mode="edit"
                   onReorderPages={reorderPages}
                   onAddPage={addPage}
+                  onAddPageAtInsertIndex={addPageAtInsertIndex}
                   onRemovePageAtIndex={requestRemovePageAt}
                   onDuplicatePageAtIndex={duplicatePageAt}
                   canRemovePage={pages.length > 1}

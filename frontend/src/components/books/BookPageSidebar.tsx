@@ -1,4 +1,13 @@
-import { type MouseEvent, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Fragment,
+  type MouseEvent,
+  type RefObject,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { createPortal } from "react-dom";
 import {
   DndContext,
@@ -41,6 +50,8 @@ type BookPageSidebarProps = {
   /** 편집 모드에서만; 슬라이드를 `from`에서 `to` 위치로 이동 */
   onReorderPages?: (fromIndex: number, toIndex: number) => void;
   onAddPage?: () => void;
+  /** 편집 모드: 슬라이드 사이(구분선) 우클릭 시 `insertIndex` 위치에 빈 페이지 삽입 */
+  onAddPageAtInsertIndex?: (insertIndex: number) => void;
   /** 편집 모드: 인덱스별 삭제(하단 버튼·우클릭 메뉴) */
   onRemovePageAtIndex?: (index: number) => void;
   canRemovePage?: boolean;
@@ -49,6 +60,123 @@ type BookPageSidebarProps = {
   /** 왼쪽 툴레일 옆 열에 넣을 때 true — 전체 너비에 맞추고 옆 테두리 제거 */
   fluid?: boolean;
 };
+
+function useDismissFloatingMenu(
+  open: boolean,
+  menuRef: RefObject<HTMLDivElement | null>,
+  onClose: () => void,
+) {
+  useEffect(() => {
+    if (!open) return;
+
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+
+    const onPointerDownCapture = (e: PointerEvent) => {
+      if (menuRef.current?.contains(e.target as Node)) return;
+      onClose();
+    };
+
+    let raf = 0;
+    raf = window.requestAnimationFrame(() => {
+      window.addEventListener("pointerdown", onPointerDownCapture, true);
+    });
+    window.addEventListener("keydown", onKeyDown);
+
+    return () => {
+      window.cancelAnimationFrame(raf);
+      window.removeEventListener("pointerdown", onPointerDownCapture, true);
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [open, menuRef, onClose]);
+}
+
+/** 슬라이드 행 사이 우클릭 → 해당 위치에 페이지 삽입 */
+function PageInsertGap({
+  insertIndex,
+  pageCount,
+  fluid,
+  onAddPageAtInsertIndex,
+}: {
+  insertIndex: number;
+  pageCount: number;
+  fluid?: boolean;
+  onAddPageAtInsertIndex?: (insertIndex: number) => void;
+}) {
+  const [ctxPoint, setCtxPoint] = useState<{ x: number; y: number } | null>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const closeMenu = useCallback(() => setCtxPoint(null), []);
+  useDismissFloatingMenu(
+    ctxPoint != null && onAddPageAtInsertIndex != null,
+    menuRef,
+    closeMenu,
+  );
+
+  if (!onAddPageAtInsertIndex) return null;
+
+  const ariaLabel =
+    insertIndex === 0
+      ? "첫 슬라이드 앞에 새 페이지 삽입, 우클릭"
+      : insertIndex >= pageCount
+        ? "목록 끝에 새 페이지 삽입, 우클릭"
+        : `슬라이드 ${insertIndex}과 ${insertIndex + 1} 사이에 새 페이지 삽입, 우클릭`;
+
+  const menuPortal =
+    ctxPoint != null
+      ? createPortal(
+          <ContextMenuFloatingPanel
+            ref={menuRef}
+            className="animate-in fade-in-0 zoom-in-95 flex min-w-[11rem] flex-col gap-0.5"
+            style={{
+              position: "fixed",
+              left: Math.min(
+                ctxPoint.x,
+                typeof window !== "undefined" ? Math.max(8, window.innerWidth - 200) : ctxPoint.x,
+              ),
+              top: Math.min(
+                ctxPoint.y,
+                typeof window !== "undefined" ? Math.max(8, window.innerHeight - 120) : ctxPoint.y,
+              ),
+            }}
+          >
+            <div className="flex flex-col gap-0.5" role="group" aria-label="삽입">
+              <ContextMenuFloatingItem
+                onClick={() => {
+                  onAddPageAtInsertIndex(insertIndex);
+                  setCtxPoint(null);
+                }}
+              >
+                <Plus className="size-4" aria-hidden />
+                페이지 추가
+              </ContextMenuFloatingItem>
+            </div>
+          </ContextMenuFloatingPanel>,
+          document.body,
+        )
+      : null;
+
+  return (
+    <>
+      <div
+        className={cn(
+          "group/gap shrink-0 cursor-context-menu rounded-sm border border-dashed border-transparent",
+          /* 목록은 gap-0이라 이 띠만 슬라이드 사이 간격을 담당 — 얇게 유지 */
+          fluid ? "mx-2.5 h-2" : "mx-1.5 h-1.5",
+          "hover:border-primary/25 hover:bg-primary/5",
+        )}
+        title="슬라이드 사이: 우클릭하면 여기에 새 페이지를 넣습니다"
+        aria-label={ariaLabel}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setCtxPoint({ x: e.clientX, y: e.clientY });
+        }}
+      />
+      {menuPortal}
+    </>
+  );
+}
 
 function slideRowClass(active: boolean, fluid?: boolean) {
   return cn(
@@ -148,30 +276,8 @@ function SortableSlideRow({
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
   const [ctxPoint, setCtxPoint] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    if (!ctxPoint) return;
-
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setCtxPoint(null);
-    };
-
-    const onPointerDownCapture = (e: PointerEvent) => {
-      if (menuRef.current?.contains(e.target as Node)) return;
-      setCtxPoint(null);
-    };
-
-    const raf = window.requestAnimationFrame(() => {
-      window.addEventListener("pointerdown", onPointerDownCapture, true);
-    });
-    window.addEventListener("keydown", onKeyDown);
-
-    return () => {
-      window.cancelAnimationFrame(raf);
-      window.removeEventListener("pointerdown", onPointerDownCapture, true);
-      window.removeEventListener("keydown", onKeyDown);
-    };
-  }, [ctxPoint]);
+  const closeCtxMenu = useCallback(() => setCtxPoint(null), []);
+  useDismissFloatingMenu(ctxPoint != null, menuRef, closeCtxMenu);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -352,6 +458,7 @@ export function BookPageSidebar({
   pageLabels,
   onReorderPages,
   onAddPage,
+  onAddPageAtInsertIndex,
   onRemovePageAtIndex,
   canRemovePage,
   onDuplicatePageAtIndex,
@@ -404,7 +511,9 @@ export function BookPageSidebar({
     return thumbnailsByKey[k];
   };
 
-  const listGap = fluid ? "gap-3.5 p-3" : "gap-2.5 p-2";
+  /** 보기 전용 목록만 카드 사이 gap 사용. 드래그+삽입 슬롯 목록은 gap-0으로 이중 여백 방지 */
+  const listGapStatic = fluid ? "gap-3 p-3" : "gap-2 p-2";
+  const listGapReorder = fluid ? "gap-0 p-3" : "gap-0 p-2";
 
   const listBody =
     reorder && sortableIds.length > 0 ? (
@@ -416,22 +525,35 @@ export function BookPageSidebar({
         onDragCancel={handleDragCancel}
       >
         <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-          <div className={cn("flex flex-col", listGap)}>
+          <div className={cn("flex flex-col", listGapReorder)}>
             {sortableIds.map((id, i) => (
-              <SortableSlideRow
-                key={id}
-                id={id}
-                fluid={fluid}
-                index={i}
-                activeIndex={activeIndex}
-                label={slideDisplayLabel(pageLabels?.[i], i)}
-                thumbUrl={thumbFor(i)}
-                onSelect={onSelectPage}
-                onRemovePageAtIndex={edit ? onRemovePageAtIndex : undefined}
-                canRemovePage={canRemovePage}
-                onDuplicatePageAtIndex={edit ? onDuplicatePageAtIndex : undefined}
-              />
+              <Fragment key={id}>
+                <PageInsertGap
+                  insertIndex={i}
+                  pageCount={pageCount}
+                  fluid={fluid}
+                  onAddPageAtInsertIndex={edit ? onAddPageAtInsertIndex : undefined}
+                />
+                <SortableSlideRow
+                  id={id}
+                  fluid={fluid}
+                  index={i}
+                  activeIndex={activeIndex}
+                  label={slideDisplayLabel(pageLabels?.[i], i)}
+                  thumbUrl={thumbFor(i)}
+                  onSelect={onSelectPage}
+                  onRemovePageAtIndex={edit ? onRemovePageAtIndex : undefined}
+                  canRemovePage={canRemovePage}
+                  onDuplicatePageAtIndex={edit ? onDuplicatePageAtIndex : undefined}
+                />
+              </Fragment>
             ))}
+            <PageInsertGap
+              insertIndex={pageCount}
+              pageCount={pageCount}
+              fluid={fluid}
+              onAddPageAtInsertIndex={edit ? onAddPageAtInsertIndex : undefined}
+            />
           </div>
         </SortableContext>
         <DragOverlay dropAnimation={{ duration: 200, easing: "cubic-bezier(0.25, 1, 0.5, 1)" }}>
@@ -447,7 +569,7 @@ export function BookPageSidebar({
         </DragOverlay>
       </DndContext>
     ) : (
-      <div className={cn("flex flex-col", listGap)}>
+      <div className={cn("flex flex-col", listGapStatic)}>
         {Array.from({ length: pageCount }, (_, i) => (
           <StaticSlideRow
             key={pageKeys?.[i] ?? `page-${i}`}
