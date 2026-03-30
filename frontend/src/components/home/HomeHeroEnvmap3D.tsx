@@ -238,7 +238,7 @@ function Porsche911({ paintColor, position, scale, rotation, ...props }: EnvmapC
 function EnvmapVehicle({ model, paintColor }: { model: EnvmapCarModelId; paintColor: string }) {
   if (model === "porsche") {
     return (
-      <Porsche911 paintColor={paintColor} scale={1} position={[-0.5, -0.2, 0]} rotation={[0, Math.PI / 5, 0]} />
+      <Porsche911 paintColor={paintColor} scale={1.5} position={[-0.5, -0.2, 0]} rotation={[0, Math.PI / 1.5, 0]} />
     );
   }
   return <Lamborghini paintColor={paintColor} rotation={[0, Math.PI / 1.5, 0]} scale={0.015} />;
