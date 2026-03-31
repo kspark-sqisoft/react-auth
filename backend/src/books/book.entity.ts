@@ -26,6 +26,10 @@ export class Book {
   @Column({ type: 'int', default: 540 })
   slideHeight: number;
 
+  /** 전체 미리보기 슬라이드쇼: 마지막 페이지 이후 처음으로 반복 */
+  @Column({ type: 'boolean', default: true })
+  presentationLoop: boolean;
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   author: User;
 

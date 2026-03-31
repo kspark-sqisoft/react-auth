@@ -17,4 +17,9 @@ export class UpdateBookDto {
     isArray: true,
   })
   pages?: BookPageInputDto[];
+
+  @ApiPropertyOptional({
+    description: '미리보기 슬라이드쇼: 마지막 슬라이드 후 처음으로 반복',
+  })
+  presentationLoop?: boolean;
 }

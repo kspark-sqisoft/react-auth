@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useId, useMemo, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -44,6 +44,7 @@ import {
   isBookElementLocked,
   isBookElementVisible,
 } from "@/lib/book-canvas";
+import { displayLayerPresentationSec } from "@/lib/book-presentation";
 import {
   bookDockedPanelHeaderIconClass,
   bookDockedPanelHeaderRowClass,
@@ -51,6 +52,8 @@ import {
 } from "@/lib/book-workspace-ui";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 
 function bookElementLayerLabel(el: BookCanvasElement): string {
   switch (el.type) {
@@ -76,6 +79,58 @@ function bookElementLayerLabel(el: BookCanvasElement): string {
     default:
       return "요소";
   }
+}
+
+function LayerHoldSecInput({
+  storedSec,
+  resolvedSec,
+  onCommit,
+}: {
+  storedSec: number | undefined;
+  resolvedSec: number;
+  onCommit: (sec: number | undefined) => void;
+}) {
+  const holdInputId = useId();
+  const [draft, setDraft] = useState(() =>
+    storedSec != null && Number.isInteger(storedSec) ? String(storedSec) : "",
+  );
+
+  return (
+    <Input
+      id={holdInputId}
+      aria-label="슬라이드쇼 표시 초"
+      title="미리보기 표시 시간(초). 비우면 기본값"
+      type="text"
+      inputMode="numeric"
+      autoComplete="off"
+      placeholder={String(resolvedSec)}
+      className="h-7 w-11 shrink-0 px-1 text-center font-mono text-[10px] tabular-nums"
+      value={draft}
+      onClick={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+      onChange={(e) => {
+        const t = e.target.value.replace(/\D/g, "").slice(0, 4);
+        setDraft(t);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+      }}
+      onBlur={() => {
+        if (draft.trim() === "") {
+          onCommit(undefined);
+          return;
+        }
+        const n = Number(draft);
+        if (Number.isInteger(n) && n >= 1 && n <= 3600) {
+          onCommit(n);
+        } else {
+          setDraft(
+            storedSec != null && Number.isInteger(storedSec) ? String(storedSec) : "",
+          );
+        }
+      }}
+    />
+  );
 }
 
 function LayerTypeIcon({ el }: { el: BookCanvasElement }) {
@@ -130,6 +185,11 @@ type LayerRowActionsProps = {
   onRequestDelete?: (elementId: string) => void;
   onReorderZ?: (elementId: string, op: ElementZOrderOp) => void;
   canReorder: boolean;
+  /** 이 슬라이드의 미리보기 시간 기준 레이어 id */
+  presentationTimingElementId?: string | null;
+  onPresentationTimingElementIdChange?: (id: string | null) => void;
+  onPresentationHoldSecChange?: (elementId: string, sec: number | undefined) => void;
+  videoDurationSecByElementId?: Record<string, number>;
 };
 
 type LayerPanelRowProps = LayerRowActionsProps & { selected: boolean };
@@ -147,10 +207,21 @@ function LayerRowActions({
   onRequestDelete,
   onReorderZ,
   canReorder,
+  presentationTimingElementId,
+  onPresentationTimingElementIdChange,
+  onPresentationHoldSecChange,
+  videoDurationSecByElementId,
 }: LayerRowActionsProps) {
   const isFront = displayIndex === 0;
   const isBack = displayIndex === revLength - 1;
   const label = bookElementLayerLabel(el);
+  const isTimingLayer =
+    presentationTimingElementId != null &&
+    presentationTimingElementId !== "" &&
+    presentationTimingElementId === el.id;
+  const displaySec = displayLayerPresentationSec(el, {
+    videoDurationSecById: videoDurationSecByElementId,
+  });
 
   return (
     <>
@@ -212,6 +283,49 @@ function LayerRowActions({
           )}
         </Button>
       )}
+      {(onPresentationTimingElementIdChange != null ||
+        presentationTimingElementId !== undefined) && (
+        <div
+          className="flex w-[2.125rem] shrink-0 flex-col items-center justify-center gap-0.5"
+          title="이 슬라이드 미리보기 시간 기준 레이어(한 개만)"
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <Checkbox
+            checked={isTimingLayer}
+            disabled={readOnly || !onPresentationTimingElementIdChange}
+            onCheckedChange={(c) => {
+              if (!onPresentationTimingElementIdChange) return;
+              onPresentationTimingElementIdChange(c === true ? el.id : null);
+            }}
+            className="size-4"
+            aria-label={`${label}: 페이지 시간 기준`}
+          />
+          <span className="text-[8px] leading-none text-muted-foreground">기준</span>
+        </div>
+      )}
+      {el.type === "mediaPlaylist" ? (
+        <span
+          className="flex w-11 shrink-0 flex-col items-center justify-center leading-none"
+          title="미디어 목록 항목 시간 합"
+        >
+          <span className="text-[9px] text-muted-foreground">합</span>
+          <span className="text-[10px] font-mono tabular-nums text-foreground/90">{displaySec}s</span>
+        </span>
+      ) : readOnly || !onPresentationHoldSecChange ? (
+        <span
+          className="w-11 shrink-0 text-center text-[10px] font-mono tabular-nums text-muted-foreground"
+          title="미리보기 표시 시간(초)"
+        >
+          {displaySec}s
+        </span>
+      ) : (
+        <LayerHoldSecInput
+          key={`${el.id}-hold-${el.presentationHoldSec ?? ""}`}
+          storedSec={el.presentationHoldSec}
+          resolvedSec={displaySec}
+          onCommit={(sec) => onPresentationHoldSecChange(el.id, sec)}
+        />
+      )}
       {readOnly ? (
         <div className="flex min-w-0 flex-1 basis-0 items-center gap-2 px-1 py-1 text-xs">
           <LayerTypeIcon el={el} />
@@ -229,6 +343,7 @@ function LayerRowActions({
               "min-w-0 flex-1 truncate font-medium text-foreground",
               !showing && "line-through decoration-muted-foreground/70",
               locked && "text-amber-900/90 dark:text-amber-100/90",
+              isTimingLayer && "text-primary",
             )}
           >
             {label}
@@ -407,6 +522,10 @@ export type BookLayersPanelProps = {
   readOnly?: boolean;
   expandVertical?: boolean;
   className?: string;
+  presentationTimingElementId?: string | null;
+  onPresentationTimingElementIdChange?: (id: string | null) => void;
+  onPresentationHoldSecChange?: (elementId: string, sec: number | undefined) => void;
+  videoDurationSecByElementId?: Record<string, number>;
 };
 
 /**
@@ -425,6 +544,10 @@ export function BookLayersPanel({
   readOnly = false,
   expandVertical = false,
   className,
+  presentationTimingElementId,
+  onPresentationTimingElementIdChange,
+  onPresentationHoldSecChange,
+  videoDurationSecByElementId,
 }: BookLayersPanelProps) {
   const rev = useMemo(() => [...elements].reverse(), [elements]);
   const canReorder = Boolean(onReorderZ) && !readOnly;
@@ -468,6 +591,10 @@ export function BookLayersPanel({
     onReorderZ,
     canReorder,
     readOnly: Boolean(readOnly),
+    presentationTimingElementId,
+    onPresentationTimingElementIdChange,
+    onPresentationHoldSecChange,
+    videoDurationSecByElementId,
   };
 
   const listUl = (
@@ -539,10 +666,10 @@ export function BookLayersPanel({
       </div>
       <p className="shrink-0 border-t border-border/60 px-3 py-1.5 text-[10px] leading-snug text-muted-foreground">
         {readOnly
-          ? "위쪽이 화면 앞 순서입니다. 눈·자물쇠 아이콘은 숨김·잠금 상태를 뜻합니다."
+          ? "위쪽이 화면 앞 순서입니다. 기준 체크는 저장된 미리보기 시간 기준 레이어입니다. 숫자는 표시 초(미디어 위젯은 합)."
           : dragSortEnabled
-            ? "위쪽이 앞 순서입니다. 왼쪽 손잡이로 드래그해 순서를 바꿀 수 있습니다. 잠긴 레이어는 이동할 수 없습니다."
-            : "위쪽이 앞 순서입니다. 눈=표시, 자물쇠=편집 잠금, 휴지통=삭제(저장 시 반영). 잠긴 레이어는 캔버스에서 옮기거나 지울 수 없습니다."}
+            ? "위쪽이 앞 순서입니다. 기준=페이지 미리보기 시간을 정하는 레이어, 초=표시 시간. 미디어 위젯은 합만 표시. 드래그로 순서 변경."
+            : "기준 체크=이 슬라이드 미리보기의 시간 기준 레이어(하나). 초 칸=표시 시간(기본 10초, 미디어 위젯 제외). 눈·자물쇠·삭제는 기존과 동일."}
       </p>
     </div>
   );

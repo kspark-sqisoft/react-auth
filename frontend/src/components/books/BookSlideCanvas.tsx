@@ -455,6 +455,7 @@ function BookSlideVideoOverlay({
   onBarPointerLeave,
   onHtmlVideoRef,
   onDurationKnown,
+  mode,
 }: {
   el: Extract<BookCanvasElement, { type: "video" }>;
   scale: number;
@@ -464,6 +465,7 @@ function BookSlideVideoOverlay({
   onBarPointerLeave: () => void;
   onHtmlVideoRef?: (elementId: string, node: HTMLVideoElement | null) => void;
   onDurationKnown?: (elementId: string, durationSec: number) => void;
+  mode: "edit" | "view";
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -478,8 +480,11 @@ function BookSlideVideoOverlay({
     (node: HTMLVideoElement | null) => {
       videoRef.current = node;
       onHtmlVideoRef?.(el.id, node);
+      if (node && mode === "view") {
+        queueMicrotask(() => void node.play().catch(() => undefined));
+      }
     },
-    [el.id, onHtmlVideoRef],
+    [el.id, onHtmlVideoRef, mode],
   );
 
   const syncFromVideo = useCallback(() => {
@@ -538,6 +543,17 @@ function BookSlideVideoOverlay({
     if (v.readyState >= HTMLMediaElement.HAVE_METADATA) queueMicrotask(prime);
     return () => v.removeEventListener("loadedmetadata", prime);
   }, [src, poster]);
+
+  /** 보기(미리보기·북 상세): 음소거+인라인이면 자동 재생 정책에 맞게 즉시 재생 */
+  useEffect(() => {
+    if (mode !== "view") return;
+    const v = videoRef.current;
+    if (!v) return;
+    const tryPlay = () => void v.play().catch(() => undefined);
+    if (v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) tryPlay();
+    v.addEventListener("canplay", tryPlay, { once: true });
+    return () => v.removeEventListener("canplay", tryPlay);
+  }, [src, mode, poster]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -1261,6 +1277,7 @@ export function BookSlideCanvas({
             key={el.id}
             el={el}
             scale={scale}
+            mode={mode}
             barVisible={Boolean(videoBarVisible[el.id])}
             liveFrame={overlayLiveFrame(el.id, dragLive, transformLive, {
               w: el.width,

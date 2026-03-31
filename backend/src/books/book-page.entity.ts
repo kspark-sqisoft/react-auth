@@ -23,4 +23,8 @@ export class BookPage {
   /** 슬라이드 배경색(CSS 색 문자열, 예: #ffffff) */
   @Column({ type: 'varchar', length: 64, default: '#ffffff' })
   backgroundColor: string;
+
+  /** 미리보기 시 이 페이지 체류 시간을 결정하는 요소 UUID(같은 페이지 elementsJson 내 id) */
+  @Column({ type: 'varchar', length: 80, nullable: true })
+  presentationTimingElementId: string | null;
 }

@@ -219,6 +219,8 @@ export type BookPagePublic = {
   /** 슬라이드 배경(CSS 색) */
   backgroundColor: string;
   elements: BookCanvasElementPublic[];
+  /** 미리보기 페이지 체류 시간 기준이 되는 요소 id */
+  presentationTimingElementId: string | null;
 };
 
 /** 목록 카드 배경용 첫 슬라이드 미리보기 */
@@ -246,6 +248,8 @@ export type BookPublic = {
   /** 모든 슬라이드 공통 캔버스 크기 */
   slideWidth: number;
   slideHeight: number;
+  /** 미리보기 슬라이드쇼 반복 */
+  presentationLoop: boolean;
   createdAt: Date;
   updatedAt: Date;
   author: BookAuthorPublic;
@@ -447,6 +451,19 @@ export class BooksService {
         throw new BadRequestException(
           '요소 locked은 true 또는 false여야 합니다.',
         );
+      }
+      if (o.presentationHoldSec != null) {
+        const ph = o.presentationHoldSec;
+        if (
+          typeof ph !== 'number' ||
+          !Number.isInteger(ph) ||
+          ph < 1 ||
+          ph > 3600
+        ) {
+          throw new BadRequestException(
+            '요소 presentationHoldSec는 1~3600 사이의 정수여야 합니다.',
+          );
+        }
       }
       const x = o.x;
       const y = o.y;
@@ -1206,11 +1223,29 @@ export class BooksService {
     return { width: w, height: h };
   }
 
+  private assertTimingElementIdOnPage(
+    elements: unknown[],
+    timingId: string,
+  ): void {
+    const ids = new Set<string>();
+    for (const el of elements) {
+      if (!el || typeof el !== 'object') continue;
+      const id = (el as Record<string, unknown>).id;
+      if (typeof id === 'string') ids.add(id);
+    }
+    if (!ids.has(timingId)) {
+      throw new BadRequestException(
+        '슬라이드쇼 시간 기준 요소 id가 해당 페이지의 요소에 없습니다.',
+      );
+    }
+  }
+
   private normalizePagesInput(pages: BookPageInputDto[] | undefined): Array<{
     sortOrder: number;
     name: string;
     backgroundColor: string;
     elements: unknown[];
+    presentationTimingElementId: string | null;
   }> {
     if (pages == null || pages.length === 0) {
       return [
@@ -1219,6 +1254,7 @@ export class BooksService {
           name: '',
           backgroundColor: '#ffffff',
           elements: [],
+          presentationTimingElementId: null,
         },
       ];
     }
@@ -1242,13 +1278,24 @@ export class BooksService {
       this.validateElements(elements);
       this.normalizePageBackgroundColor(p.backgroundColor);
     }
-    return sorted.map((p) => ({
-      sortOrder: p.sortOrder,
-      name:
-        typeof p.name === 'string' ? p.name.trim().slice(0, PAGE_NAME_MAX) : '',
-      backgroundColor: this.normalizePageBackgroundColor(p.backgroundColor),
-      elements: p.elements ?? [],
-    }));
+    return sorted.map((p) => {
+      const elements = p.elements ?? [];
+      let presentationTimingElementId: string | null = null;
+      const tr = p.presentationTimingElementId;
+      if (tr != null && String(tr).trim() !== '') {
+        const tid = String(tr).trim().slice(0, 80);
+        this.assertTimingElementIdOnPage(elements, tid);
+        presentationTimingElementId = tid;
+      }
+      return {
+        sortOrder: p.sortOrder,
+        name:
+          typeof p.name === 'string' ? p.name.trim().slice(0, PAGE_NAME_MAX) : '',
+        backgroundColor: this.normalizePageBackgroundColor(p.backgroundColor),
+        elements,
+        presentationTimingElementId,
+      };
+    });
   }
 
   async findPage(
@@ -1354,6 +1401,7 @@ export class BooksService {
       title: book.title,
       slideWidth: book.slideWidth ?? DEFAULT_PAGE_W,
       slideHeight: book.slideHeight ?? DEFAULT_PAGE_H,
+      presentationLoop: book.presentationLoop !== false,
       createdAt: book.createdAt,
       updatedAt: book.updatedAt,
       author: this.mapAuthor(book.author),
@@ -1363,6 +1411,7 @@ export class BooksService {
         name: p.slideName ?? '',
         backgroundColor: p.backgroundColor?.trim() || '#ffffff',
         elements: this.parseElementsJson(p.elementsJson || '[]'),
+        presentationTimingElementId: p.presentationTimingElementId ?? null,
       })),
     };
   }
@@ -1386,6 +1435,7 @@ export class BooksService {
       author: { id: userId },
       slideWidth: sw,
       slideHeight: sh,
+      presentationLoop: body.presentationLoop !== false,
     });
     await this.bookRepo.save(book);
 
@@ -1399,6 +1449,7 @@ export class BooksService {
           slideName: p.name,
           backgroundColor: p.backgroundColor,
           elementsJson: JSON.stringify(elements),
+          presentationTimingElementId: p.presentationTimingElementId,
         }),
       );
     }
@@ -1445,6 +1496,11 @@ export class BooksService {
       await this.bookRepo.save(book);
     }
 
+    if (body.presentationLoop != null) {
+      book.presentationLoop = Boolean(body.presentationLoop);
+      await this.bookRepo.save(book);
+    }
+
     if (body.pages != null) {
       const normalized = this.normalizePagesInput(body.pages);
       await this.pageRepo.delete({ book: { id: bookId } });
@@ -1458,6 +1514,7 @@ export class BooksService {
             slideName: p.name,
             backgroundColor: p.backgroundColor,
             elementsJson: JSON.stringify(elements),
+            presentationTimingElementId: p.presentationTimingElementId,
           }),
         );
       }

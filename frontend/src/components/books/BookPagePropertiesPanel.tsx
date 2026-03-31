@@ -1,8 +1,21 @@
+import { useMemo } from "react";
 import { LayoutTemplate } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-import { DEFAULT_PAGE_BACKGROUND, slideDisplayLabel } from "@/lib/book-canvas";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  DEFAULT_PAGE_BACKGROUND,
+  slideDisplayLabel,
+  type BookCanvasElement,
+} from "@/lib/book-canvas";
 import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
 import {
   bookDockedPanelHeaderIconClass,
@@ -21,10 +34,30 @@ type BookPagePropertiesPanelProps = {
   onChangeBackgroundColor: (color: string) => void;
   /** 레이어 패널과 같은 컬럼에 넣을 때 */
   embedded?: boolean;
+  elements: BookCanvasElement[];
+  presentationTimingElementId: string | null | undefined;
+  onChangePresentationTimingElementId: (id: string | null) => void;
+  presentationLoop: boolean;
+  onChangePresentationLoop: (loop: boolean) => void;
 };
 
 function hexForColorInput(css: string): string {
   return /^#[0-9A-Fa-f]{6}$/.test(css) ? css : DEFAULT_PAGE_BACKGROUND;
+}
+
+function bookElementTimingLabel(el: BookCanvasElement, displayIndex: number): string {
+  const typeKo: Record<BookCanvasElement["type"], string> = {
+    text: "텍스트",
+    image: "이미지",
+    video: "동영상",
+    mediaPlaylist: "미디어 위젯",
+    weather: "날씨",
+    digitalClock: "디지털 시계",
+    news: "뉴스",
+    drawing: "그리기",
+  };
+  const kind = typeKo[el.type] ?? el.type;
+  return `${displayIndex + 1}. ${kind}`;
 }
 
 export function BookPagePropertiesPanel({
@@ -35,9 +68,29 @@ export function BookPagePropertiesPanel({
   backgroundColor,
   onChangeBackgroundColor,
   embedded = false,
+  elements,
+  presentationTimingElementId,
+  onChangePresentationTimingElementId,
+  presentationLoop,
+  onChangePresentationLoop,
 }: BookPagePropertiesPanelProps) {
   const preview = slideDisplayLabel(name, pageIndex);
   const pickerValue = hexForColorInput(backgroundColor.trim());
+
+  const layerOptions = useMemo(() => {
+    const rev = [...elements].reverse();
+    return rev.map((el, displayIndex) => ({
+      id: el.id,
+      label: bookElementTimingLabel(el, displayIndex),
+    }));
+  }, [elements]);
+
+  const timingSelectValue =
+    presentationTimingElementId != null &&
+    presentationTimingElementId !== "" &&
+    elements.some((e) => e.id === presentationTimingElementId)
+      ? presentationTimingElementId
+      : "__none__";
 
   const Root = embedded ? "div" : "aside";
   return (
@@ -70,6 +123,49 @@ export function BookPagePropertiesPanel({
               maxLength={120}
             />
             <p className="text-[11px] text-muted-foreground">목록 표시: {preview}</p>
+          </div>
+          <div className="space-y-2 rounded-md border border-border/60 bg-muted/[0.06] p-2.5">
+            <p className="text-xs font-medium text-foreground">미리보기(슬라이드쇼)</p>
+            <p className="text-[11px] leading-snug text-muted-foreground">
+              레이어 목록의 「기준」체크로 이 페이지의 시간 기준 위젯을 고를 수 있습니다. 미디어(플레이리스트)
+              위젯은 목록 항목 시간 합이 슬라이드 길이입니다. 그 외 위젯은 기본 10초이며 레이어 목록·위젯 속성에서
+              바꿀 수 있습니다. 아래에서도 기준을 고를 수 있습니다.
+            </p>
+            <div className="space-y-1">
+              <Label className="text-[11px]">시간 기준 레이어</Label>
+              <Select
+                value={timingSelectValue}
+                onValueChange={(v) =>
+                  onChangePresentationTimingElementId(v === "__none__" ? null : v)
+                }
+              >
+                <SelectTrigger size="sm" className="h-9 w-full">
+                  <SelectValue placeholder="기본(페이지당 고정 초)" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">없음 · 기본 시간</SelectItem>
+                  {layerOptions.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <label className="flex cursor-pointer items-start gap-2 rounded-md border border-transparent px-0.5 py-1 hover:bg-muted/30">
+              <Checkbox
+                checked={presentationLoop}
+                onCheckedChange={(c) => onChangePresentationLoop(c === true)}
+                className="mt-0.5"
+                aria-label="마지막 슬라이드 후 처음으로 반복"
+              />
+              <span className="text-[11px] leading-snug text-foreground">
+                마지막 슬라이드 후 처음으로 반복
+                <span className="mt-0.5 block text-[10px] text-muted-foreground">
+                  끄면 마지막 페이지에서 멈춥니다.
+                </span>
+              </span>
+            </label>
           </div>
           <div className="space-y-2">
             <Label htmlFor="page-bg-hex">슬라이드 배경색</Label>

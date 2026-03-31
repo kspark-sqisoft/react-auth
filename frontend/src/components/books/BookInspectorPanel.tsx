@@ -45,6 +45,11 @@ import {
   isBookElementLocked,
 } from "@/lib/book-canvas";
 import {
+  computeMediaPlaylistPresentationDurationSec,
+  DEFAULT_PRESENTATION_PLAYLIST_VIDEO_ESTIMATE_SEC,
+  DEFAULT_WIDGET_PRESENTATION_SEC,
+} from "@/lib/book-presentation";
+import {
   defaultTextWidgetBoxHeight,
   getTextWidgetDisplayHtml,
 } from "@/lib/book-text-widget";
@@ -105,6 +110,8 @@ type BookInspectorPanelProps = {
   ) => void;
   /** 동영상 위젯 id → 재생 길이(초), 캔버스에서 메타 로드 후 채움 */
   videoDurationSecByElementId?: Record<string, number>;
+  /** 현재 슬라이드의 미리보기 시간 기준 위젯 id */
+  pagePresentationTimingElementId?: string | null;
 };
 
 /** 캐러셀 간격: 입력 중 1→10처럼 잠깐 범위 밖이 되므로 blur까지 draft만 두고 커밋 */
@@ -165,6 +172,134 @@ function NewsCarouselIntervalInput(props: {
 }) {
   const k = `${props.elementId}:${props.seconds == null ? "u" : props.seconds}`;
   return <NewsCarouselIntervalInputInner key={k} {...props} />;
+}
+
+function InspectorPresentationHoldInputInner({
+  elementId,
+  value,
+  onChange,
+}: {
+  elementId: string;
+  value: number | undefined;
+  onChange: BookInspectorPanelProps["onChange"];
+}) {
+  const [draft, setDraft] = useState(
+    () => (value != null && Number.isInteger(value) ? String(value) : ""),
+  );
+
+  return (
+    <div className="space-y-1">
+      <Label className="text-[11px]">표시 시간(초)</Label>
+      <Input
+        id={`insp-pres-hold-${elementId}`}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder={`기본 ${DEFAULT_WIDGET_PRESENTATION_SEC}`}
+        className="h-8 font-mono"
+        value={draft}
+        onChange={(e) => {
+          const t = e.target.value.replace(/\D/g, "").slice(0, 4);
+          setDraft(t);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+        }}
+        onBlur={() => {
+          if (draft.trim() === "") {
+            onChange(elementId, { presentationHoldSec: undefined });
+            return;
+          }
+          const n = Number(draft);
+          if (Number.isInteger(n) && n >= 1 && n <= 3600) {
+            onChange(elementId, { presentationHoldSec: n });
+          } else {
+            setDraft(
+              value != null && Number.isInteger(value) ? String(value) : "",
+            );
+          }
+        }}
+      />
+      <p className="text-[10px] leading-snug text-muted-foreground">
+        1~3600초. 비우면 기본 {DEFAULT_WIDGET_PRESENTATION_SEC}초(또는 동영상 메타 길이)를 씁니다.
+      </p>
+    </div>
+  );
+}
+
+function InspectorPresentationHoldInput(props: {
+  elementId: string;
+  value: number | undefined;
+  onChange: BookInspectorPanelProps["onChange"];
+}) {
+  const k = `${props.elementId}:${props.value == null ? "u" : props.value}`;
+  return <InspectorPresentationHoldInputInner key={k} {...props} />;
+}
+
+function InspectorPresentationTimingSection({
+  el,
+  pagePresentationTimingElementId,
+  onChange,
+  videoMetaDurationSec,
+}: {
+  el: BookCanvasElement;
+  pagePresentationTimingElementId?: string | null;
+  onChange: BookInspectorPanelProps["onChange"];
+  videoMetaDurationSec?: number;
+}) {
+  const isTiming =
+    pagePresentationTimingElementId != null &&
+    pagePresentationTimingElementId !== "" &&
+    pagePresentationTimingElementId === el.id;
+
+  if (el.type === "mediaPlaylist") {
+    const sum = computeMediaPlaylistPresentationDurationSec(el);
+    return (
+      <div className="space-y-2 rounded-md border border-border/60 bg-muted/[0.08] p-2.5">
+        <p className="text-[10px] font-semibold text-foreground">슬라이드쇼(미리보기)</p>
+        {isTiming ? (
+          <p className="text-[10px] font-medium text-primary">
+            이 위젯이 이 페이지의 시간 기준 레이어입니다.
+          </p>
+        ) : (
+          <p className="text-[10px] leading-snug text-muted-foreground">
+            페이지 속성에서 이 레이어를 시간 기준으로 고르면, 아래 합계가 슬라이드 길이가 됩니다.
+          </p>
+        )}
+        <p className="text-[10px] leading-snug text-muted-foreground">
+          목록의 이미지 표시 시간 + 동영상(메타 없으면 {DEFAULT_PRESENTATION_PLAYLIST_VIDEO_ESTIMATE_SEC}초로
+          추정)을 더합니다.
+        </p>
+        <p className="font-mono text-sm tabular-nums">합계 약 {sum}초</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2 rounded-md border border-border/60 bg-muted/[0.08] p-2.5">
+      <p className="text-[10px] font-semibold text-foreground">슬라이드쇼(미리보기)</p>
+      {isTiming ? (
+        <p className="text-[10px] font-medium text-primary">
+          이 위젯이 이 페이지의 시간 기준 레이어입니다.
+        </p>
+      ) : (
+        <p className="text-[10px] leading-snug text-muted-foreground">
+          이 위젯을 시간 기준으로 쓰려면 페이지 속성에서 선택하세요.
+        </p>
+      )}
+      {el.type === "video" && videoMetaDurationSec != null && videoMetaDurationSec > 0 ? (
+        <p className="text-[10px] leading-snug text-muted-foreground">
+          동영상 메타 길이 약 {Math.ceil(videoMetaDurationSec)}초. 표시 시간을 비우면 미리보기 타이머에 이 길이를
+          씁니다.
+        </p>
+      ) : null}
+      <InspectorPresentationHoldInput
+        elementId={el.id}
+        value={el.presentationHoldSec}
+        onChange={onChange}
+      />
+    </div>
+  );
 }
 
 function num(v: string, fallback: number, min: number, max: number) {
@@ -1142,6 +1277,7 @@ export function BookInspectorPanel({
   mediaPlaylistPlaybackUiByElementId,
   onMediaPlaylistRemoteControl,
   videoDurationSecByElementId,
+  pagePresentationTimingElementId,
 }: BookInspectorPanelProps) {
   const Root = embedded ? "div" : "aside";
   const [playlistItemDelete, setPlaylistItemDelete] = useState<{
@@ -1984,6 +2120,16 @@ export function BookInspectorPanel({
 
                 {selected ? (
                   <div className="flex flex-col gap-2">
+                    <InspectorPresentationTimingSection
+                      el={selected}
+                      pagePresentationTimingElementId={pagePresentationTimingElementId}
+                      onChange={onChange}
+                      videoMetaDurationSec={
+                        selected.type === "video"
+                          ? videoDurationSecByElementId?.[selected.id]
+                          : undefined
+                      }
+                    />
                     {selected.type !== "drawing" ? (
                       <Button
                         type="button"

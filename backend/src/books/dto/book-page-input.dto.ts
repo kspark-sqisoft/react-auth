@@ -18,4 +18,11 @@ export class BookPageInputDto {
     items: { type: 'object' },
   })
   elements?: unknown[];
+
+  @ApiPropertyOptional({
+    description:
+      '슬라이드쇼 시간 기준이 될 요소 id(해당 페이지 elements 내). 비우면 기본 시간',
+    nullable: true,
+  })
+  presentationTimingElementId?: string | null;
 }

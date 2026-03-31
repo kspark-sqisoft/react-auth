@@ -317,6 +317,8 @@ export type BookCanvasElement =
       visible?: boolean;
       /** true면 캔버스에서 위치·크기·삭제 등 편집 불가 */
       locked?: boolean;
+      /** 슬라이드쇼: 시간 기준 레이어일 때 표시 초(미디어 플레이리스트는 항목 합으로 계산) */
+      presentationHoldSec?: number;
     }
   | {
       id: string;
@@ -335,6 +337,7 @@ export type BookCanvasElement =
       outlineColor?: string;
       visible?: boolean;
       locked?: boolean;
+      presentationHoldSec?: number;
     }
   | {
       id: string;
@@ -353,6 +356,7 @@ export type BookCanvasElement =
       outlineColor?: string;
       visible?: boolean;
       locked?: boolean;
+      presentationHoldSec?: number;
     }
   | {
       id: string;
@@ -376,6 +380,7 @@ export type BookCanvasElement =
       outlineColor?: string;
       visible?: boolean;
       locked?: boolean;
+      presentationHoldSec?: number;
     }
   | {
       id: string;
@@ -397,6 +402,7 @@ export type BookCanvasElement =
       outlineColor?: string;
       visible?: boolean;
       locked?: boolean;
+      presentationHoldSec?: number;
     }
   | {
       id: string;
@@ -443,6 +449,7 @@ export type BookCanvasElement =
       outlineColor?: string;
       visible?: boolean;
       locked?: boolean;
+      presentationHoldSec?: number;
     }
   | {
       id: string;
@@ -464,6 +471,7 @@ export type BookCanvasElement =
       outlineColor?: string;
       visible?: boolean;
       locked?: boolean;
+      presentationHoldSec?: number;
     }
   | {
       id: string;
@@ -481,6 +489,7 @@ export type BookCanvasElement =
       rotation?: number;
       visible?: boolean;
       locked?: boolean;
+      presentationHoldSec?: number;
     };
 
 export function resolveMediaPlaylistLoop(
@@ -767,6 +776,8 @@ export type BookEditorPageState = {
   /** 슬라이드 배경(CSS 색, Konva Stage 배경과 동일) */
   backgroundColor: string;
   elements: BookCanvasElement[];
+  /** 미리보기 페이지 체류 시간 기준 위젯 id(같은 페이지 elements 내) */
+  presentationTimingElementId?: string | null;
 };
 
 export const DEFAULT_SLIDE_WIDTH = 960;
@@ -1178,6 +1189,7 @@ export function duplicateBookEditorPage(
     name: page.name,
     backgroundColor: page.backgroundColor,
     elements,
+    presentationTimingElementId: null,
   };
 }
 
@@ -1190,6 +1202,7 @@ export function toBookPagePayloads(pages: BookEditorPageState[]) {
       p.backgroundColor || DEFAULT_PAGE_BACKGROUND,
     ),
     elements: normalizeBookElementsForSave(p.elements),
+    presentationTimingElementId: p.presentationTimingElementId ?? null,
   }));
 }
 
@@ -1480,6 +1493,16 @@ function parseMediaPlaylistItems(raw: unknown): BookMediaPlaylistItem[] {
   return out;
 }
 
+function presentationHoldFromRaw(o: Record<string, unknown>): {
+  presentationHoldSec?: number;
+} {
+  const ph = o.presentationHoldSec;
+  if (typeof ph !== "number" || !Number.isInteger(ph) || ph < 1 || ph > 3600) {
+    return {};
+  }
+  return { presentationHoldSec: ph };
+}
+
 export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
   const out: BookCanvasElement[] = [];
   for (const el of raw) {
@@ -1516,6 +1539,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(rotation !== undefined ? { rotation } : {}),
         ...(o.visible === false ? { visible: false as const } : {}),
         ...(o.locked === true ? { locked: true as const } : {}),
+        ...presentationHoldFromRaw(o),
       });
     } else if (o.type === "image") {
       const objectFit = parseBookMediaObjectFit(o.objectFit);
@@ -1533,6 +1557,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(rotation !== undefined ? { rotation } : {}),
         ...(o.visible === false ? { visible: false as const } : {}),
         ...(o.locked === true ? { locked: true as const } : {}),
+        ...presentationHoldFromRaw(o),
       });
     } else if (o.type === "video") {
       const objectFit = parseBookMediaObjectFit(o.objectFit);
@@ -1554,6 +1579,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(rotation !== undefined ? { rotation } : {}),
         ...(o.visible === false ? { visible: false as const } : {}),
         ...(o.locked === true ? { locked: true as const } : {}),
+        ...presentationHoldFromRaw(o),
       });
     } else if (o.type === "weather") {
       const cityQuery =
@@ -1579,6 +1605,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(rotation !== undefined ? { rotation } : {}),
         ...(o.visible === false ? { visible: false as const } : {}),
         ...(o.locked === true ? { locked: true as const } : {}),
+        ...presentationHoldFromRaw(o),
       });
     } else if (o.type === "digitalClock") {
       const cd = parseBookDigitalClockDisplay(o.clockDisplay);
@@ -1599,6 +1626,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(rotation !== undefined ? { rotation } : {}),
         ...(o.visible === false ? { visible: false as const } : {}),
         ...(o.locked === true ? { locked: true as const } : {}),
+        ...presentationHoldFromRaw(o),
       });
     } else if (o.type === "news") {
       const country = parseBookNewsCountry(o.newsCountry);
@@ -1645,6 +1673,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(rotation !== undefined ? { rotation } : {}),
         ...(o.visible === false ? { visible: false as const } : {}),
         ...(o.locked === true ? { locked: true as const } : {}),
+        ...presentationHoldFromRaw(o),
       });
     } else if (o.type === "mediaPlaylist") {
       const items = parseMediaPlaylistItems(o.mediaPlaylistItems);
@@ -1667,6 +1696,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(rotation !== undefined ? { rotation } : {}),
         ...(o.visible === false ? { visible: false as const } : {}),
         ...(o.locked === true ? { locked: true as const } : {}),
+        ...presentationHoldFromRaw(o),
       });
     } else if (o.type === "drawing") {
       const rawPts = o.points;
@@ -1700,6 +1730,7 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
           ...(rotation !== undefined ? { rotation } : {}),
           ...(o.visible === false ? { visible: false as const } : {}),
           ...(o.locked === true ? { locked: true as const } : {}),
+          ...presentationHoldFromRaw(o),
         });
       }
     }

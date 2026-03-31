@@ -13,4 +13,9 @@ export class CreateBookDto {
 
   @ApiPropertyOptional({ type: BookPageInputDto, isArray: true })
   pages?: BookPageInputDto[];
+
+  @ApiPropertyOptional({
+    description: '미리보기 슬라이드쇼 반복(기본 true)',
+  })
+  presentationLoop?: boolean;
 }

@@ -643,6 +643,8 @@ export type BookPageDto = {
   /** 슬라이드 배경색(CSS) */
   backgroundColor?: string;
   elements: BookCanvasElement[];
+  /** 미리보기: 이 페이지 체류 시간을 정하는 기준 위젯 id(없으면 기본 초) */
+  presentationTimingElementId?: string | null;
 };
 
 /** 북 목록 카드 — 첫 슬라이드 썸네일 합성용 */
@@ -669,6 +671,8 @@ export type BookDetail = {
   /** 모든 슬라이드 공통 캔버스 크기(px) */
   slideWidth: number;
   slideHeight: number;
+  /** 미리보기: 마지막 슬라이드 후 처음으로 돌아갈지(기본 true) */
+  presentationLoop?: boolean;
   createdAt: string;
   updatedAt: string;
   author: PostAuthor;
@@ -680,6 +684,7 @@ export type BookPageInput = {
   name?: string;
   backgroundColor?: string;
   elements: BookCanvasElement[];
+  presentationTimingElementId?: string | null;
 };
 
 const BOOK_PAGE_DEFAULT = 12;
@@ -725,6 +730,7 @@ export async function createBook(input: {
   pages?: BookPageInput[];
   slideWidth?: number;
   slideHeight?: number;
+  presentationLoop?: boolean;
 }): Promise<BookDetail> {
   try {
     const { data } = await api.post<BookDetail>("/books", input);
@@ -870,6 +876,7 @@ export async function updateBook(
     pages?: BookPageInput[];
     slideWidth?: number;
     slideHeight?: number;
+    presentationLoop?: boolean;
   },
 ): Promise<BookDetail> {
   try {

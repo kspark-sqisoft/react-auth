@@ -9,7 +9,7 @@ import {
 } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, useNavigate, useParams } from "react-router-dom";
-import { Save, Trash2 } from "lucide-react";
+import { MonitorPlay, Save, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import {
   deleteBook,
@@ -122,6 +122,11 @@ function mapServerPagesToLocal(pages: BookPageDto[]): BookEditorPageState[] {
           ? p.backgroundColor.trim()
           : DEFAULT_PAGE_BACKGROUND,
       elements: p.elements,
+      presentationTimingElementId:
+        typeof p.presentationTimingElementId === "string" &&
+        p.presentationTimingElementId.trim()
+          ? p.presentationTimingElementId.trim()
+          : null,
     })),
   );
 }
@@ -175,6 +180,9 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
   );
   const [dragGridPx, setDragGridPx] = useState(BOOK_CANVAS_DRAG_GRID_PX);
+  const [presentationLoop, setPresentationLoop] = useState(
+    () => serverBook.presentationLoop !== false,
+  );
   const [leftDockTab, setLeftDockTab] = useState<BookEditorLeftTab>("page");
   const [drawingStrokeColor, setDrawingStrokeColor] = useState("#0f172a");
   const [drawingStrokeWidth, setDrawingStrokeWidth] = useState(4);
@@ -453,6 +461,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         title: bookTitle.trim() || "제목 없음",
         slideWidth,
         slideHeight,
+        presentationLoop,
         pages: toBookPagePayloads(localPages),
       }),
     onSuccess: (res) => {
@@ -616,6 +625,16 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       updatePages((draft) => {
         const p = draft[activePageIndex];
         if (p) p.name = name;
+      });
+    },
+    [activePageIndex, updatePages],
+  );
+
+  const updatePresentationTimingElementId = useCallback(
+    (id: string | null) => {
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.presentationTimingElementId = id;
       });
     },
     [activePageIndex, updatePages],
@@ -1171,6 +1190,12 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       updatePages((draft) => {
         const p = draft[activePageIndex];
         if (!p) return;
+        if (
+          p.presentationTimingElementId != null &&
+          idSet.has(p.presentationTimingElementId)
+        ) {
+          p.presentationTimingElementId = null;
+        }
         p.elements = p.elements.filter((e) => !idSet.has(e.id));
       });
       setSelectedIds((prev) => prev.filter((id) => !idSet.has(id)));
@@ -1360,6 +1385,12 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         actions={
           <>
             <div className="flex flex-wrap items-center justify-end gap-2">
+              <Button type="button" size="sm" variant="outline" asChild>
+                <Link to={`/books/${bookId}/preview`} target="_blank" rel="noreferrer">
+                  <MonitorPlay className="mr-2 size-4" />
+                  미리보기
+                </Link>
+              </Button>
               <Button
                 type="button"
                 size="sm"
@@ -1505,6 +1536,12 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       actions={
         <>
           <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button type="button" size="sm" variant="outline" asChild>
+              <Link to={`/books/${bookId}/preview`} target="_blank" rel="noreferrer">
+                <MonitorPlay className="mr-2 size-4" />
+                미리보기
+              </Link>
+            </Button>
             <Button
               type="button"
               size="sm"
@@ -1764,6 +1801,12 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
             onVisibilityChange={onLayerVisibilityChange}
             onLockChange={onLayerLockChange}
             onRequestDelete={requestRemoveWidget}
+            presentationTimingElementId={activePage.presentationTimingElementId}
+            onPresentationTimingElementIdChange={updatePresentationTimingElementId}
+            onPresentationHoldSecChange={(eid, sec) =>
+              onElementChange(eid, { presentationHoldSec: sec })
+            }
+            videoDurationSecByElementId={videoDurationByElementId}
           />
           <div className="min-h-0 flex-1 overflow-hidden">
             {canvasSelectedIds.length >= 2 ? (
@@ -1795,6 +1838,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 mediaPlaylistPlaybackUiByElementId={mediaPlaylistPlaybackUiByElementId}
                 onMediaPlaylistRemoteControl={handleMediaPlaylistRemoteControl}
                 videoDurationSecByElementId={videoDurationByElementId}
+                pagePresentationTimingElementId={activePage.presentationTimingElementId}
               />
             ) : (
               <BookPagePropertiesPanel
@@ -1807,6 +1851,11 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                   activePage.backgroundColor?.trim() || DEFAULT_PAGE_BACKGROUND
                 }
                 onChangeBackgroundColor={updateCurrentPageBackground}
+                elements={activePage.elements}
+                presentationTimingElementId={activePage.presentationTimingElementId}
+                onChangePresentationTimingElementId={updatePresentationTimingElementId}
+                presentationLoop={presentationLoop}
+                onChangePresentationLoop={setPresentationLoop}
               />
             )}
           </div>
@@ -2002,6 +2051,7 @@ function BookDetailGuestBookView({
             selectedIds={[]}
             onSelect={() => undefined}
             readOnly
+            presentationTimingElementId={viewPage.presentationTimingElementId ?? null}
           />
         </aside>
       }

@@ -110,6 +110,7 @@ export function BookEditorPage() {
     DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
   );
   const [dragGridPx, setDragGridPx] = useState(BOOK_CANVAS_DRAG_GRID_PX);
+  const [presentationLoop, setPresentationLoop] = useState(true);
   const [mediaPlaylistPlaybackByElementId, setMediaPlaylistPlaybackByElementId] = useState<
     Record<string, number>
   >({});
@@ -319,6 +320,7 @@ export function BookEditorPage() {
         title: title.trim() || "제목 없음",
         slideWidth,
         slideHeight,
+        presentationLoop,
         pages: toBookPagePayloads(pages),
       }),
     onSuccess: (res) => {
@@ -476,6 +478,16 @@ export function BookEditorPage() {
       updatePages((draft) => {
         const p = draft[activePageIndex];
         if (p) p.backgroundColor = backgroundColor;
+      });
+    },
+    [activePageIndex, updatePages],
+  );
+
+  const updatePresentationTimingElementId = useCallback(
+    (id: string | null) => {
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.presentationTimingElementId = id;
       });
     },
     [activePageIndex, updatePages],
@@ -683,6 +695,12 @@ export function BookEditorPage() {
       updatePages((draft) => {
         const p = draft[activePageIndex];
         if (!p) return;
+        if (
+          p.presentationTimingElementId != null &&
+          idSet.has(p.presentationTimingElementId)
+        ) {
+          p.presentationTimingElementId = null;
+        }
         p.elements = p.elements.filter((e) => !idSet.has(e.id));
       });
       setSelectedIds((prev) => prev.filter((id) => !idSet.has(id)));
@@ -1039,6 +1057,11 @@ export function BookEditorPage() {
                 onVisibilityChange={onLayerVisibilityChange}
                 onLockChange={onLayerLockChange}
                 onRequestDelete={requestRemoveWidget}
+                presentationTimingElementId={currentPage.presentationTimingElementId}
+                onPresentationTimingElementIdChange={updatePresentationTimingElementId}
+                onPresentationHoldSecChange={(eid, sec) =>
+                  onElementChange(eid, { presentationHoldSec: sec })
+                }
               />
               <div className="min-h-0 flex-1 overflow-hidden">
                 {canvasSelectedIds.length >= 2 ? (
@@ -1064,6 +1087,7 @@ export function BookEditorPage() {
                     mediaPlaylistPlaybackByElementId={mediaPlaylistPlaybackByElementId}
                     mediaPlaylistPlaybackUiByElementId={mediaPlaylistPlaybackUiByElementId}
                     onMediaPlaylistRemoteControl={handleMediaPlaylistRemoteControl}
+                    pagePresentationTimingElementId={currentPage.presentationTimingElementId}
                   />
                 ) : (
                   <BookPagePropertiesPanel
@@ -1076,6 +1100,11 @@ export function BookEditorPage() {
                       currentPage.backgroundColor?.trim() || DEFAULT_PAGE_BACKGROUND
                     }
                     onChangeBackgroundColor={updateCurrentPageBackground}
+                    elements={currentPage.elements}
+                    presentationTimingElementId={currentPage.presentationTimingElementId}
+                    onChangePresentationTimingElementId={updatePresentationTimingElementId}
+                    presentationLoop={presentationLoop}
+                    onChangePresentationLoop={setPresentationLoop}
                   />
                 )}
               </div>

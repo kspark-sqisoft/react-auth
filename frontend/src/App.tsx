@@ -6,6 +6,7 @@ import { HomePage } from "@/pages/HomePage";
 import { LoginPage } from "@/pages/LoginPage";
 import { BookDetailPage } from "@/pages/BookDetailPage";
 import { BookEditorPage } from "@/pages/BookEditorPage";
+import { BookPresentationPage } from "@/pages/BookPresentationPage";
 import { BookListPage } from "@/pages/BookListPage";
 import { PostDetailPage } from "@/pages/PostDetailPage";
 import { PostEditorPage } from "@/pages/PostEditorPage";
@@ -44,6 +45,7 @@ const App = () => {
         {/* 상세는 공개; `/posts/new`보다 뒤에 두어 `new`가 id로 해석되지 않게 함 */}
         <Route path="/posts/:id" element={<PostDetailPage />} />
         <Route path="/books/:id/edit" element={<BookLegacyEditRedirect />} />
+        <Route path="/books/:id/preview" element={<BookPresentationPage />} />
         <Route path="/books/:id" element={<BookDetailPage />} />
       </Route>
     </Routes>

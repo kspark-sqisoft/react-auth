@@ -106,6 +106,17 @@ export function BookMediaPlaylistWidgetOverlay({
   const clampedIndex = items.length > 0 ? Math.min(index, items.length - 1) : 0;
   const current = items.length > 0 ? items[clampedIndex] : null;
 
+  const setPlaylistVideoRef = useCallback(
+    (node: HTMLVideoElement | null) => {
+      videoRef.current = node;
+      if (!node || current?.kind !== "video") return;
+      if (mode === "view" || !paused) {
+        queueMicrotask(() => void node.play().catch(() => undefined));
+      }
+    },
+    [current?.kind, mode, paused],
+  );
+
   useEffect(() => {
     lastAppliedRemoteSeqRef.current = 0;
   }, [el.id]);
@@ -159,6 +170,18 @@ export function BookMediaPlaylistWidgetOverlay({
       void v.play().catch(() => undefined);
     }
   }, [paused, current?.kind, current?.id]);
+
+  /** 보기 모드: 항목 전환 직후 ref 타이밍 보강 */
+  useEffect(() => {
+    if (mode !== "view") return;
+    if (current?.kind !== "video") return;
+    const v = videoRef.current;
+    if (!v) return;
+    const tryPlay = () => void v.play().catch(() => undefined);
+    if (v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) queueMicrotask(tryPlay);
+    else v.addEventListener("canplay", tryPlay, { once: true });
+    return () => v.removeEventListener("canplay", tryPlay);
+  }, [mode, current?.id, current?.kind]);
 
   /** 진행률·시간 표시 + 선택 시 속성 패널 동기화 */
   useEffect(() => {
@@ -381,7 +404,7 @@ export function BookMediaPlaylistWidgetOverlay({
           />
         ) : current?.kind === "video" ? (
           <video
-            ref={videoRef}
+            ref={setPlaylistVideoRef}
             key={current.id}
             className="absolute inset-0 size-full"
             style={objectFitStyle(fit)}

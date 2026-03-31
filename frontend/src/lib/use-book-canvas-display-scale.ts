@@ -14,9 +14,15 @@ const MAX_USER_ZOOM = 4;
  */
 export function useBookCanvasDisplayScale(
   wrapRef: RefObject<HTMLElement | null>,
-  opts: { slideWidth: number; slideHeight: number; bottomPad: number },
+  opts: {
+    slideWidth: number;
+    slideHeight: number;
+    bottomPad: number;
+    /** 좌우 여백 합에 가깝게 빼는 값(기본 48). 미리보기 등에서 작게 줄여 슬라이드를 크게 맞춤 */
+    horizontalPad?: number;
+  },
 ) {
-  const { slideWidth, slideHeight, bottomPad } = opts;
+  const { slideWidth, slideHeight, bottomPad, horizontalPad = 48 } = opts;
   const [fitScale, setFitScale] = useState(0.55);
   const [zoomMul, setZoomMul] = useState(1);
 
@@ -26,7 +32,7 @@ export function useBookCanvasDisplayScale(
     const ro = new ResizeObserver(() => {
       const cr = el.getBoundingClientRect();
       const s = Math.min(
-        (cr.width - 48) / slideWidth,
+        (cr.width - horizontalPad) / slideWidth,
         (cr.height - bottomPad) / slideHeight,
         1,
       );
@@ -34,7 +40,7 @@ export function useBookCanvasDisplayScale(
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [wrapRef, slideWidth, slideHeight, bottomPad]);
+  }, [wrapRef, slideWidth, slideHeight, bottomPad, horizontalPad]);
 
   const displayScale = fitScale * zoomMul;
 
