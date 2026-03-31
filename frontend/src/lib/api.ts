@@ -291,12 +291,16 @@ export async function updateMyProfile(input: {
 
 export type PostsPageResponse = {
   items: Post[];
-  total: number;
+  /** 다음 요청에 `cursor`로 전달 */
+  nextCursor: string | null;
+  hasMore: boolean;
+  /** 첫 페이지(cursor 없음)에만 포함 */
+  total?: number;
 };
 
-/** 공개 글 목록 페이지네이션 (무한 스크롤·더 보기) */
+/** 공개 글 목록 커서 페이지네이션 (무한 스크롤·더 보기) */
 export async function fetchPostsPage(params?: {
-  skip?: number;
+  cursor?: string;
   take?: number;
   /** 제목·본문 부분 일치 */
   search?: string;
@@ -305,8 +309,8 @@ export async function fetchPostsPage(params?: {
     const search = params?.search?.trim();
     const { data } = await api.get<PostsPageResponse>("/posts", {
       params: {
-        skip: params?.skip ?? 0,
         take: params?.take ?? POST_PAGE_DEFAULT,
+        ...(params?.cursor ? { cursor: params.cursor } : {}),
         ...(search ? { search } : {}),
       },
     });

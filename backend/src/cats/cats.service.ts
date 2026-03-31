@@ -61,7 +61,9 @@ export class CatsService {
     };
   }
 
-  private async unlinkCatImage(filename: string | null | undefined): Promise<void> {
+  private async unlinkCatImage(
+    filename: string | null | undefined,
+  ): Promise<void> {
     const f = filename?.trim();
     if (!f) return;
     const p = join(UPLOAD_ROOT, CAT_IMAGES_SUBDIR, f);
@@ -118,7 +120,9 @@ export class CatsService {
   }
 
   async uploadImage(id: number, storedFilename: string): Promise<CatPublic> {
-    this.logger.log(`[CATS·서비스] uploadImage(${id}) | file=${storedFilename}`);
+    this.logger.log(
+      `[CATS·서비스] uploadImage(${id}) | file=${storedFilename}`,
+    );
     const cat = await this.findEntity(id);
     const prev = cat.imageFilename;
     cat.imageFilename = storedFilename;

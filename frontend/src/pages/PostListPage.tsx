@@ -65,30 +65,35 @@ export function PostListPage() {
     queryFn: async ({ pageParam }) => {
       const q = searchQuery || undefined;
       const res = await fetchPostsPage({
-        skip: pageParam,
+        cursor: pageParam,
         take: POST_PAGE_DEFAULT,
         search: q,
       });
-      appLog("posts", pageParam === 0 ? "목록 초기 로드" : "목록 추가 로드", {
-        received: res.items.length,
-        total: res.total,
-        skip: pageParam,
-        search: q ?? "",
-      });
+      appLog(
+        "posts",
+        pageParam == null ? "목록 초기 로드" : "목록 추가 로드(커서)",
+        {
+          received: res.items.length,
+          hasMore: res.hasMore,
+          total: res.total,
+          search: q ?? "",
+        },
+      );
       return res;
     },
-    initialPageParam: 0,
-    getNextPageParam: (lastPage, allPages) => {
-      const loaded = allPages.reduce((acc, p) => acc + p.items.length, 0);
-      return loaded < lastPage.total ? loaded : undefined;
-    },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) =>
+      lastPage.hasMore && lastPage.nextCursor ? lastPage.nextCursor : undefined,
   });
 
   const posts: Post[] = useMemo(
     () => data?.pages.flatMap((p) => p.items) ?? [],
     [data],
   );
-  const total = useMemo(() => data?.pages[0]?.total ?? null, [data]);
+  const total = useMemo(
+    () => data?.pages[0]?.total ?? null,
+    [data],
+  );
   const error =
     isError && queryError instanceof Error
       ? queryError.message
@@ -105,7 +110,7 @@ export function PostListPage() {
   const skipUrlToStateSyncRef = useRef(false);
 
   const postsRef = useRef<Post[]>([]);
-  const totalRef = useRef<number | null>(null);
+  const hasNextPageRef = useRef(false);
   const initialLoadingRef = useRef(false);
   /** 스크롤/휠/터치 전에는 추가 로드하지 않음 (첫 화면에서 감시 요소가 보여도 자동 연속 요청 방지) */
   const scrollArmedRef = useRef(false);
@@ -178,10 +183,10 @@ export function PostListPage() {
 
   useLayoutEffect(() => {
     postsRef.current = posts;
-    totalRef.current = total;
+    hasNextPageRef.current = Boolean(hasNextPage);
     initialLoadingRef.current = isPending;
     scheduleAppendPostsRef.current = scheduleAppendPosts;
-  }, [posts, total, isPending, scheduleAppendPosts]);
+  }, [posts, hasNextPage, isPending, scheduleAppendPosts]);
 
   useEffect(() => {
     return () => {
@@ -229,9 +234,7 @@ export function PostListPage() {
       if (!scrollArmedRef.current) return;
       if (initialLoadingRef.current || isFetchingNextPage) return;
 
-      const t = totalRef.current;
-      if (t === null) return;
-      if (postsRef.current.length >= t) return;
+      if (!hasNextPageRef.current) return;
 
       const fullHeight = pageScrollHeight();
       const viewBottom = window.scrollY + window.innerHeight;

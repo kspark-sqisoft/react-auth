@@ -268,20 +268,63 @@ export class PostsService {
     return { likeCount, likedByMe };
   }
 
+  /** 목록 무한 스크롤용 커서(createdAt·id, 최신순 안정 정렬) */
+  private encodePostListCursor(row: { id: number; createdAt: Date }): string {
+    return Buffer.from(
+      JSON.stringify({
+        c: row.createdAt.toISOString(),
+        i: row.id,
+      }),
+      'utf8',
+    ).toString('base64url');
+  }
+
+  private decodePostListCursor(cursor: string): {
+    createdAt: Date;
+    id: number;
+  } {
+    try {
+      const json: unknown = JSON.parse(
+        Buffer.from(cursor, 'base64url').toString('utf8'),
+      );
+      if (json === null || typeof json !== 'object') {
+        throw new Error('invalid shape');
+      }
+      const rec = json as { c?: unknown; i?: unknown };
+      const id = Number(rec.i);
+      const createdAt = new Date(String(rec.c));
+      if (!Number.isFinite(id) || id < 1 || Number.isNaN(createdAt.getTime())) {
+        throw new Error('invalid fields');
+      }
+      return { createdAt, id };
+    } catch {
+      throw new BadRequestException('유효하지 않은 cursor입니다.');
+    }
+  }
+
+  /**
+   * 글 목록(커서 페이지). 첫 요청(cursor 없음)에만 total(검색·전체 건수)를 포함합니다.
+   */
   async findPage(
-    skip: number,
     take: number,
-    viewerId?: number,
-    search?: string,
-  ): Promise<{ items: PostPublic[]; total: number }> {
+    viewerId: number | undefined,
+    search: string | undefined,
+    cursor?: string | null,
+  ): Promise<{
+    items: PostPublic[];
+    nextCursor: string | null;
+    hasMore: boolean;
+    total?: number;
+  }> {
     const raw = search?.trim() ?? '';
     const term =
       raw.length > PostsService.SEARCH_MAX_LEN
         ? raw.slice(0, PostsService.SEARCH_MAX_LEN)
         : raw;
 
+    const cursorLabel = cursor?.trim() ? '(있음)' : '(없음)';
     this.logger.log(
-      `[POSTS·서비스] 목록 페이지 조회 skip=${skip} take=${take} search=${term ? `"${term.slice(0, 40)}${term.length > 40 ? '…' : ''}"` : '(없음)'}`,
+      `[POSTS·서비스] 목록 커서 조회 take=${take} cursor=${cursorLabel} search=${term ? `"${term.slice(0, 40)}${term.length > 40 ? '…' : ''}"` : '(없음)'}`,
     );
 
     const applySearch = (
@@ -296,23 +339,44 @@ export class PostsService {
       }
     };
 
-    /** 첨부 JOIN과 함께 take/skip 하면 행 단위로 잘려 글 개수가 부족해지므로, 글 id만 페이지네이션 후 관계 로드 */
     const idQb = this.repo
       .createQueryBuilder('post')
-      .select('post.id')
-      .orderBy('post.createdAt', 'DESC');
+      .select(['post.id', 'post.createdAt'])
+      .orderBy('post.createdAt', 'DESC')
+      .addOrderBy('post.id', 'DESC');
     applySearch(idQb);
-    idQb.skip(skip).take(take);
-    const idRows = await idQb.getMany();
-    const ids = idRows.map((p) => p.id);
 
-    const countQb = this.repo.createQueryBuilder('post');
-    applySearch(countQb);
-    const total = await countQb.getCount();
+    if (cursor?.trim()) {
+      const { createdAt, id } = this.decodePostListCursor(cursor.trim());
+      idQb.andWhere(
+        '(post.createdAt < :cursorCreatedAt OR (post.createdAt = :cursorCreatedAt AND post.id < :cursorId))',
+        { cursorCreatedAt: createdAt, cursorId: id },
+      );
+    }
+
+    idQb.take(take + 1);
+    const idRows = await idQb.getMany();
+    const hasMore = idRows.length > take;
+    const pageRows = hasMore ? idRows.slice(0, take) : idRows;
+    const ids = pageRows.map((p) => p.id);
+
+    let total: number | undefined;
+    if (!cursor?.trim()) {
+      const countQb = this.repo.createQueryBuilder('post');
+      applySearch(countQb);
+      total = await countQb.getCount();
+    }
 
     if (ids.length === 0) {
-      this.logger.log(`[POSTS·서비스] 목록 페이지 응답 반환=0 total=${total}`);
-      return { items: [], total };
+      this.logger.log(
+        `[POSTS·서비스] 목록 커서 응답 반환=0 total=${total ?? '—'}`,
+      );
+      return {
+        items: [],
+        nextCursor: null,
+        hasMore: false,
+        ...(total !== undefined ? { total } : {}),
+      };
     }
 
     const postsRaw = await this.repo
@@ -321,17 +385,24 @@ export class PostsService {
       .leftJoinAndSelect('post.attachments', 'att')
       .where('post.id IN (:...ids)', { ids })
       .orderBy('post.createdAt', 'DESC')
+      .addOrderBy('post.id', 'DESC')
       .addOrderBy('att.sortOrder', 'ASC')
       .getMany();
     const byId = new Map(postsRaw.map((p) => [p.id, p]));
     const posts = ids.map((id) => byId.get(id)!);
     const agg = await this.getLikeAggregates(ids, viewerId);
+
+    const last = pageRows[pageRows.length - 1];
+    const nextCursor = hasMore ? this.encodePostListCursor(last) : null;
+
     this.logger.log(
-      `[POSTS·서비스] 목록 페이지 응답 반환=${posts.length} total=${total}`,
+      `[POSTS·서비스] 목록 커서 응답 반환=${posts.length} hasMore=${hasMore} total=${total ?? '—'}`,
     );
     return {
       items: posts.map((p) => this.toPublic(p, agg.get(p.id))),
-      total,
+      nextCursor,
+      hasMore,
+      ...(total !== undefined ? { total } : {}),
     };
   }
 

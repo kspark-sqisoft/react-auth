@@ -1337,7 +1337,12 @@ ${msg}`;
     bookId: number,
     userId: number,
   ): Promise<
-    { id: number; role: 'user' | 'assistant'; text: string; createdAt: string }[]
+    {
+      id: number;
+      role: 'user' | 'assistant';
+      text: string;
+      createdAt: string;
+    }[]
   > {
     await this.booksService.assertBookOwner(bookId, userId);
     const rows = await this.chatMsgRepo.find({

@@ -2,6 +2,8 @@
 
 > 백엔드(NestJS) · 프론트엔드(React + Vite) · SQLite(TypeORM) 기반 풀스택 앱의 구조, 엔티티, API, 주요 사용자 흐름을 한곳에 정리한 문서입니다.
 
+**유지보수:** API·라우트·페이징(무한 스크롤 포함)·엔티티 등 이 문서에 대응하는 코드가 바뀌면, 변경과 **같은 작업**에서 이 파일도 수정하거나 필요한 절을 추가한다. 에이전트·기여자용 자동 안내는 `.cursor/rules/docs-architecture-sync.mdc`를 본다.
+
 ---
 
 ## 목차
@@ -213,7 +215,7 @@ flowchart LR
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
-| GET | `/posts` | 목록(페이지), Bearer 시 likedByMe |
+| GET | `/posts` | 목록(**커서**·`cursor`/`nextCursor`/`hasMore`), Bearer 시 likedByMe; 첫 응답에만 `total` |
 | GET | `/posts/:id` | 상세 |
 | GET | `/posts/:id/comments` | 댓글 트리 |
 | POST | `/posts/:id/like` | 좋아요 (JWT) |
@@ -286,10 +288,10 @@ flowchart TB
 |------|--------|------|
 | `/` | `HomePage` | 랜딩 |
 | `/login`, `/signup` | 로그인·가입 | |
-| `/posts` | `PostListPage` | |
+| `/posts` | `PostListPage` | 무한 스크롤·**커서 API** (아래 **6.3절** 참고) |
 | `/posts/:id` | `PostDetailPage` | 공개 |
 | `/posts/new`, `/posts/:id/edit` | `PostEditorPage` | 로그인 필요 |
-| `/books` | `BookListPage` | |
+| `/books` | `BookListPage` | 무한 스크롤 UI이나 API는 **`skip`/`take`/`total`** (6.3절) |
 | `/books/new` | `BookEditorPage` | 로그인 필요, 저장 후 상세로 이동 가능 |
 | `/books/:id` | `BookDetailPage` | 공개 URL; 작성자면 편집 UI |
 | `/books/:id/edit` | → `/books/:id` 리다이렉트 | 레거시 |
@@ -301,6 +303,18 @@ flowchart TB
 - `AppLayout`: 헤더·채팅 독(`ChatDock`) 등 껍데기
 - `ProtectedRoute`: 비로그인 시 로그인으로 이동
 - API 래퍼: `frontend/src/lib/api.ts` (토큰·에러 처리)
+
+### 6.3 공부용: 무한 스크롤·목록 페이징 (posts만 방식이 다름)
+
+같은 “아래로 스크롤하면 더 불러오기” UX라도, **백엔드 페이징 모델은 글(posts)만 커서 기반**으로 구현해 두었습니다. 나머지는 비교·학습용으로 다른 패턴을 그대로 둡니다.
+
+| 구분 | 화면 | 프론트 | 백엔드 목록 API |
+|------|------|--------|-----------------|
+| **글** | `PostListPage` | `useInfiniteQuery`, `pageParam` = 이전 응답의 **`nextCursor`** 문자열(첫 요청은 생략) | `GET /posts?take=&search=&cursor=` — **`cursor` / `nextCursor` / `hasMore`**, 정렬 `createdAt DESC`, `id DESC`로 안정적 이어붙임. **`total`은 cursor 없는 첫 응답에만** 포함 |
+| 북 | `BookListPage` | `useInfiniteQuery`, `pageParam` = 지금까지 로드한 개수(**오프셋 `skip`**) | `GET /books?skip=&take=` … **`skip`·`take`·`total`** 전통적 페이지네이션 |
+| 캣츠 | `CatsPage` | `useQuery`로 **목록 전체 한 번** 로드 | `GET /cats` 전체(데모 규모 가정) |
+
+정리하면, **무한 스크롤 “데이터 이어붙이기” 구현을 커서 방식으로 쓰는 곳은 posts 뿐**이고, books는 오프셋+`total`로 다음 페이지를 잡습니다. 실무에서는 데이터가 커지면 북 목록도 커서로 바꾸는 선택지가 있습니다.
 
 ---
 
@@ -448,6 +462,7 @@ react-auth/
 | 비밀 값 | `backend/.env`, `frontend/.env` — 예시는 각 `.env.example` |
 | 북 AI | `OPENAI_API_KEY`, 선택 `OPENAI_MODEL`; Pexels 키는 서버 설정에 따름 |
 | 정적·업로드 | `uploads/` 아바타·북 미디어·글 첨부 등 |
+| 글 시드(개발) | `backend`에서 `npm run seed:posts` — 가장 오래된 사용자에게 IT 주제 글 20개 삽입(무한 스크롤 테스트용). **재실행 시 20개씩 추가** |
 
 ---
 

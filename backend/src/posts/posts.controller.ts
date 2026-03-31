@@ -124,8 +124,15 @@ export class PostsController {
 
   @UseGuards(OptionalJwtAuthGuard)
   @Get()
-  @ApiOperation({ summary: '글 목록(페이지); Bearer 있으면 likedByMe 반영' })
-  @ApiQuery({ name: 'skip', required: false, example: 0 })
+  @ApiOperation({
+    summary:
+      '글 목록(커서·무한 스크롤); Bearer 있으면 likedByMe 반영. 첫 응답에만 total 포함',
+  })
+  @ApiQuery({
+    name: 'cursor',
+    required: false,
+    description: '이전 응답의 nextCursor(첫 페이지는 생략)',
+  })
   @ApiQuery({ name: 'take', required: false, example: 12 })
   @ApiQuery({
     name: 'search',
@@ -134,14 +141,14 @@ export class PostsController {
   })
   findPage(
     @Req() req: Request & { user?: JwtPayload },
-    @Query('skip', new DefaultValuePipe(0), ParseIntPipe) skipRaw: number,
     @Query('take', new DefaultValuePipe(12), ParseIntPipe) takeRaw: number,
     @Query('search') search?: string,
+    @Query('cursor') cursor?: string,
   ) {
     this.logger.log('[POSTS·컨트롤러] findPage() 핸들러 진입');
-    const skip = Math.max(0, skipRaw);
     const take = Math.min(50, Math.max(1, takeRaw));
-    return this.postsService.findPage(skip, take, req.user?.sub, search);
+    const c = cursor?.trim() ? cursor.trim() : undefined;
+    return this.postsService.findPage(take, req.user?.sub, search, c);
   }
 
   @Get(':id/comments')

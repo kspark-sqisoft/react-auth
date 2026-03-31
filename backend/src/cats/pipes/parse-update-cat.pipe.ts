@@ -8,7 +8,10 @@ import {
 import type { UpdateCatDto } from '../dto/update-cat.dto';
 
 @Injectable()
-export class ParseUpdateCatPipe implements PipeTransform<unknown, UpdateCatDto> {
+export class ParseUpdateCatPipe implements PipeTransform<
+  unknown,
+  UpdateCatDto
+> {
   private readonly logger = new Logger('CatsPipeUpdateBody');
 
   transform(value: unknown, _metadata: ArgumentMetadata): UpdateCatDto {
@@ -17,9 +20,9 @@ export class ParseUpdateCatPipe implements PipeTransform<unknown, UpdateCatDto> 
       throw new BadRequestException('JSON body 가 필요합니다.');
     }
     const body = value as Record<string, unknown>;
-    const hasName = Object.prototype.hasOwnProperty.call(body, 'name');
-    const hasAge = Object.prototype.hasOwnProperty.call(body, 'age');
-    const hasBreed = Object.prototype.hasOwnProperty.call(body, 'breed');
+    const hasName = Object.hasOwn(body, 'name');
+    const hasAge = Object.hasOwn(body, 'age');
+    const hasBreed = Object.hasOwn(body, 'breed');
     if (!hasName && !hasAge && !hasBreed) {
       throw new BadRequestException(
         'name, age, breed 중 최소 하나는 보내야 합니다.',
@@ -30,7 +33,9 @@ export class ParseUpdateCatPipe implements PipeTransform<unknown, UpdateCatDto> 
 
     if (hasName) {
       if (typeof body.name !== 'string' || !body.name.trim()) {
-        throw new BadRequestException('name 은 비어 있지 않은 문자열이어야 합니다.');
+        throw new BadRequestException(
+          'name 은 비어 있지 않은 문자열이어야 합니다.',
+        );
       }
       dto.name = body.name.trim();
     }
