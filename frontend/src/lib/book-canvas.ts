@@ -537,11 +537,11 @@ export function sanitizePageBackgroundColor(raw: string): string {
   return s;
 }
 
-const BOOK_MEDIA_SRC_MAX = 500;
+/** Pexels·Vimeo 재생 URL은 쿼리·서명이 길어 500자면 잘려 서버 검증 실패함 — 백엔드와 동일 상한 */
+const BOOK_MEDIA_SRC_MAX = 2000;
 
 /**
- * 저장 시 `src`·`posterSrc`: `/uploads/...`(업로드) 또는 템플릿용 `/cards/...`(프론트 public)만 유효합니다.
- * 절대 URL이 들어오면 `/uploads/` 또는 `/cards/`가 포함된 부분만 잘라 냅니다.
+ * 저장 시 `src`·`posterSrc`: `/uploads/...`·`/cards/...`는 그대로 두고, 외부 https URL은 상한까지 유지합니다.
  */
 export function bookMediaSrcForApi(src: string, maxLen = BOOK_MEDIA_SRC_MAX): string {
   const t = src.trim();

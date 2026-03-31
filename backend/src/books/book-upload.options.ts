@@ -11,7 +11,8 @@ import {
 } from '../env.constants';
 
 export const BOOK_MEDIA_IMAGE_MAX_BYTES = 5 * 1024 * 1024;
-const BOOK_MEDIA_VIDEO_MAX_BYTES = 80 * 1024 * 1024;
+/** 북에 올리는 동영상(짧은 클립·AI 외부 URL과 별개) */
+const BOOK_MEDIA_VIDEO_MAX_BYTES = 150 * 1024 * 1024;
 export const BOOK_MEDIA_POSTER_MAX_BYTES = 2 * 1024 * 1024;
 
 const imageMime = new Set([

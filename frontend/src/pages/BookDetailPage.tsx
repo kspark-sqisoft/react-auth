@@ -67,6 +67,7 @@ import { BookInspectorPanel } from "@/components/books/BookInspectorPanel";
 import { BookLayersPanel } from "@/components/books/BookLayersPanel";
 import { BookPagePropertiesPanel } from "@/components/books/BookPagePropertiesPanel";
 import { BookPageSidebar } from "@/components/books/BookPageSidebar";
+import { BookAiAssistantPanel } from "@/components/books/BookAiAssistantPanel";
 import { BookEditorToolRail } from "@/components/books/BookEditorToolRail";
 import { BookWidgetPalette } from "@/components/books/BookWidgetPalette";
 import { BookMediaLibraryPanel } from "@/components/books/BookMediaLibraryPanel";
@@ -174,19 +175,26 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     setFloatingMediaLibraryOpen(open);
   }, []);
   const [floatingPanelZ, setFloatingPanelZ] = useState(() => ({
-    widget: 220,
-    media: 219,
+    widget: 290,
+    media: 289,
+    ai: 288,
   }));
   const raiseFloatingWidgetStack = useCallback(() => {
     setFloatingPanelZ((prev) => {
-      const top = Math.max(prev.widget, prev.media) + 1;
+      const top = Math.max(prev.widget, prev.media, prev.ai) + 1;
       return { ...prev, widget: top };
     });
   }, []);
   const raiseFloatingMediaStack = useCallback(() => {
     setFloatingPanelZ((prev) => {
-      const top = Math.max(prev.widget, prev.media) + 1;
+      const top = Math.max(prev.widget, prev.media, prev.ai) + 1;
       return { ...prev, media: top };
+    });
+  }, []);
+  const raiseFloatingAiStack = useCallback(() => {
+    setFloatingPanelZ((prev) => {
+      const top = Math.max(prev.widget, prev.media, prev.ai) + 1;
+      return { ...prev, ai: top };
     });
   }, []);
 
@@ -282,7 +290,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       ) {
         return;
       }
-      if (widgetDeleteOpen || deleteConfirmOpen) return;
+      if (widgetDeleteOpen || deleteConfirmOpen || pageDeleteOpen) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "a") {
         e.preventDefault();
         if (!activePage) return;
@@ -303,9 +311,14 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       ) {
         e.preventDefault();
         if (canRedo) redo();
-      } else if (e.key === "Delete" && canvasSelectedIds.length === 0) {
+      } else if (
+        e.key === "Delete" &&
+        canvasSelectedIds.length === 0 &&
+        localPages.length > 1
+      ) {
         e.preventDefault();
-        setDeleteConfirmOpen(true);
+        setPageDeleteIndex(activePageIndex);
+        setPageDeleteOpen(true);
       } else if (
         (e.key === "Delete" || e.key === "Backspace") &&
         canvasSelectedIds.length > 0
@@ -326,6 +339,9 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     activePage,
     widgetDeleteOpen,
     deleteConfirmOpen,
+    pageDeleteOpen,
+    localPages.length,
+    activePageIndex,
   ]);
 
   const saveMutation = useMutation({
@@ -500,6 +516,31 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       });
     },
     [activePageIndex, updatePages],
+  );
+
+  const updatePageNameAt = useCallback(
+    (index: number, name: string) => {
+      updatePages((draft) => {
+        const p = draft[index];
+        if (p) p.name = name;
+      });
+    },
+    [updatePages],
+  );
+
+  const applyPageTitleFromAi = useCallback(
+    (name: string, opts?: { slideNumber?: number }) => {
+      const n = opts?.slideNumber;
+      if (n == null || !Number.isFinite(n)) {
+        updatePageNameAt(activePageIndex, name);
+        return;
+      }
+      if (localPages.length === 0) return;
+      const idx = Math.round(n) - 1;
+      const clamped = Math.min(localPages.length - 1, Math.max(0, idx));
+      updatePageNameAt(clamped, name);
+    },
+    [activePageIndex, localPages.length, updatePageNameAt],
   );
 
   const updateCurrentPageBackground = useCallback(
@@ -710,6 +751,63 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     [addDigitalClockAt, addTextAt, addWeatherAt],
   );
 
+  const applyAiElements = useCallback(
+    (
+      elements: BookCanvasElement[],
+      opts?: { targetSlideNumber?: number },
+    ) => {
+      if (elements.length === 0) return;
+      let navigatedIdx: number | null = null;
+      updatePages((draft) => {
+        const maxIdx = Math.max(0, draft.length - 1);
+        const idx =
+          typeof opts?.targetSlideNumber === "number" &&
+          Number.isFinite(opts.targetSlideNumber)
+            ? Math.min(maxIdx, Math.max(0, Math.round(opts.targetSlideNumber) - 1))
+            : Math.min(Math.max(0, activePageIndex), maxIdx);
+        const p = draft[idx];
+        if (!p) return;
+        for (const el of elements) p.elements.push(el);
+        if (
+          typeof opts?.targetSlideNumber === "number" &&
+          Number.isFinite(opts.targetSlideNumber)
+        ) {
+          navigatedIdx = idx;
+        }
+      });
+      if (navigatedIdx != null) {
+        setPageIndex(navigatedIdx);
+      }
+      setSelectedIds([elements[elements.length - 1]!.id]);
+    },
+    [activePageIndex, updatePages],
+  );
+
+  const addPagesFromAi = useCallback(
+    (count: number) => {
+      const n = Math.min(20, Math.max(1, Math.round(count)));
+      const prevLen = localPages.length;
+      commitPages((prev) => {
+        const next = [...prev];
+        for (let i = 0; i < n; i++) {
+          next.push(createEmptyEditorPage(next.length));
+        }
+        return applyAutoSlideNamesByIndex(next);
+      });
+      setPageIndex(prevLen + n - 1);
+      setSelectedIds([]);
+    },
+    [commitPages, localPages.length],
+  );
+
+  const applySlideDimensionsFromAi = useCallback(
+    (partial: { slideWidth?: number; slideHeight?: number }) => {
+      if (typeof partial.slideWidth === "number") setSlideWidth(partial.slideWidth);
+      if (typeof partial.slideHeight === "number") setSlideHeight(partial.slideHeight);
+    },
+    [],
+  );
+
   const onDropLibraryMedia = useCallback(
     (point: { x: number; y: number }, payload: BookLibraryDragPayload) => {
       const id = crypto.randomUUID();
@@ -790,6 +888,10 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     setPageDeleteOpen(true);
   }, []);
 
+  const requestRemoveCurrentPageForAi = useCallback(() => {
+    requestRemovePageAt(activePageIndex);
+  }, [activePageIndex, requestRemovePageAt]);
+
   const confirmRemovePageAt = useCallback(() => {
     if (pageDeleteIndex != null) removePageAt(pageDeleteIndex);
     setPageDeleteOpen(false);
@@ -865,6 +967,12 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     const id = canvasSelectedIds[0];
     return activePage.elements.find((e) => e.id === id) ?? null;
   }, [canvasSelectedIds, activePage]);
+
+  const layoutAiMediaSelection = useMemo(() => {
+    if (!selectedEl) return null;
+    if (selectedEl.type !== "image" && selectedEl.type !== "video") return null;
+    return { elementId: selectedEl.id, kind: selectedEl.type };
+  }, [selectedEl]);
 
   const onInspectorReplaceMediaFromFile = useCallback(() => {
     if (!selectedEl || (selectedEl.type !== "image" && selectedEl.type !== "video")) return;
@@ -1311,6 +1419,25 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
               onClose={() => persistMediaFloatingOpen(false)}
             />
           ) : null}
+          <BookAiAssistantPanel
+            slideWidth={slideWidth}
+            slideHeight={slideHeight}
+            pageCount={localPages.length}
+            activePageIndex={activePageIndex}
+            onApplyElements={applyAiElements}
+            onApplyPageBackground={updateCurrentPageBackground}
+            onApplyPageTitle={applyPageTitleFromAi}
+            onApplyBookTitle={setBookTitle}
+            onAddPages={addPagesFromAi}
+            onUndo={undo}
+            onRedo={redo}
+            onRequestRemoveCurrentPage={requestRemoveCurrentPageForAi}
+            floatingStackZIndex={floatingPanelZ.ai}
+            onRaiseFloatingStack={raiseFloatingAiStack}
+            onApplySlideDimensions={applySlideDimensionsFromAi}
+            layoutAiMediaSelection={layoutAiMediaSelection}
+            onPatchBookElement={onElementChange}
+          />
           <input
             ref={imageInputRef}
             type="file"

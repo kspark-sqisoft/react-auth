@@ -39,6 +39,7 @@ async function bootstrap() {
       'Accept',
       'X-Requested-With',
       'Cookie',
+      'X-Client-Feature',
     ],
   });
 

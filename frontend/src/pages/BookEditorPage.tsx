@@ -55,6 +55,7 @@ import {
 import { BookEditorToolRail } from "@/components/books/BookEditorToolRail";
 import { BookSlideDrawingPanel } from "@/components/books/BookSlideDrawingPanel";
 import { BookSlideTemplatesPanel } from "@/components/books/BookSlideTemplatesPanel";
+import { BookAiAssistantPanel } from "@/components/books/BookAiAssistantPanel";
 import { BookWidgetPalette } from "@/components/books/BookWidgetPalette";
 import { BookWorkspaceShell } from "@/components/books/BookWorkspaceShell";
 import {
@@ -187,7 +188,7 @@ export function BookEditorPage() {
       ) {
         return;
       }
-      if (widgetDeleteOpen) return;
+      if (widgetDeleteOpen || pageDeleteOpen) return;
       if ((e.ctrlKey || e.metaKey) && e.key === "a") {
         e.preventDefault();
         if (!currentPage) return;
@@ -209,6 +210,14 @@ export function BookEditorPage() {
         e.preventDefault();
         if (canRedo) redo();
       } else if (
+        e.key === "Delete" &&
+        canvasSelectedIds.length === 0 &&
+        pages.length > 1
+      ) {
+        e.preventDefault();
+        setPageDeleteIndex(activePageIndex);
+        setPageDeleteOpen(true);
+      } else if (
         (e.key === "Delete" || e.key === "Backspace") &&
         canvasSelectedIds.length > 0
       ) {
@@ -219,7 +228,18 @@ export function BookEditorPage() {
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [canUndo, canRedo, undo, redo, canvasSelectedIds, currentPage, widgetDeleteOpen]);
+  }, [
+    canUndo,
+    canRedo,
+    undo,
+    redo,
+    canvasSelectedIds,
+    currentPage,
+    widgetDeleteOpen,
+    pageDeleteOpen,
+    pages.length,
+    activePageIndex,
+  ]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -354,6 +374,31 @@ export function BookEditorPage() {
     [activePageIndex, updatePages],
   );
 
+  const updatePageNameAt = useCallback(
+    (index: number, name: string) => {
+      updatePages((draft) => {
+        const p = draft[index];
+        if (p) p.name = name;
+      });
+    },
+    [updatePages],
+  );
+
+  const applyPageTitleFromAi = useCallback(
+    (name: string, opts?: { slideNumber?: number }) => {
+      const n = opts?.slideNumber;
+      if (n == null || !Number.isFinite(n)) {
+        updatePageNameAt(activePageIndex, name);
+        return;
+      }
+      if (pages.length === 0) return;
+      const idx = Math.round(n) - 1;
+      const clamped = Math.min(pages.length - 1, Math.max(0, idx));
+      updatePageNameAt(clamped, name);
+    },
+    [activePageIndex, pages.length, updatePageNameAt],
+  );
+
   const updateCurrentPageBackground = useCallback(
     (backgroundColor: string) => {
       updatePages((draft) => {
@@ -447,6 +492,63 @@ export function BookEditorPage() {
     [addDigitalClockAt, addTextAt, addWeatherAt],
   );
 
+  const applyAiElements = useCallback(
+    (
+      elements: BookCanvasElement[],
+      opts?: { targetSlideNumber?: number },
+    ) => {
+      if (elements.length === 0) return;
+      let navigatedIdx: number | null = null;
+      updatePages((draft) => {
+        const maxIdx = Math.max(0, draft.length - 1);
+        const idx =
+          typeof opts?.targetSlideNumber === "number" &&
+          Number.isFinite(opts.targetSlideNumber)
+            ? Math.min(maxIdx, Math.max(0, Math.round(opts.targetSlideNumber) - 1))
+            : Math.min(Math.max(0, activePageIndex), maxIdx);
+        const p = draft[idx];
+        if (!p) return;
+        for (const el of elements) p.elements.push(el);
+        if (
+          typeof opts?.targetSlideNumber === "number" &&
+          Number.isFinite(opts.targetSlideNumber)
+        ) {
+          navigatedIdx = idx;
+        }
+      });
+      if (navigatedIdx != null) {
+        setPageIndex(navigatedIdx);
+      }
+      setSelectedIds([elements[elements.length - 1]!.id]);
+    },
+    [activePageIndex, updatePages],
+  );
+
+  const addPagesFromAi = useCallback(
+    (count: number) => {
+      const n = Math.min(20, Math.max(1, Math.round(count)));
+      const prevLen = pages.length;
+      commitPages((prev) => {
+        const next = [...prev];
+        for (let i = 0; i < n; i++) {
+          next.push(createEmptyEditorPage(next.length));
+        }
+        return applyAutoSlideNamesByIndex(next);
+      });
+      setPageIndex(prevLen + n - 1);
+      setSelectedIds([]);
+    },
+    [commitPages, pages.length],
+  );
+
+  const applySlideDimensionsFromAi = useCallback(
+    (partial: { slideWidth?: number; slideHeight?: number }) => {
+      if (typeof partial.slideWidth === "number") setSlideWidth(partial.slideWidth);
+      if (typeof partial.slideHeight === "number") setSlideHeight(partial.slideHeight);
+    },
+    [],
+  );
+
   const removeElementsByIds = useCallback(
     (ids: string[]) => {
       if (ids.length === 0) return;
@@ -525,6 +627,10 @@ export function BookEditorPage() {
     setPageDeleteOpen(true);
   }, []);
 
+  const requestRemoveCurrentPageForAi = useCallback(() => {
+    requestRemovePageAt(activePageIndex);
+  }, [activePageIndex, requestRemovePageAt]);
+
   const confirmRemovePageAt = useCallback(() => {
     if (pageDeleteIndex != null) removePageAt(pageDeleteIndex);
     setPageDeleteOpen(false);
@@ -565,6 +671,12 @@ export function BookEditorPage() {
     return currentPage.elements.find((e) => e.id === id) ?? null;
   }, [canvasSelectedIds, currentPage]);
 
+  const layoutAiMediaSelection = useMemo(() => {
+    if (!selectedEl) return null;
+    if (selectedEl.type !== "image" && selectedEl.type !== "video") return null;
+    return { elementId: selectedEl.id, kind: selectedEl.type };
+  }, [selectedEl]);
+
   const widgetDeleteKindLabel = useMemo(() => {
     if (widgetDeleteIds.length === 0 || !currentPage) return "위젯";
     if (widgetDeleteIds.length > 1) return `${widgetDeleteIds.length}개 위젯`;
@@ -604,266 +716,285 @@ export function BookEditorPage() {
 
   return (
     <>
-    <BookWorkspaceShell
-      titleArea={
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
-          <Input
-            className="h-9 min-w-[10rem] max-w-md flex-1 rounded-md border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/25 focus-visible:bg-muted/20 focus-visible:ring-1 focus-visible:ring-ring/50 sm:text-lg"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="북 제목"
-            maxLength={200}
-            aria-label="북 제목"
-          />
-          <BookHeaderSlideDimensions
-            slideWidth={slideWidth}
-            slideHeight={slideHeight}
-            onChangeSlideWidth={setSlideWidth}
-            onChangeSlideHeight={setSlideHeight}
-          />
-        </div>
-      }
-      actions={
-        <Button
-          type="button"
-          size="sm"
-          className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
-          onClick={() => saveMutation.mutate()}
-          disabled={saveMutation.isPending}
-        >
-          {saveMutation.isPending ? (
-            <Spinner className="mr-2 size-4 text-white" />
-          ) : (
-            <Save className="mr-2 size-4" />
-          )}
-          저장
-        </Button>
-      }
-      left={
-        <div className="flex h-full min-h-0 w-full min-w-0 flex-row">
-          <BookEditorToolRail
-            activeTab={leftDockTab}
-            onActiveTabChange={setLeftDockTab}
-            mediaLibraryEnabled={false}
-          />
-          <div className={bookLeftDockContentColumnClass("border-s border-border/40")}>
-            {leftDockTab === "page" ? (
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                <BookPageSidebar
-                  fluid
-                  pageCount={pages.length}
-                  pageKeys={pageKeys}
-                  thumbnailsByKey={slideThumbnails}
-                  activeIndex={activePageIndex}
-                  pageLabels={pageLabels}
-                  onSelectPage={(i) => {
-                    setPageIndex(i);
-                    setSelectedIds([]);
-                  }}
-                  mode="edit"
-                  onReorderPages={reorderPages}
-                  onAddPage={addPage}
-                  onAddPageAtInsertIndex={addPageAtInsertIndex}
-                  onRemovePageAtIndex={requestRemovePageAt}
-                  onDuplicatePageAtIndex={duplicatePageAt}
-                  canRemovePage={pages.length > 1}
-                />
-              </div>
-            ) : null}
-            {leftDockTab === "widgets" ? (
-              <BookWidgetPalette
-                variant="docked"
-                className="min-h-0 flex-1"
-                onRequestFloat={() => persistWidgetFloatingOpen(true)}
-              />
-            ) : null}
-            {leftDockTab === "templates" ? (
-              <BookSlideTemplatesPanel
-                className="min-h-0 flex-1"
-                onApplyTemplate={applySlideTemplate}
-              />
-            ) : null}
-            {leftDockTab === "drawing" ? (
-              <BookSlideDrawingPanel
-                className="min-h-0 flex-1"
-                strokeColor={drawingStrokeColor}
-                strokeWidth={drawingStrokeWidth}
-                onStrokeColorChange={setDrawingStrokeColor}
-                onStrokeWidthChange={setDrawingStrokeWidth}
-              />
-            ) : null}
+      <BookWorkspaceShell
+        titleArea={
+          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
+            <Input
+              className="h-9 min-w-[10rem] max-w-md flex-1 rounded-md border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/25 focus-visible:bg-muted/20 focus-visible:ring-1 focus-visible:ring-ring/50 sm:text-lg"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="북 제목"
+              maxLength={200}
+              aria-label="북 제목"
+            />
+            <BookHeaderSlideDimensions
+              slideWidth={slideWidth}
+              slideHeight={slideHeight}
+              onChangeSlideWidth={setSlideWidth}
+              onChangeSlideHeight={setSlideHeight}
+            />
           </div>
-        </div>
-      }
-      center={
-        <>
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex shrink-0 justify-start border-b border-border/60 bg-muted/15 px-2 py-2 sm:px-3">
-              <BookCanvasToolbar
-                zoomPercent={zoomPercent}
-                onZoomIn={zoomIn}
-                onZoomOut={zoomOut}
-                onZoomReset={zoomReset}
-                showUndoRedo
-                canUndo={canUndo}
-                canRedo={canRedo}
-                onUndo={undo}
-                onRedo={redo}
-                centerGuideThresholdPx={centerGuideThresholdPx}
-                onCenterGuideThresholdPxChange={setCenterGuideThresholdPx}
-                dragGridPx={dragGridPx}
-                onDragGridPxChange={setDragGridPx}
-              />
-            </div>
-            <div
-              ref={canvasWrapRef}
-              className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 pb-24"
-              onWheel={handleWheel}
-              onPointerDown={(e) => {
-                const slide = (e.currentTarget as HTMLElement).querySelector(
-                  "[data-book-slide-root]",
-                );
-                if (slide?.contains(e.target as Node)) return;
-                setSelectedIds([]);
-              }}
-            >
-              {currentPage ? (
-                <BookSlideCanvas
-                  pageWidth={slideWidth}
-                  pageHeight={slideHeight}
-                  pageBackgroundColor={
-                    currentPage.backgroundColor?.trim() || DEFAULT_PAGE_BACKGROUND
-                  }
-                  scale={displayScale}
-                  elements={currentPage.elements}
-                  mode="edit"
-                  selectedIds={canvasSelectedIds}
-                  onSelect={handleCanvasSelect}
-                  onElementChange={onElementChange}
-                  onDropWidget={onDropWidget}
-                  onReorderZ={onReorderZ}
-                  onDeleteElement={requestRemoveWidget}
-                  centerGuideThresholdPx={centerGuideThresholdPx}
-                  dragGridPx={dragGridPx}
-                  editInteractionTool={leftDockTab === "drawing" ? "draw" : "default"}
-                  drawingStrokeColor={drawingStrokeColor}
-                  drawingStrokeWidth={drawingStrokeWidth}
-                  onAppendElement={onAppendDrawingElement}
+        }
+        actions={
+          <Button
+            type="button"
+            size="sm"
+            className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
+            onClick={() => saveMutation.mutate()}
+            disabled={saveMutation.isPending}
+          >
+            {saveMutation.isPending ? (
+              <Spinner className="mr-2 size-4 text-white" />
+            ) : (
+              <Save className="mr-2 size-4" />
+            )}
+            저장
+          </Button>
+        }
+        left={
+          <div className="flex h-full min-h-0 w-full min-w-0 flex-row">
+            <BookEditorToolRail
+              activeTab={leftDockTab}
+              onActiveTabChange={setLeftDockTab}
+              mediaLibraryEnabled={false}
+            />
+            <div className={bookLeftDockContentColumnClass("border-s border-border/40")}>
+              {leftDockTab === "page" ? (
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  <BookPageSidebar
+                    fluid
+                    pageCount={pages.length}
+                    pageKeys={pageKeys}
+                    thumbnailsByKey={slideThumbnails}
+                    activeIndex={activePageIndex}
+                    pageLabels={pageLabels}
+                    onSelectPage={(i) => {
+                      setPageIndex(i);
+                      setSelectedIds([]);
+                    }}
+                    mode="edit"
+                    onReorderPages={reorderPages}
+                    onAddPage={addPage}
+                    onAddPageAtInsertIndex={addPageAtInsertIndex}
+                    onRemovePageAtIndex={requestRemovePageAt}
+                    onDuplicatePageAtIndex={duplicatePageAt}
+                    canRemovePage={pages.length > 1}
+                  />
+                </div>
+              ) : null}
+              {leftDockTab === "widgets" ? (
+                <BookWidgetPalette
+                  variant="docked"
+                  className="min-h-0 flex-1"
+                  onRequestFloat={() => persistWidgetFloatingOpen(true)}
+                />
+              ) : null}
+              {leftDockTab === "templates" ? (
+                <BookSlideTemplatesPanel
+                  className="min-h-0 flex-1"
+                  onApplyTemplate={applySlideTemplate}
+                />
+              ) : null}
+              {leftDockTab === "drawing" ? (
+                <BookSlideDrawingPanel
+                  className="min-h-0 flex-1"
+                  strokeColor={drawingStrokeColor}
+                  strokeWidth={drawingStrokeWidth}
+                  onStrokeColorChange={setDrawingStrokeColor}
+                  onStrokeWidthChange={setDrawingStrokeWidth}
                 />
               ) : null}
             </div>
           </div>
-          {floatingWidgetPaletteOpen ? (
-            <BookWidgetPalette
-              variant="floating"
-              onClose={() => persistWidgetFloatingOpen(false)}
-            />
-          ) : null}
-        </>
-      }
-      right={
-        currentPage ? (
-          <aside className="flex h-full min-h-0 w-96 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
-            <BookLayersPanel
-              elements={currentPage.elements}
-              selectedIds={canvasSelectedIds}
-              onSelect={handleLayerSelect}
-              onReorderZ={onReorderZ}
-              onLayerDragReorder={onLayerDragReorder}
-              onVisibilityChange={onLayerVisibilityChange}
-              onLockChange={onLayerLockChange}
-              onRequestDelete={requestRemoveWidget}
-            />
-            <div className="min-h-0 flex-1 overflow-hidden">
-              {canvasSelectedIds.length >= 2 ? (
-                <BookInspectorPanel
-                  embedded
-                  selected={null}
-                  multiSelectionCount={canvasSelectedIds.length}
-                  slideWidth={slideWidth}
-                  slideHeight={slideHeight}
-                  onChange={onElementChange}
-                  onDelete={removeSelectedBulk}
-                  mediaHint={mediaHint}
+        }
+        center={
+          <>
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+              <div className="flex shrink-0 justify-start border-b border-border/60 bg-muted/15 px-2 py-2 sm:px-3">
+                <BookCanvasToolbar
+                  zoomPercent={zoomPercent}
+                  onZoomIn={zoomIn}
+                  onZoomOut={zoomOut}
+                  onZoomReset={zoomReset}
+                  showUndoRedo
+                  canUndo={canUndo}
+                  canRedo={canRedo}
+                  onUndo={undo}
+                  onRedo={redo}
+                  centerGuideThresholdPx={centerGuideThresholdPx}
+                  onCenterGuideThresholdPxChange={setCenterGuideThresholdPx}
+                  dragGridPx={dragGridPx}
+                  onDragGridPxChange={setDragGridPx}
                 />
-              ) : canvasSelectedIds.length === 1 ? (
-                <BookInspectorPanel
-                  embedded
-                  selected={selectedEl}
-                  slideWidth={slideWidth}
-                  slideHeight={slideHeight}
-                  onChange={onElementChange}
-                  onDelete={removeSelected}
-                  mediaHint={mediaHint}
-                />
-              ) : (
-                <BookPagePropertiesPanel
-                  embedded
-                  pageIndex={activePageIndex}
-                  totalPages={pages.length}
-                  name={currentPage.name}
-                  onChangeName={updateCurrentPageName}
-                  backgroundColor={
-                    currentPage.backgroundColor?.trim() || DEFAULT_PAGE_BACKGROUND
-                  }
-                  onChangeBackgroundColor={updateCurrentPageBackground}
-                />
-              )}
+              </div>
+              <div
+                ref={canvasWrapRef}
+                className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 pb-24"
+                onWheel={handleWheel}
+                onPointerDown={(e) => {
+                  const slide = (e.currentTarget as HTMLElement).querySelector(
+                    "[data-book-slide-root]",
+                  );
+                  if (slide?.contains(e.target as Node)) return;
+                  setSelectedIds([]);
+                }}
+              >
+                {currentPage ? (
+                  <BookSlideCanvas
+                    pageWidth={slideWidth}
+                    pageHeight={slideHeight}
+                    pageBackgroundColor={
+                      currentPage.backgroundColor?.trim() || DEFAULT_PAGE_BACKGROUND
+                    }
+                    scale={displayScale}
+                    elements={currentPage.elements}
+                    mode="edit"
+                    selectedIds={canvasSelectedIds}
+                    onSelect={handleCanvasSelect}
+                    onElementChange={onElementChange}
+                    onDropWidget={onDropWidget}
+                    onReorderZ={onReorderZ}
+                    onDeleteElement={requestRemoveWidget}
+                    centerGuideThresholdPx={centerGuideThresholdPx}
+                    dragGridPx={dragGridPx}
+                    editInteractionTool={leftDockTab === "drawing" ? "draw" : "default"}
+                    drawingStrokeColor={drawingStrokeColor}
+                    drawingStrokeWidth={drawingStrokeWidth}
+                    onAppendElement={onAppendDrawingElement}
+                  />
+                ) : null}
+              </div>
             </div>
-          </aside>
-        ) : null
-      }
-    />
-    <AlertDialog
-      open={widgetDeleteOpen}
-      onOpenChange={(open) => {
-        setWidgetDeleteOpen(open);
-        if (!open) setWidgetDeleteIds([]);
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>위젯을 삭제할까요?</AlertDialogTitle>
-          <AlertDialogDescription>
-            이 슬라이드에서 「{widgetDeleteKindLabel}」을(를) 제거합니다.
-            {widgetDeleteIds.length > 1 ? " 선택한 위젯이 모두 삭제됩니다." : ""} 실행 후에는 되돌리기(Ctrl+Z)로
-            복구할 수 있습니다.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel type="button">취소</AlertDialogCancel>
-          <Button type="button" variant="destructive" onClick={() => confirmRemoveWidget()}>
-            삭제
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-    <AlertDialog
-      open={pageDeleteOpen}
-      onOpenChange={(open) => {
-        setPageDeleteOpen(open);
-        if (!open) setPageDeleteIndex(null);
-      }}
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>슬라이드를 삭제할까요?</AlertDialogTitle>
-          <AlertDialogDescription>
-            「
-            {pageDeleteIndex != null && pages[pageDeleteIndex]
-              ? pages[pageDeleteIndex].name.trim() || `슬라이드 ${pageDeleteIndex + 1}`
-              : "이 슬라이드"}
-            」와 이 페이지에 있는 모든 위젯이 제거됩니다. 되돌리기(Ctrl+Z)로 복구할 수 있습니다.
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel type="button">취소</AlertDialogCancel>
-          <Button type="button" variant="destructive" onClick={() => confirmRemovePageAt()}>
-            삭제
-          </Button>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
+            {floatingWidgetPaletteOpen ? (
+              <BookWidgetPalette
+                variant="floating"
+                onClose={() => persistWidgetFloatingOpen(false)}
+              />
+            ) : null}
+            {currentPage ? (
+              <BookAiAssistantPanel
+                slideWidth={slideWidth}
+                slideHeight={slideHeight}
+                pageCount={pages.length}
+                activePageIndex={activePageIndex}
+                onApplyElements={applyAiElements}
+                onApplyPageBackground={updateCurrentPageBackground}
+                onApplyPageTitle={applyPageTitleFromAi}
+                onApplyBookTitle={setTitle}
+                onAddPages={addPagesFromAi}
+                onUndo={undo}
+                onRedo={redo}
+                onRequestRemoveCurrentPage={requestRemoveCurrentPageForAi}
+                onApplySlideDimensions={applySlideDimensionsFromAi}
+                layoutAiMediaSelection={layoutAiMediaSelection}
+                onPatchBookElement={onElementChange}
+              />
+            ) : null}
+          </>
+        }
+        right={
+          currentPage ? (
+            <aside className="flex h-full min-h-0 w-96 shrink-0 flex-col overflow-hidden border-l border-border bg-card/50">
+              <BookLayersPanel
+                elements={currentPage.elements}
+                selectedIds={canvasSelectedIds}
+                onSelect={handleLayerSelect}
+                onReorderZ={onReorderZ}
+                onLayerDragReorder={onLayerDragReorder}
+                onVisibilityChange={onLayerVisibilityChange}
+                onLockChange={onLayerLockChange}
+                onRequestDelete={requestRemoveWidget}
+              />
+              <div className="min-h-0 flex-1 overflow-hidden">
+                {canvasSelectedIds.length >= 2 ? (
+                  <BookInspectorPanel
+                    embedded
+                    selected={null}
+                    multiSelectionCount={canvasSelectedIds.length}
+                    slideWidth={slideWidth}
+                    slideHeight={slideHeight}
+                    onChange={onElementChange}
+                    onDelete={removeSelectedBulk}
+                    mediaHint={mediaHint}
+                  />
+                ) : canvasSelectedIds.length === 1 ? (
+                  <BookInspectorPanel
+                    embedded
+                    selected={selectedEl}
+                    slideWidth={slideWidth}
+                    slideHeight={slideHeight}
+                    onChange={onElementChange}
+                    onDelete={removeSelected}
+                    mediaHint={mediaHint}
+                  />
+                ) : (
+                  <BookPagePropertiesPanel
+                    embedded
+                    pageIndex={activePageIndex}
+                    totalPages={pages.length}
+                    name={currentPage.name}
+                    onChangeName={updateCurrentPageName}
+                    backgroundColor={
+                      currentPage.backgroundColor?.trim() || DEFAULT_PAGE_BACKGROUND
+                    }
+                    onChangeBackgroundColor={updateCurrentPageBackground}
+                  />
+                )}
+              </div>
+            </aside>
+          ) : null
+        }
+      />
+      <AlertDialog
+        open={widgetDeleteOpen}
+        onOpenChange={(open) => {
+          setWidgetDeleteOpen(open);
+          if (!open) setWidgetDeleteIds([]);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>위젯을 삭제할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              이 슬라이드에서 「{widgetDeleteKindLabel}」을(를) 제거합니다.
+              {widgetDeleteIds.length > 1 ? " 선택한 위젯이 모두 삭제됩니다." : ""} 실행 후에는 되돌리기(Ctrl+Z)로
+              복구할 수 있습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button">취소</AlertDialogCancel>
+            <Button type="button" variant="destructive" onClick={() => confirmRemoveWidget()}>
+              삭제
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+      <AlertDialog
+        open={pageDeleteOpen}
+        onOpenChange={(open) => {
+          setPageDeleteOpen(open);
+          if (!open) setPageDeleteIndex(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>슬라이드를 삭제할까요?</AlertDialogTitle>
+            <AlertDialogDescription>
+              「
+              {pageDeleteIndex != null && pages[pageDeleteIndex]
+                ? pages[pageDeleteIndex].name.trim() || `슬라이드 ${pageDeleteIndex + 1}`
+                : "이 슬라이드"}
+              」와 이 페이지에 있는 모든 위젯이 제거됩니다. 되돌리기(Ctrl+Z)로 복구할 수 있습니다.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel type="button">취소</AlertDialogCancel>
+            <Button type="button" variant="destructive" onClick={() => confirmRemovePageAt()}>
+              삭제
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   );
 }

@@ -263,6 +263,63 @@ export class BooksService {
     return null;
   }
 
+  /**
+   * 이미지·동영상 요소의 src: 업로드·정적 카드 경로 또는 허용된 https CDN(Pexels·Vimeo 재생 링크).
+   */
+  private normalizeBookMediaElementSrc(
+    raw: unknown,
+    maxLen = 2000,
+  ): string | null {
+    const path = this.normalizeBookMediaUploadsPath(raw, 500);
+    if (path != null) return path;
+
+    if (typeof raw !== 'string') return null;
+    const t = raw.trim();
+    if (!t || t.length > maxLen) return null;
+
+    try {
+      const u = new URL(t);
+      if (u.protocol !== 'https:') return null;
+      const host = u.hostname.toLowerCase();
+      if (
+        host === 'player.vimeo.com' ||
+        host.endsWith('.pexels.com') ||
+        host.endsWith('.vimeocdn.com') ||
+        host === 'vimeocdn.com'
+      ) {
+        return t;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
+  /** 동영상 poster: 업로드·카드 또는 Pexels 계열 이미지 URL */
+  private normalizeBookVideoPosterSrc(
+    raw: unknown,
+    maxLen = 2000,
+  ): string | null {
+    const path = this.normalizeBookMediaUploadsPath(raw, 500);
+    if (path != null) return path;
+
+    if (typeof raw !== 'string') return null;
+    const t = raw.trim();
+    if (!t || t.length > maxLen) return null;
+
+    try {
+      const u = new URL(t);
+      if (u.protocol !== 'https:') return null;
+      const host = u.hostname.toLowerCase();
+      if (host.endsWith('.pexels.com')) {
+        return t;
+      }
+    } catch {
+      return null;
+    }
+    return null;
+  }
+
   /** `/cards/img1.jpg` 등 — path traversal·이상한 확장자 차단 */
   private isSafeBookCardsStaticPath(path: string): boolean {
     if (!path.startsWith('/cards/')) return false;
@@ -582,7 +639,7 @@ export class BooksService {
             '이미지·비디오 크기가 올바르지 않습니다.',
           );
         }
-        const normSrc = this.normalizeBookMediaUploadsPath(o.src);
+        const normSrc = this.normalizeBookMediaElementSrc(o.src);
         if (normSrc == null) {
           throw new BadRequestException('미디어 src가 올바르지 않습니다.');
         }
@@ -590,11 +647,13 @@ export class BooksService {
         if (o.type === 'video') {
           const ps = o.posterSrc;
           if (ps != null && ps !== '') {
-            const normPs = this.normalizeBookMediaUploadsPath(ps);
+            const normPs = this.normalizeBookVideoPosterSrc(ps);
             if (normPs == null) {
               throw new BadRequestException('posterSrc가 올바르지 않습니다.');
             }
             o.posterSrc = normPs;
+          } else {
+            o.posterSrc = null;
           }
         }
         if (o.objectFit != null) {

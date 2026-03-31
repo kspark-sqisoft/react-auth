@@ -667,6 +667,114 @@ export async function createBook(input: {
   }
 }
 
+export type BookLayoutAiAddWidgetDto = {
+  type: "add_widget";
+  widget: "weather" | "digitalClock" | "text" | "image" | "video";
+  anchor: string;
+  slideNumber?: number;
+  cityQuery?: string;
+  text?: string;
+  fontSize?: number;
+  imageSearchQuery?: string;
+  imageUrl?: string;
+  videoSearchQuery?: string;
+  videoUrl?: string;
+  src?: string;
+  posterSrc?: string | null;
+  imageWidth?: number;
+  imageHeight?: number;
+  videoWidth?: number;
+  videoHeight?: number;
+};
+
+export type BookLayoutAiReplaceWidgetMediaDto = {
+  type: "replace_widget_media";
+  elementId: string;
+  widget: "image" | "video";
+  imageSearchQuery?: string;
+  imageUrl?: string;
+  videoSearchQuery?: string;
+  videoUrl?: string;
+  src?: string;
+  posterSrc?: string | null;
+  imageWidth?: number;
+  imageHeight?: number;
+  videoWidth?: number;
+  videoHeight?: number;
+};
+
+export type BookLayoutAiSetBackgroundDto = {
+  type: "set_page_background";
+  backgroundColor: string;
+};
+
+export type BookLayoutAiSetPageTitleDto = {
+  type: "set_page_title";
+  title: string;
+  /** 왼쪽 목록 기준 1번째 = 1 */
+  slideNumber?: number;
+};
+
+export type BookLayoutAiSetBookTitleDto = {
+  type: "set_book_title";
+  title: string;
+};
+
+export type BookLayoutAiAddPageDto = {
+  type: "add_page";
+  count?: number;
+};
+
+export type BookLayoutAiUndoDto = { type: "undo" };
+export type BookLayoutAiRedoDto = { type: "redo" };
+export type BookLayoutAiRemoveCurrentPageDto = { type: "remove_current_page" };
+
+export type BookLayoutAiSetSlideDimensionsDto = {
+  type: "set_slide_dimensions";
+  slideWidth?: number;
+  slideHeight?: number;
+};
+
+export type BookLayoutAiActionDto =
+  | BookLayoutAiAddWidgetDto
+  | BookLayoutAiReplaceWidgetMediaDto
+  | BookLayoutAiSetBackgroundDto
+  | BookLayoutAiSetPageTitleDto
+  | BookLayoutAiSetBookTitleDto
+  | BookLayoutAiAddPageDto
+  | BookLayoutAiUndoDto
+  | BookLayoutAiRedoDto
+  | BookLayoutAiRemoveCurrentPageDto
+  | BookLayoutAiSetSlideDimensionsDto;
+
+export type BookLayoutAiResponse = {
+  reply: string;
+  actions: BookLayoutAiActionDto[];
+};
+
+/** 로그인 필요. 서버에서 OpenAI로 북 편집용 자연어 → 액션 JSON을 해석합니다. */
+export async function requestBookLayoutAi(body: {
+  message: string;
+  slideWidth: number;
+  slideHeight: number;
+  pageCount: number;
+  activeSlideIndex: number;
+  /** 단일 이미지·비디오 선택 시 — 채팅으로 «바꿔줘» 등 시 교체 액션으로 연결 */
+  selection?: { elementId: string; kind: "image" | "video" };
+}): Promise<BookLayoutAiResponse> {
+  try {
+    const { data } = await api.post<BookLayoutAiResponse>("/books/ai/layout", body, {
+      headers: {
+        /** DevTools 네트워크에서 `book-layout-ai`로 필터하기 쉽게 */
+        "X-Client-Feature": "book-layout-ai",
+      },
+    });
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
 export async function updateBook(
   id: number,
   input: {

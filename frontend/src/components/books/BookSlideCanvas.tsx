@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
 } from "react";
 import { getBookImageIfReady, loadBookImage } from "@/lib/book-image-cache";
@@ -29,7 +30,6 @@ import {
   resolveBookElementOutlineColor,
   resolveBookElementOutlineWidth,
   resolveBookElementRotation,
-  resolveBookMediaObjectFit,
   snapKonvaBookNodePositionToGrid,
   buildBookDrawingElement,
   isBookElementLocked,
@@ -38,6 +38,7 @@ import {
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
 import { publicAssetUrl } from "@/lib/api";
+import { appLog } from "@/lib/app-log";
 import {
   BookTextWidgetInlineEditor,
   type BookTextWidgetInlineEditorHandle,
@@ -48,7 +49,7 @@ import {
 } from "@/components/books/BookTextWidgetOverlay";
 import { BookDigitalClockWidgetOverlay } from "@/components/books/BookDigitalClockWidgetOverlay";
 import { BookWeatherWidgetOverlay } from "@/components/books/BookWeatherWidgetOverlay";
-import { computeKonvaFittedImageLayout, mediaObjectFitToCssClass } from "@/lib/book-media-layout";
+import { computeKonvaFittedImageLayout } from "@/lib/book-media-layout";
 import {
   defaultTextWidgetBoxHeight,
   getTextWidgetDisplayHtml,
@@ -355,7 +356,10 @@ function formatMediaClock(seconds: number): string {
 
 const VIDEO_BAR_HIDE_DELAY_MS = 2000;
 
-/** 슬라이드 위 HTML 비디오 + 하단 재생 컨트롤(호버 시 표시, 이탈 후 지연 숨김). */
+/**
+ * 화면 픽셀은 Konva.Image(HTMLVideoElement)로 그림 — Stage 아래 HTML video는 일부 브라우저에서
+ * 캔버스에 가려져 보이지 않는 경우가 있어, 재생용 `<video>`는 화면 밖에 두고 ref만 공유합니다.
+ */
 function BookSlideVideoOverlay({
   el,
   scale,
@@ -363,6 +367,7 @@ function BookSlideVideoOverlay({
   liveFrame,
   onBarPointerEnter,
   onBarPointerLeave,
+  onHtmlVideoRef,
 }: {
   el: Extract<BookCanvasElement, { type: "video" }>;
   scale: number;
@@ -370,16 +375,24 @@ function BookSlideVideoOverlay({
   liveFrame?: BookTextOverlayLiveFrame | null;
   onBarPointerEnter: () => void;
   onBarPointerLeave: () => void;
+  onHtmlVideoRef?: (elementId: string, node: HTMLVideoElement | null) => void;
 }) {
-  const videoRef = useRef<HTMLVideoElement>(null);
+  const videoRef = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [intrinsic, setIntrinsic] = useState<{ src: string; w: number; h: number } | null>(null);
 
   const src = publicAssetUrl(el.src) ?? el.src;
   const poster =
     el.posterSrc != null ? (publicAssetUrl(el.posterSrc) ?? el.posterSrc) : undefined;
+
+  const setVideoRef = useCallback(
+    (node: HTMLVideoElement | null) => {
+      videoRef.current = node;
+      onHtmlVideoRef?.(el.id, node);
+    },
+    [el.id, onHtmlVideoRef],
+  );
 
   const syncFromVideo = useCallback(() => {
     const v = videoRef.current;
@@ -440,22 +453,13 @@ function BookSlideVideoOverlay({
   const vh = liveFrame?.height ?? el.height;
   const vDeg = liveFrame != null ? liveFrame.rotation : vRot;
 
-  const fit = resolveBookMediaObjectFit(el.objectFit);
-  const layout =
-    intrinsic && intrinsic.src === src && intrinsic.w > 0 && intrinsic.h > 0
-      ? computeKonvaFittedImageLayout(el.objectFit, vw, vh, intrinsic.w, intrinsic.h)
-      : null;
-  /** cover·fill은 브라우저 object-*로 처리. contain·scale-down·none은 박스만큼만 비디오를 두어 레터박스 검정을 피함 */
-  const fullBleedFit = fit === "cover" || fit === "fill";
-  const useLayoutBox = Boolean(layout && !fullBleedFit);
-
   const vidBr = resolveBookElementBorderRadius(el);
   const vidOw = resolveBookElementOutlineWidth(el);
   const vidOc = resolveBookElementOutlineColor(el);
   const vidOutlineShadow =
     vidOw > 0 ? `0 0 0 ${Math.max(0.5, vidOw * scale)}px ${vidOc}` : undefined;
 
-  const boxStyle = {
+  const boxStyle: CSSProperties = {
     left: vx * scale,
     top: vy * scale,
     width: vw * scale,
@@ -468,49 +472,29 @@ function BookSlideVideoOverlay({
 
   return (
     <>
-      {/* Konva(z-1) 아래: 화면 + 외곽선 — 선택/트랜스포머가 위에 보이게 */}
-      <div
-        className="absolute z-0 overflow-hidden pointer-events-none"
-        style={{
-          ...boxStyle,
-          boxShadow: vidOutlineShadow,
+      <video
+        ref={setVideoRef}
+        className="pointer-events-none fixed -left-[9999px] top-0 size-px max-h-px max-w-px overflow-hidden opacity-0"
+        aria-hidden
+        src={src}
+        poster={poster || undefined}
+        muted
+        playsInline
+        preload="metadata"
+        controls={false}
+        onError={(e) => {
+          appLog("bookSlideVideo", "<video> 로드/디코드 실패", {
+            elementId: el.id,
+            srcPrefix: src.length > 100 ? `${src.slice(0, 100)}…` : src,
+            mediaErrorCode: e.currentTarget.error?.code,
+          });
         }}
-      >
-        <video
-          ref={videoRef}
-          className={cn(
-            "pointer-events-none absolute outline-none",
-            useLayoutBox ? undefined : "inset-0 size-full",
-            !useLayoutBox && mediaObjectFitToCssClass(el.objectFit),
-          )}
-          style={
-            useLayoutBox && layout
-              ? {
-                  left: layout.x * scale,
-                  top: layout.y * scale,
-                  width: layout.width * scale,
-                  height: layout.height * scale,
-                  objectFit: "fill",
-                  backgroundColor: "transparent",
-                }
-              : { backgroundColor: "transparent" }
-          }
-          src={src}
-          poster={poster || undefined}
-          muted
-          playsInline
-          preload="metadata"
-          controls={false}
-          onLoadedMetadata={(e) => {
-            const v = e.currentTarget;
-            const w = v.videoWidth;
-            const h = v.videoHeight;
-            if (w > 0 && h > 0) setIntrinsic({ src, w, h });
-          }}
-        />
-      </div>
+      />
       {/* Konva보다 위: 하단 바만 클릭 가능. 나머지 영역은 pointer-events-none으로 Konva로 통과 */}
-      <div className="absolute z-2 overflow-hidden pointer-events-none" style={boxStyle}>
+      <div
+        className="absolute z-2 overflow-hidden pointer-events-none"
+        style={{ ...boxStyle, ...(vidOutlineShadow ? { boxShadow: vidOutlineShadow } : {}) }}
+      >
         <div
           className={cn(
             "absolute bottom-0 left-0 right-0 z-10 flex h-9 min-h-9 items-center gap-1 border-t border-white/15 bg-black/75 px-1 py-0.5 transition-opacity duration-200",
@@ -594,6 +578,17 @@ export function BookSlideCanvas({
     origins: Map<string, { x: number; y: number }>;
   } | null>(null);
   const videoBarHideTimers = useRef<Map<string, ReturnType<typeof setTimeout>>>(new Map());
+  const [videoHtmlById, setVideoHtmlById] = useState<Map<string, HTMLVideoElement>>(
+    () => new Map(),
+  );
+  const onHtmlVideoRef = useCallback((elementId: string, node: HTMLVideoElement | null) => {
+    setVideoHtmlById((prev) => {
+      const next = new Map(prev);
+      if (node) next.set(elementId, node);
+      else next.delete(elementId);
+      return next;
+    });
+  }, []);
   const [videoBarVisible, setVideoBarVisible] = useState<Record<string, boolean>>({});
   const [zMenu, setZMenu] = useState<{ x: number; y: number; elementId: string } | null>(null);
   const zMenuRef = useRef<HTMLDivElement>(null);
@@ -1106,7 +1101,7 @@ export function BookSlideCanvas({
       }
       onDrop={dropEnabled ? handleDrop : undefined}
     >
-      {/* 슬라이드 배경은 HTML — 비디오 화면은 z-0, 하단 컨트롤만 z-2로 Stage(z-1) 위에 올려 클릭이 Konva로만 가지 않게 함 */}
+      {/* 슬라이드 배경은 HTML — 비디오 픽셀은 Konva.Image, 재생용 video는 화면 밖 + 하단 바만 z-2 */}
       <div
         className="pointer-events-none absolute inset-0 z-0"
         style={{ backgroundColor: pageBackgroundColor }}
@@ -1156,6 +1151,7 @@ export function BookSlideCanvas({
             })}
             onBarPointerEnter={() => showVideoBar(el.id)}
             onBarPointerLeave={() => scheduleHideVideoBar(el.id)}
+            onHtmlVideoRef={onHtmlVideoRef}
           />
         ))}
       <div className="relative z-[1]">
@@ -1261,6 +1257,7 @@ export function BookSlideCanvas({
               <BookVideoBox
                 key={`${el.id}:${el.src}`}
                 el={el}
+                htmlVideoEl={videoHtmlById.get(el.id) ?? null}
                 locked={locked}
                 liveSync={shapeLiveSync}
                 registerKonvaNode={registerKonvaNode}
@@ -2260,6 +2257,7 @@ function BookImageShape({
 
 function BookVideoBox({
   el,
+  htmlVideoEl,
   locked,
   liveSync,
   registerKonvaNode,
@@ -2272,6 +2270,7 @@ function BookVideoBox({
   onZMenu,
 }: {
   el: Extract<BookCanvasElement, { type: "video" }>;
+  htmlVideoEl: HTMLVideoElement | null;
   locked: boolean;
   liveSync: BookShapeLiveSync;
   registerKonvaNode: (elementId: string, node: Konva.Node | null) => void;
@@ -2283,6 +2282,52 @@ function BookVideoBox({
   zMenuEnabled: boolean;
   onZMenu: (clientX: number, clientY: number) => void;
 }) {
+  const groupRef = useRef<Konva.Group>(null);
+  const [, setVideoDimGen] = useState(0);
+
+  useEffect(() => {
+    const v = htmlVideoEl;
+    if (!v) return;
+    const poke = () => setVideoDimGen((n) => n + 1);
+    v.addEventListener("loadedmetadata", poke);
+    queueMicrotask(poke);
+    return () => v.removeEventListener("loadedmetadata", poke);
+  }, [htmlVideoEl]);
+
+  useEffect(() => {
+    const v = htmlVideoEl;
+    if (!v) return;
+    let raf = 0;
+    const draw = () => {
+      groupRef.current?.getLayer()?.batchDraw();
+    };
+    const loop = () => {
+      draw();
+      if (!v.paused) raf = requestAnimationFrame(loop);
+    };
+    const onPlay = () => {
+      cancelAnimationFrame(raf);
+      loop();
+    };
+    const onPause = () => {
+      cancelAnimationFrame(raf);
+      draw();
+    };
+    v.addEventListener("play", onPlay);
+    v.addEventListener("pause", onPause);
+    v.addEventListener("seeked", draw);
+    v.addEventListener("loadeddata", draw);
+    if (!v.paused) loop();
+    else draw();
+    return () => {
+      cancelAnimationFrame(raf);
+      v.removeEventListener("play", onPlay);
+      v.removeEventListener("pause", onPause);
+      v.removeEventListener("seeked", draw);
+      v.removeEventListener("loadeddata", draw);
+    };
+  }, [htmlVideoEl]);
+
   const vidOpacity = resolveBookElementOpacity(el.opacity);
   const basePivot = bookElementPivotKonva(el);
   const tf = liveSync.transformLive?.id === el.id ? liveSync.transformLive : null;
@@ -2301,29 +2346,39 @@ function BookVideoBox({
   } else if (dg) {
     pivot = { ...basePivot, cx: dg.cx, cy: dg.cy };
   }
+  const iw = htmlVideoEl?.videoWidth ?? 0;
+  const ih = htmlVideoEl?.videoHeight ?? 0;
+  const layout = useMemo(
+    () =>
+      htmlVideoEl && iw > 0 && ih > 0
+        ? computeKonvaFittedImageLayout(el.objectFit, fw, fh, iw, ih)
+        : null,
+    [htmlVideoEl, iw, ih, el.objectFit, fw, fh],
+  );
   const vBr = resolveBookElementBorderRadius(el);
   const vOw = resolveBookElementOutlineWidth(el);
   const vOc = resolveBookElementOutlineColor(el);
   const videoEditGuide = mode === "edit" && vOw <= 0;
+
   return (
-    <Rect
+    <Group
       ref={(node) => {
+        groupRef.current = node;
         registerKonvaNode(el.id, node);
       }}
       x={pivot.cx}
       y={pivot.cy}
       offsetX={pivot.offsetX}
       offsetY={pivot.offsetY}
+      rotation={pivot.rotation}
       width={fw}
       height={fh}
-      rotation={pivot.rotation}
       scaleX={tf ? 1 : undefined}
       scaleY={tf ? 1 : undefined}
       opacity={vidOpacity}
-      fill="transparent"
-      cornerRadius={vBr}
-      stroke={vOw > 0 ? vOc : videoEditGuide ? "#cbd5e1" : "transparent"}
-      strokeWidth={vOw > 0 ? vOw : videoEditGuide ? 1 : 0}
+      clipFunc={(ctx) => {
+        canvasRoundRectPath(ctx as never, 0, 0, fw, fh, vBr);
+      }}
       draggable={mode === "edit" && !locked}
       onMouseEnter={onVideoHoverEnter}
       onMouseLeave={onVideoHoverLeave}
@@ -2351,7 +2406,7 @@ function BookVideoBox({
         locked
           ? undefined
           : (e) => {
-              liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
+              liveSync.commitDragEndPosition(el.id, e.target as Konva.Node, fw, fh);
             }
       }
       onTransformStart={
@@ -2365,7 +2420,7 @@ function BookVideoBox({
           ? undefined
           : (e) => {
               liveSync.clearTransformLive();
-              const node = e.target;
+              const node = e.target as Konva.Group;
               const sx = Math.abs(node.scaleX());
               const sy = Math.abs(node.scaleY());
               node.scaleX(1);
@@ -2385,6 +2440,54 @@ function BookVideoBox({
               });
             }
       }
-    />
+    >
+      {htmlVideoEl && layout ? (
+        <KonvaImage
+          image={htmlVideoEl}
+          x={layout.x}
+          y={layout.y}
+          width={layout.width}
+          height={layout.height}
+          {...(layout.crop ? { crop: layout.crop } : {})}
+          listening={false}
+        />
+      ) : (
+        <Rect
+          x={0}
+          y={0}
+          width={fw}
+          height={fh}
+          cornerRadius={vBr}
+          fill="#0f172a"
+          stroke="#475569"
+          strokeWidth={1}
+          listening={false}
+        />
+      )}
+      {vOw > 0 ? (
+        <Rect
+          x={0}
+          y={0}
+          width={fw}
+          height={fh}
+          cornerRadius={vBr}
+          fillEnabled={false}
+          stroke={vOc}
+          strokeWidth={vOw}
+          listening={false}
+        />
+      ) : null}
+      <Rect
+        x={0}
+        y={0}
+        width={fw}
+        height={fh}
+        cornerRadius={vBr}
+        fill="rgba(0,0,0,0.01)"
+        stroke={vOw > 0 ? "transparent" : videoEditGuide ? "#cbd5e1" : "transparent"}
+        strokeWidth={vOw > 0 ? 0 : videoEditGuide ? 1 : 0}
+        listening
+      />
+    </Group>
   );
 }
