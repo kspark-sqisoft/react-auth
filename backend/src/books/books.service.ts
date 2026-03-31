@@ -44,6 +44,8 @@ export type BookCanvasElementPublic =
       fill: string;
       width?: number;
       height?: number;
+      /** 위젯 박스 안 텍스트 블록 세로 위치(top|middle|bottom) */
+      verticalAlign?: 'top' | 'middle' | 'bottom';
       /** 0~1, 생략 시 1 */
       opacity?: number;
       /** 시계 방향 도(°), 생략 시 0 */
@@ -421,6 +423,17 @@ export class BooksService {
             o.height > 4000
           ) {
             throw new BadRequestException('텍스트 height가 올바르지 않습니다.');
+          }
+        }
+        if (o.verticalAlign != null) {
+          if (
+            o.verticalAlign !== 'top' &&
+            o.verticalAlign !== 'middle' &&
+            o.verticalAlign !== 'bottom'
+          ) {
+            throw new BadRequestException(
+              '텍스트 verticalAlign은 top, middle, bottom 중 하나여야 합니다.',
+            );
           }
         }
       } else if (o.type === 'weather') {

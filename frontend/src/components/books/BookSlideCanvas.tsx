@@ -51,8 +51,8 @@ import { BookDigitalClockWidgetOverlay } from "@/components/books/BookDigitalClo
 import { BookWeatherWidgetOverlay } from "@/components/books/BookWeatherWidgetOverlay";
 import { computeKonvaFittedImageLayout } from "@/lib/book-media-layout";
 import {
-  defaultTextWidgetBoxHeight,
   getTextWidgetDisplayHtml,
+  nextTextWidgetHeightGrowOnly,
   textWidgetHitHeight,
 } from "@/lib/book-text-widget";
 
@@ -1342,12 +1342,12 @@ export function BookSlideCanvas({
                   onReportLogicalHeight={
                     mode === "edit"
                       ? (logical) => {
-                          const next = Math.max(28, Math.min(4000, Math.ceil(logical)));
-                          const prev =
-                            typeof el.height === "number"
-                              ? el.height
-                              : defaultTextWidgetBoxHeight(el.fontSize);
-                          if (Math.abs(next - prev) <= 2) return;
+                          const next = nextTextWidgetHeightGrowOnly(
+                            logical,
+                            el.height,
+                            el.fontSize,
+                          );
+                          if (next == null) return;
                           scheduleTextBoxHeight(el.id, next);
                         }
                       : undefined
@@ -1411,12 +1411,12 @@ export function BookSlideCanvas({
                   }}
                   onCancel={() => setInlineTextEdit(null)}
                   onReportLogicalHeight={(logical) => {
-                    const next = Math.max(28, Math.min(4000, Math.ceil(logical)));
-                    const prev =
-                      typeof tel.height === "number"
-                        ? tel.height
-                        : defaultTextWidgetBoxHeight(tel.fontSize);
-                    if (Math.abs(next - prev) <= 2) return;
+                    const next = nextTextWidgetHeightGrowOnly(
+                      logical,
+                      tel.height,
+                      tel.fontSize,
+                    );
+                    if (next == null) return;
                     scheduleTextBoxHeight(tel.id, next);
                   }}
                 />

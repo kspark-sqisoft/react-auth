@@ -634,370 +634,383 @@ export function BookInspectorPanel({
                   isBookElementLocked(selected) && "pointer-events-none opacity-[0.68]",
                 )}
               >
-          {selected.type === "text" ? (
-            <>
-              <div className="space-y-1">
-                <Label>내용 (리치 텍스트)</Label>
-                <BookTextRichEditor
-                  widgetKey={selected.id}
-                  html={getTextWidgetDisplayHtml(selected)}
-                  onRichPatch={(p) =>
-                    onChange(selected.id, { richHtml: p.richHtml, text: p.text })
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="insp-fs">크기</Label>
-                <Input
-                  id="insp-fs"
-                  type="number"
-                  min={10}
-                  max={120}
-                  value={selected.fontSize}
-                  onChange={(e) =>
-                    onChange(selected.id, {
-                      fontSize: num(e.target.value, selected.fontSize, 10, 120),
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="insp-fill">기본 글자색</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  리치 텍스트에 색이 없는 구간·플레인 미리보기에 쓰입니다.
-                </p>
-                <p className="text-[11px] text-muted-foreground">자주 쓰는 색</p>
-                <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/25 p-1">
-                  {BOOK_HEX_COLOR_PRESETS.map((c) => {
-                    const fillNorm = selected.fill.trim().replace(/\s/g, "").toLowerCase();
-                    const active = fillNorm === c.toLowerCase();
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        title={c}
-                        aria-label={`기본 글자색 ${c}`}
-                        aria-pressed={active}
-                        className={cn(
-                          "size-7 shrink-0 rounded-md border border-border shadow-sm ring-offset-background hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
-                          active && "ring-2 ring-primary ring-offset-2",
-                        )}
-                        style={{ backgroundColor: c }}
-                        onClick={() => onChange(selected.id, { fill: c })}
+                {selected.type === "text" ? (
+                  <>
+                    <div className="space-y-1">
+                      <Label>내용 (리치 텍스트)</Label>
+                      <p className="text-[11px] leading-snug text-muted-foreground">
+                        문단 좌·우·가운데 맞춤과 위젯 박스 안 세로(위·중·아래)는 바로 아래 도구 모음에서 같이
+                        설정합니다.
+                      </p>
+                      <BookTextRichEditor
+                        widgetKey={selected.id}
+                        html={getTextWidgetDisplayHtml(selected)}
+                        onRichPatch={(p) =>
+                          onChange(selected.id, { richHtml: p.richHtml, text: p.text })
+                        }
+                        verticalAlign={
+                          selected.verticalAlign === "middle" ||
+                          selected.verticalAlign === "bottom"
+                            ? selected.verticalAlign
+                            : "top"
+                        }
+                        onVerticalAlignChange={(v) =>
+                          onChange(selected.id, { verticalAlign: v })
+                        }
                       />
-                    );
-                  })}
-                </div>
-                <div className="flex flex-wrap items-center gap-2">
-                  <Input
-                    id="insp-fill"
-                    type="color"
-                    className="h-9 w-14 shrink-0 cursor-pointer px-1"
-                    value={selected.fill.startsWith("#") ? selected.fill : "#111827"}
-                    onChange={(e) => onChange(selected.id, { fill: e.target.value })}
-                    aria-label="기본 글자색 직접 선택"
-                  />
-                  <span className="text-[11px] text-muted-foreground">팔레트로 직접 선택</span>
-                </div>
-              </div>
-              <ElementOpacitySlider
-                elementId={selected.id}
-                opacity={selected.opacity}
-                onChange={onChange}
-              />
-              <div className="space-y-1">
-                <Label htmlFor="insp-tw">줄 너비</Label>
-                <Input
-                  id="insp-tw"
-                  type="number"
-                  min={80}
-                  max={2000}
-                  value={selected.width ?? 640}
-                  onChange={(e) =>
-                    onChange(selected.id, {
-                      width: num(e.target.value, selected.width ?? 640, 80, 2000),
-                    })
-                  }
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="insp-th">박스 높이</Label>
-                <Input
-                  id="insp-th"
-                  type="number"
-                  min={28}
-                  max={4000}
-                  value={Math.round(
-                    selected.height ?? defaultTextWidgetBoxHeight(selected.fontSize),
-                  )}
-                  onChange={(e) =>
-                    onChange(selected.id, {
-                      height: num(
-                        e.target.value,
-                        selected.height ?? defaultTextWidgetBoxHeight(selected.fontSize),
-                        28,
-                        4000,
-                      ),
-                    })
-                  }
-                />
-              </div>
-              <ElementShapeChromeFields el={selected} onChange={onChange} />
-              <PositionSizeFields el={selected} onChange={onChange} />
-            </>
-          ) : selected.type === "weather" ? (
-            <>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                OpenWeatherMap(지오코딩·날씨·대기질)을 사용합니다. 서버에{" "}
-                <code className="rounded bg-muted px-1 py-0.5 text-[10px]">OPENWEATHERMAP_API_KEY</code>가
-                필요합니다.
-              </p>
-              <div className="space-y-1">
-                <Label htmlFor="insp-weather-city">도시 / 지역</Label>
-                <Input
-                  id="insp-weather-city"
-                  placeholder="비우면 서울 · 예: Seoul,KR, Busan,KR"
-                  value={selected.cityQuery ?? ""}
-                  maxLength={120}
-                  onChange={(e) => {
-                    const v = e.target.value;
-                    onChange(selected.id, {
-                      cityQuery: v.trim() === "" ? undefined : v,
-                    });
-                  }}
-                />
-                <p className="text-[11px] text-muted-foreground">
-                  검색어 뒤에 국가 코드를 붙이면 더 정확합니다.
-                </p>
-              </div>
-              <div className="space-y-2">
-                <Label>표시 항목</Label>
-                <p className="text-[11px] text-muted-foreground">
-                  날씨만 남기면 큰 기온 카드, 대기 항목만 켜면 대기질 전용 톤으로 바뀝니다.
-                </p>
-                <div className="flex flex-col gap-2">
-                  {WEATHER_INSPECTOR_FIELDS.map(({ key, label }) => {
-                    const disp = resolveBookWeatherDisplay(selected.weatherDisplay);
-                    return (
-                      <label
-                        key={key}
-                        className="flex cursor-pointer items-center gap-2 text-sm leading-none"
-                      >
-                        <Checkbox
-                          checked={disp[key]}
-                          onCheckedChange={(c) => {
-                            const on = c === true;
-                            onChange(selected.id, {
-                              weatherDisplay: patchWeatherDisplay(selected.weatherDisplay, key, on),
-                            });
-                          }}
-                        />
-                        <span>{label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-              <OptionalWidgetBackdropFields
-                elementId={selected.id}
-                value={selected.weatherBackground}
-                field="weatherBackground"
-                defaultRgba="rgba(14,165,233,0.88)"
-                colorAriaLabel="날씨 카드 배경색"
-                defaultHint="끄면 날씨/대기 테마 일러스트 배경을 씁니다."
-                onChange={onChange}
-              />
-              <OptionalWidgetTextColorFields
-                elementId={selected.id}
-                value={selected.weatherTextColor}
-                field="weatherTextColor"
-                defaultHex="#ffffff"
-                colorAriaLabel="날씨 위젯 글자색"
-                defaultHint="끄면 배경 테마에 맞는 기본 글자색을 씁니다."
-                onChange={onChange}
-              />
-              <ElementOpacitySlider
-                elementId={selected.id}
-                opacity={selected.opacity}
-                onChange={onChange}
-              />
-              <ElementShapeChromeFields el={selected} onChange={onChange} />
-              <PositionSizeFields el={selected} onChange={onChange} />
-            </>
-          ) : selected.type === "digitalClock" ? (
-            <>
-              <p className="text-xs text-muted-foreground leading-relaxed">
-                브라우저 로컬 시간 기준입니다. 초 표시를 끄면 분이 바뀔 때만 갱신됩니다.
-              </p>
-              <div className="space-y-2">
-                <Label>표시</Label>
-                <div className="flex flex-col gap-2">
-                  {DIGITAL_CLOCK_INSPECTOR_FIELDS.map(({ key, label }) => {
-                    const disp = resolveBookDigitalClockDisplay(selected.clockDisplay);
-                    const checked = disp[key];
-                    return (
-                      <label
-                        key={key}
-                        className="flex cursor-pointer items-center gap-2 text-sm leading-none"
-                      >
-                        <Checkbox
-                          checked={checked}
-                          onCheckedChange={(c) => {
-                            const on = c === true;
-                            onChange(selected.id, {
-                              clockDisplay: patchDigitalClockDisplay(selected.clockDisplay, key, on),
-                            });
-                          }}
-                        />
-                        <span>{label}</span>
-                      </label>
-                    );
-                  })}
-                </div>
-              </div>
-              <OptionalWidgetBackdropFields
-                elementId={selected.id}
-                value={selected.clockBackground}
-                field="clockBackground"
-                defaultRgba="rgba(15,23,42,0.92)"
-                colorAriaLabel="시계 배경색"
-                defaultHint="끄면 기본 그라데이션 배경을 씁니다."
-                onChange={onChange}
-              />
-              <OptionalWidgetTextColorFields
-                elementId={selected.id}
-                value={selected.clockTextColor}
-                field="clockTextColor"
-                defaultHex="#ffffff"
-                colorAriaLabel="디지털 시계 글자색"
-                defaultHint="끄면 밝은 기본 글자색을 씁니다."
-                onChange={onChange}
-              />
-              <ElementOpacitySlider
-                elementId={selected.id}
-                opacity={selected.opacity}
-                onChange={onChange}
-              />
-              <ElementShapeChromeFields el={selected} onChange={onChange} />
-              <PositionSizeFields el={selected} onChange={onChange} />
-            </>
-          ) : selected.type === "drawing" ? (
-            <>
-              <p className="text-[11px] leading-snug text-muted-foreground">
-                자유 곡선입니다. 선 좌표는 박스 안에서 상대 위치로 저장되며, 박스를 옮기거나 크기를 바꿔도 모양이
-                함께 이동합니다.
-              </p>
-              <div className="space-y-2">
-                <Label className="text-xs text-muted-foreground">선 색</Label>
-                <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/25 p-1">
-                  {BOOK_HEX_COLOR_PRESETS.map((c) => {
-                    const strokeNorm = selected.stroke.trim().replace(/\s/g, "").toLowerCase();
-                    const active = strokeNorm === c.toLowerCase();
-                    return (
-                      <button
-                        key={c}
-                        type="button"
-                        title={c}
-                        aria-label={`선 색 ${c}`}
-                        aria-pressed={active}
-                        className={cn(
-                          "size-7 shrink-0 rounded-md border border-border shadow-sm ring-offset-background hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
-                          active && "ring-2 ring-primary ring-offset-2",
-                        )}
-                        style={{ backgroundColor: c }}
-                        onClick={() => onChange(selected.id, { stroke: c })}
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="insp-fs">크기</Label>
+                      <Input
+                        id="insp-fs"
+                        type="number"
+                        min={10}
+                        max={120}
+                        value={selected.fontSize}
+                        onChange={(e) =>
+                          onChange(selected.id, {
+                            fontSize: num(e.target.value, selected.fontSize, 10, 120),
+                          })
+                        }
                       />
-                    );
-                  })}
-                </div>
-                <Input
-                  type="color"
-                  className="h-9 w-14 shrink-0 cursor-pointer px-1"
-                  value={
-                    selected.stroke.startsWith("#") && selected.stroke.length >= 7
-                      ? selected.stroke.slice(0, 7)
-                      : "#000000"
-                  }
-                  onChange={(e) => onChange(selected.id, { stroke: e.target.value })}
-                  aria-label="선 색 직접 선택"
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="insp-draw-sw">선 굵기 (px)</Label>
-                <Input
-                  id="insp-draw-sw"
-                  type="number"
-                  min={1}
-                  max={48}
-                  value={Math.round(selected.strokeWidth)}
-                  onChange={(e) =>
-                    onChange(selected.id, {
-                      strokeWidth: num(e.target.value, selected.strokeWidth, 1, 48),
-                    })
-                  }
-                />
-              </div>
-              <ElementOpacitySlider
-                elementId={selected.id}
-                opacity={selected.opacity}
-                onChange={onChange}
-              />
-              <PositionSizeFields el={selected} onChange={onChange} />
-            </>
-          ) : selected.type === "image" ? (
-            <>
-              <InspectorMediaSourceSection
-                kind="image"
-                src={selected.src}
-                onReplaceFile={onReplaceMediaFromFile}
-                onPickLibrary={onPickMediaFromLibrary}
-                libraryEnabled={mediaLibraryReplaceEnabled}
-              />
-              <Separator className="my-1 bg-border/80" />
-              <div className="space-y-3">
-                <p className="text-[10px] font-medium text-muted-foreground">표시</p>
-                <MediaObjectFitFields
-                  elementId={selected.id}
-                  value={selected.objectFit}
-                  onChange={onChange}
-                />
-                <ElementOpacitySlider
-                  elementId={selected.id}
-                  opacity={selected.opacity}
-                  onChange={onChange}
-                />
-                <ElementShapeChromeFields el={selected} onChange={onChange} />
-                <PositionSizeFields el={selected} onChange={onChange} />
-              </div>
-            </>
-          ) : selected.type === "video" ? (
-            <>
-              <InspectorMediaSourceSection
-                kind="video"
-                src={selected.src}
-                posterSrc={selected.posterSrc}
-                onReplaceFile={onReplaceMediaFromFile}
-                onPickLibrary={onPickMediaFromLibrary}
-                libraryEnabled={mediaLibraryReplaceEnabled}
-              />
-              <Separator className="my-1 bg-border/80" />
-              <div className="space-y-3">
-                <p className="text-[10px] font-medium text-muted-foreground">표시</p>
-                <MediaObjectFitFields
-                  elementId={selected.id}
-                  value={selected.objectFit}
-                  onChange={onChange}
-                />
-                <ElementOpacitySlider
-                  elementId={selected.id}
-                  opacity={selected.opacity}
-                  onChange={onChange}
-                />
-                <ElementShapeChromeFields el={selected} onChange={onChange} />
-                <PositionSizeFields el={selected} onChange={onChange} />
-              </div>
-            </>
-          ) : null}
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="insp-fill">기본 글자색</Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        리치 텍스트에 색이 없는 구간·플레인 미리보기에 쓰입니다.
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">자주 쓰는 색</p>
+                      <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/25 p-1">
+                        {BOOK_HEX_COLOR_PRESETS.map((c) => {
+                          const fillNorm = selected.fill.trim().replace(/\s/g, "").toLowerCase();
+                          const active = fillNorm === c.toLowerCase();
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              title={c}
+                              aria-label={`기본 글자색 ${c}`}
+                              aria-pressed={active}
+                              className={cn(
+                                "size-7 shrink-0 rounded-md border border-border shadow-sm ring-offset-background hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
+                                active && "ring-2 ring-primary ring-offset-2",
+                              )}
+                              style={{ backgroundColor: c }}
+                              onClick={() => onChange(selected.id, { fill: c })}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                          id="insp-fill"
+                          type="color"
+                          className="h-9 w-14 shrink-0 cursor-pointer px-1"
+                          value={selected.fill.startsWith("#") ? selected.fill : "#111827"}
+                          onChange={(e) => onChange(selected.id, { fill: e.target.value })}
+                          aria-label="기본 글자색 직접 선택"
+                        />
+                        <span className="text-[11px] text-muted-foreground">팔레트로 직접 선택</span>
+                      </div>
+                    </div>
+                    <ElementOpacitySlider
+                      elementId={selected.id}
+                      opacity={selected.opacity}
+                      onChange={onChange}
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="insp-tw">줄 너비</Label>
+                      <Input
+                        id="insp-tw"
+                        type="number"
+                        min={80}
+                        max={2000}
+                        value={selected.width ?? 640}
+                        onChange={(e) =>
+                          onChange(selected.id, {
+                            width: num(e.target.value, selected.width ?? 640, 80, 2000),
+                          })
+                        }
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="insp-th">박스 높이</Label>
+                      <Input
+                        id="insp-th"
+                        type="number"
+                        min={28}
+                        max={4000}
+                        value={Math.round(
+                          selected.height ?? defaultTextWidgetBoxHeight(selected.fontSize),
+                        )}
+                        onChange={(e) =>
+                          onChange(selected.id, {
+                            height: num(
+                              e.target.value,
+                              selected.height ?? defaultTextWidgetBoxHeight(selected.fontSize),
+                              28,
+                              4000,
+                            ),
+                          })
+                        }
+                      />
+                    </div>
+                    <ElementShapeChromeFields el={selected} onChange={onChange} />
+                    <PositionSizeFields el={selected} onChange={onChange} />
+                  </>
+                ) : selected.type === "weather" ? (
+                  <>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      OpenWeatherMap(지오코딩·날씨·대기질)을 사용합니다. 서버에{" "}
+                      <code className="rounded bg-muted px-1 py-0.5 text-[10px]">OPENWEATHERMAP_API_KEY</code>가
+                      필요합니다.
+                    </p>
+                    <div className="space-y-1">
+                      <Label htmlFor="insp-weather-city">도시 / 지역</Label>
+                      <Input
+                        id="insp-weather-city"
+                        placeholder="비우면 서울 · 예: Seoul,KR, Busan,KR"
+                        value={selected.cityQuery ?? ""}
+                        maxLength={120}
+                        onChange={(e) => {
+                          const v = e.target.value;
+                          onChange(selected.id, {
+                            cityQuery: v.trim() === "" ? undefined : v,
+                          });
+                        }}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        검색어 뒤에 국가 코드를 붙이면 더 정확합니다.
+                      </p>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>표시 항목</Label>
+                      <p className="text-[11px] text-muted-foreground">
+                        날씨만 남기면 큰 기온 카드, 대기 항목만 켜면 대기질 전용 톤으로 바뀝니다.
+                      </p>
+                      <div className="flex flex-col gap-2">
+                        {WEATHER_INSPECTOR_FIELDS.map(({ key, label }) => {
+                          const disp = resolveBookWeatherDisplay(selected.weatherDisplay);
+                          return (
+                            <label
+                              key={key}
+                              className="flex cursor-pointer items-center gap-2 text-sm leading-none"
+                            >
+                              <Checkbox
+                                checked={disp[key]}
+                                onCheckedChange={(c) => {
+                                  const on = c === true;
+                                  onChange(selected.id, {
+                                    weatherDisplay: patchWeatherDisplay(selected.weatherDisplay, key, on),
+                                  });
+                                }}
+                              />
+                              <span>{label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <OptionalWidgetBackdropFields
+                      elementId={selected.id}
+                      value={selected.weatherBackground}
+                      field="weatherBackground"
+                      defaultRgba="rgba(14,165,233,0.88)"
+                      colorAriaLabel="날씨 카드 배경색"
+                      defaultHint="끄면 날씨/대기 테마 일러스트 배경을 씁니다."
+                      onChange={onChange}
+                    />
+                    <OptionalWidgetTextColorFields
+                      elementId={selected.id}
+                      value={selected.weatherTextColor}
+                      field="weatherTextColor"
+                      defaultHex="#ffffff"
+                      colorAriaLabel="날씨 위젯 글자색"
+                      defaultHint="끄면 배경 테마에 맞는 기본 글자색을 씁니다."
+                      onChange={onChange}
+                    />
+                    <ElementOpacitySlider
+                      elementId={selected.id}
+                      opacity={selected.opacity}
+                      onChange={onChange}
+                    />
+                    <ElementShapeChromeFields el={selected} onChange={onChange} />
+                    <PositionSizeFields el={selected} onChange={onChange} />
+                  </>
+                ) : selected.type === "digitalClock" ? (
+                  <>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      브라우저 로컬 시간 기준입니다. 초 표시를 끄면 분이 바뀔 때만 갱신됩니다.
+                    </p>
+                    <div className="space-y-2">
+                      <Label>표시</Label>
+                      <div className="flex flex-col gap-2">
+                        {DIGITAL_CLOCK_INSPECTOR_FIELDS.map(({ key, label }) => {
+                          const disp = resolveBookDigitalClockDisplay(selected.clockDisplay);
+                          const checked = disp[key];
+                          return (
+                            <label
+                              key={key}
+                              className="flex cursor-pointer items-center gap-2 text-sm leading-none"
+                            >
+                              <Checkbox
+                                checked={checked}
+                                onCheckedChange={(c) => {
+                                  const on = c === true;
+                                  onChange(selected.id, {
+                                    clockDisplay: patchDigitalClockDisplay(selected.clockDisplay, key, on),
+                                  });
+                                }}
+                              />
+                              <span>{label}</span>
+                            </label>
+                          );
+                        })}
+                      </div>
+                    </div>
+                    <OptionalWidgetBackdropFields
+                      elementId={selected.id}
+                      value={selected.clockBackground}
+                      field="clockBackground"
+                      defaultRgba="rgba(15,23,42,0.92)"
+                      colorAriaLabel="시계 배경색"
+                      defaultHint="끄면 기본 그라데이션 배경을 씁니다."
+                      onChange={onChange}
+                    />
+                    <OptionalWidgetTextColorFields
+                      elementId={selected.id}
+                      value={selected.clockTextColor}
+                      field="clockTextColor"
+                      defaultHex="#ffffff"
+                      colorAriaLabel="디지털 시계 글자색"
+                      defaultHint="끄면 밝은 기본 글자색을 씁니다."
+                      onChange={onChange}
+                    />
+                    <ElementOpacitySlider
+                      elementId={selected.id}
+                      opacity={selected.opacity}
+                      onChange={onChange}
+                    />
+                    <ElementShapeChromeFields el={selected} onChange={onChange} />
+                    <PositionSizeFields el={selected} onChange={onChange} />
+                  </>
+                ) : selected.type === "drawing" ? (
+                  <>
+                    <p className="text-[11px] leading-snug text-muted-foreground">
+                      자유 곡선입니다. 선 좌표는 박스 안에서 상대 위치로 저장되며, 박스를 옮기거나 크기를 바꿔도 모양이
+                      함께 이동합니다.
+                    </p>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">선 색</Label>
+                      <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/25 p-1">
+                        {BOOK_HEX_COLOR_PRESETS.map((c) => {
+                          const strokeNorm = selected.stroke.trim().replace(/\s/g, "").toLowerCase();
+                          const active = strokeNorm === c.toLowerCase();
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              title={c}
+                              aria-label={`선 색 ${c}`}
+                              aria-pressed={active}
+                              className={cn(
+                                "size-7 shrink-0 rounded-md border border-border shadow-sm ring-offset-background hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
+                                active && "ring-2 ring-primary ring-offset-2",
+                              )}
+                              style={{ backgroundColor: c }}
+                              onClick={() => onChange(selected.id, { stroke: c })}
+                            />
+                          );
+                        })}
+                      </div>
+                      <Input
+                        type="color"
+                        className="h-9 w-14 shrink-0 cursor-pointer px-1"
+                        value={
+                          selected.stroke.startsWith("#") && selected.stroke.length >= 7
+                            ? selected.stroke.slice(0, 7)
+                            : "#000000"
+                        }
+                        onChange={(e) => onChange(selected.id, { stroke: e.target.value })}
+                        aria-label="선 색 직접 선택"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="insp-draw-sw">선 굵기 (px)</Label>
+                      <Input
+                        id="insp-draw-sw"
+                        type="number"
+                        min={1}
+                        max={48}
+                        value={Math.round(selected.strokeWidth)}
+                        onChange={(e) =>
+                          onChange(selected.id, {
+                            strokeWidth: num(e.target.value, selected.strokeWidth, 1, 48),
+                          })
+                        }
+                      />
+                    </div>
+                    <ElementOpacitySlider
+                      elementId={selected.id}
+                      opacity={selected.opacity}
+                      onChange={onChange}
+                    />
+                    <PositionSizeFields el={selected} onChange={onChange} />
+                  </>
+                ) : selected.type === "image" ? (
+                  <>
+                    <InspectorMediaSourceSection
+                      kind="image"
+                      src={selected.src}
+                      onReplaceFile={onReplaceMediaFromFile}
+                      onPickLibrary={onPickMediaFromLibrary}
+                      libraryEnabled={mediaLibraryReplaceEnabled}
+                    />
+                    <Separator className="my-1 bg-border/80" />
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-medium text-muted-foreground">표시</p>
+                      <MediaObjectFitFields
+                        elementId={selected.id}
+                        value={selected.objectFit}
+                        onChange={onChange}
+                      />
+                      <ElementOpacitySlider
+                        elementId={selected.id}
+                        opacity={selected.opacity}
+                        onChange={onChange}
+                      />
+                      <ElementShapeChromeFields el={selected} onChange={onChange} />
+                      <PositionSizeFields el={selected} onChange={onChange} />
+                    </div>
+                  </>
+                ) : selected.type === "video" ? (
+                  <>
+                    <InspectorMediaSourceSection
+                      kind="video"
+                      src={selected.src}
+                      posterSrc={selected.posterSrc}
+                      onReplaceFile={onReplaceMediaFromFile}
+                      onPickLibrary={onPickMediaFromLibrary}
+                      libraryEnabled={mediaLibraryReplaceEnabled}
+                    />
+                    <Separator className="my-1 bg-border/80" />
+                    <div className="space-y-3">
+                      <p className="text-[10px] font-medium text-muted-foreground">표시</p>
+                      <MediaObjectFitFields
+                        elementId={selected.id}
+                        value={selected.objectFit}
+                        onChange={onChange}
+                      />
+                      <ElementOpacitySlider
+                        elementId={selected.id}
+                        opacity={selected.opacity}
+                        onChange={onChange}
+                      />
+                      <ElementShapeChromeFields el={selected} onChange={onChange} />
+                      <PositionSizeFields el={selected} onChange={onChange} />
+                    </div>
+                  </>
+                ) : null}
 
                 {selected ? (
                   <div className="flex flex-col gap-2">

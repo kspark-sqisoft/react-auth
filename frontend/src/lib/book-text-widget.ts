@@ -51,6 +51,37 @@ function isSafeFontSizeValue(val: string): boolean {
   return false;
 }
 
+/** p·제목·인용·목록 항목 등에 허용하는 style — text-align만 (TipTap TextAlign·contentEditable 공통) */
+export function sanitizeBlockTextAlignStyle(raw: string): string | null {
+  const s = raw.trim();
+  if (!s) return null;
+  const parts = s.split(";").map((x) => x.trim()).filter(Boolean);
+  for (const part of parts) {
+    const m = /^text-align\s*:\s*(.+)$/i.exec(part);
+    if (!m) continue;
+    const val = m[1]!.trim().toLowerCase();
+    if (
+      val === "left" ||
+      val === "center" ||
+      val === "right" ||
+      val === "justify" ||
+      val === "start" ||
+      val === "end"
+    ) {
+      return `text-align: ${val}`;
+    }
+  }
+  return null;
+}
+
+const BLOCK_TAGS_ALLOW_TEXT_ALIGN = new Set([
+  "p",
+  "h2",
+  "h3",
+  "blockquote",
+  "li",
+]);
+
 function sanitizeSpanStyle(raw: string): string | null {
   const s = raw.trim();
   if (!s) return null;
@@ -92,14 +123,21 @@ function bookRichHtmlPostProcessStyle(html: string): string {
     const wrap = doc.body.firstElementChild as HTMLDivElement | null;
     if (!wrap) return html;
     wrap.querySelectorAll("[style]").forEach((el) => {
-      if (el.tagName.toLowerCase() !== "span") {
-        el.removeAttribute("style");
+      const tag = el.tagName.toLowerCase();
+      const raw = el.getAttribute("style") || "";
+      if (tag === "span") {
+        const next = sanitizeSpanStyle(raw);
+        if (next) el.setAttribute("style", next);
+        else el.removeAttribute("style");
         return;
       }
-      const raw = el.getAttribute("style") || "";
-      const next = sanitizeSpanStyle(raw);
-      if (next) el.setAttribute("style", next);
-      else el.removeAttribute("style");
+      if (BLOCK_TAGS_ALLOW_TEXT_ALIGN.has(tag)) {
+        const next = sanitizeBlockTextAlignStyle(raw);
+        if (next) el.setAttribute("style", next);
+        else el.removeAttribute("style");
+        return;
+      }
+      el.removeAttribute("style");
     });
     return wrap.innerHTML;
   } catch {
@@ -133,6 +171,11 @@ export function normalizeContentEditableHtmlForBook(html: string): string {
     const divs = Array.from(root.querySelectorAll("div")).reverse();
     for (const div of divs) {
       const p = doc.createElement("p");
+      const st = div.getAttribute("style");
+      if (st) {
+        const alignOnly = sanitizeBlockTextAlignStyle(st);
+        if (alignOnly) p.setAttribute("style", alignOnly);
+      }
       while (div.firstChild) p.appendChild(div.firstChild);
       div.parentNode?.replaceChild(p, div);
     }
@@ -191,4 +234,40 @@ export function textWidgetHitHeight(
 ): number {
   if (typeof el.height === "number" && el.height >= 24) return el.height;
   return defaultTextWidgetBoxHeight(el.fontSize);
+}
+
+/**
+ * 캔버스 오버레이 측정값으로 높이를 바꿀 때: 사용자·변형으로 키운 박스는 줄이지 않음(창 확대·축소 시 축소 방지).
+ * 내용이 더 길어질 때만 새 높이를 반환, 그 외 null.
+ */
+export function nextTextWidgetHeightGrowOnly(
+  measuredLogical: number,
+  currentHeight: number | undefined,
+  fontSize: number,
+): number | null {
+  const next = Math.max(28, Math.min(4000, Math.ceil(measuredLogical)));
+  const prev =
+    typeof currentHeight === "number" &&
+    Number.isFinite(currentHeight) &&
+    currentHeight >= 24
+      ? currentHeight
+      : defaultTextWidgetBoxHeight(fontSize);
+  if (next <= prev + 2) return null;
+  return next;
+}
+
+/** 인라인 편집 커밋 등: 측정 높이와 기존 높이 중 더 큰 값으로 유지 */
+export function mergeTextWidgetHeightAfterMeasure(
+  measuredLogical: number,
+  currentHeight: number | undefined,
+  fontSize: number,
+): number {
+  const m = Math.max(28, Math.min(4000, Math.ceil(measuredLogical)));
+  const prev =
+    typeof currentHeight === "number" &&
+    Number.isFinite(currentHeight) &&
+    currentHeight >= 24
+      ? currentHeight
+      : defaultTextWidgetBoxHeight(fontSize);
+  return Math.max(m, prev);
 }

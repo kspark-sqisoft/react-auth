@@ -150,6 +150,11 @@ export type BookCanvasElement =
       width?: number;
       /** 리치 텍스트 박스 논리 높이(Konva 히트·오버레이). 없으면 기본값 계산. */
       height?: number;
+      /**
+       * 위젯 박스 안에서 텍스트 블록의 세로 위치(박스가 글보다 클 때).
+       * 생략·top = 상단.
+       */
+      verticalAlign?: "top" | "middle" | "bottom";
       /** 0~1, 생략 시 1 */
       opacity?: number;
       /** 시계 방향 도(°), 생략 시 0 */
@@ -927,6 +932,12 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         fill: typeof o.fill === "string" ? o.fill : "#111827",
         ...(width !== undefined ? { width } : {}),
         ...(height !== undefined ? { height } : {}),
+        ...(typeof o.verticalAlign === "string" &&
+        (o.verticalAlign === "top" ||
+          o.verticalAlign === "middle" ||
+          o.verticalAlign === "bottom")
+          ? { verticalAlign: o.verticalAlign }
+          : {}),
         ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),

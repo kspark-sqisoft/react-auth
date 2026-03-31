@@ -32,6 +32,14 @@ type Props = {
   onReportLogicalHeight?: (logicalPx: number) => void;
 };
 
+function textWidgetCellVerticalAlign(
+  el: Extract<BookCanvasElement, { type: "text" }>,
+): "top" | "middle" | "bottom" {
+  const v = el.verticalAlign;
+  if (v === "middle" || v === "bottom") return v;
+  return "top";
+}
+
 export function BookTextWidgetOverlay({
   el,
   scale,
@@ -40,7 +48,7 @@ export function BookTextWidgetOverlay({
   liveFrame,
   onReportLogicalHeight,
 }: Props) {
-  const rootRef = useRef<HTMLDivElement>(null);
+  const measureRef = useRef<HTMLDivElement>(null);
   const html = getTextWidgetDisplayHtml(el);
   const w = el.width ?? 720;
   const h = textWidgetHitHeight(el);
@@ -53,6 +61,7 @@ export function BookTextWidgetOverlay({
   const fw = liveFrame?.width ?? w;
   const fh = liveFrame?.height ?? h;
   const fRot = liveFrame != null ? liveFrame.rotation : rot;
+  const cellVerticalAlign = textWidgetCellVerticalAlign(el);
 
   const tBr = resolveBookElementBorderRadius(el);
   const tOw = resolveBookElementOutlineWidth(el);
@@ -62,7 +71,7 @@ export function BookTextWidgetOverlay({
 
   useLayoutEffect(() => {
     if (mode !== "edit" || !onReportLogicalHeight) return;
-    const node = rootRef.current;
+    const node = measureRef.current;
     if (!node) return;
 
     const measure = () => {
@@ -76,11 +85,10 @@ export function BookTextWidgetOverlay({
     const ro = new ResizeObserver(() => measure());
     ro.observe(node);
     return () => ro.disconnect();
-  }, [html, scale, mode, onReportLogicalHeight, w, fh, liveFrame]);
+  }, [html, scale, mode, onReportLogicalHeight, w, fh, liveFrame, el.verticalAlign]);
 
   return (
     <div
-      ref={rootRef}
       className={cn(
         "pointer-events-none absolute overflow-hidden",
         isSelected && mode === "edit" && "ring-2 ring-primary ring-offset-0",
@@ -101,20 +109,39 @@ export function BookTextWidgetOverlay({
       }}
     >
       <div
-        className={cn(
-          "book-text-widget-content h-full min-h-0 select-none overflow-hidden text-left [&_blockquote]:border-s-2 [&_blockquote]:border-border/80 [&_blockquote]:ps-2 [&_blockquote]:italic",
-          "[&_code]:rounded [&_code]:bg-muted/80 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em]",
-          "[&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted/80 [&_pre]:p-2 [&_pre]:font-mono [&_pre]:text-[0.85em]",
-          "[&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:ps-4",
-          "[&_ol]:my-0.5 [&_ol]:list-decimal [&_ol]:ps-4",
-          "[&_h2]:mt-1 [&_h2]:mb-0.5 [&_h2]:text-[1.15em] [&_h2]:font-semibold",
-          "[&_h3]:mt-1 [&_h3]:mb-0.5 [&_h3]:text-[1.05em] [&_h3]:font-semibold",
-          "[&_p]:my-0.5 [&_p]:min-h-[1em]",
-          "[&_a]:text-primary [&_a]:underline",
-          "[&_hr]:my-2 [&_hr]:border-border",
-        )}
-        dangerouslySetInnerHTML={{ __html: html }}
-      />
+        style={{
+          display: "table",
+          width: "100%",
+          height: "100%",
+          tableLayout: "fixed",
+        }}
+      >
+        <div
+          style={{
+            display: "table-cell",
+            verticalAlign: cellVerticalAlign,
+            height: "100%",
+            width: "100%",
+          }}
+        >
+          <div
+            ref={measureRef}
+            className={cn(
+              "book-text-widget-content max-h-full min-h-0 select-none overflow-x-hidden overflow-y-auto [&_blockquote]:border-s-2 [&_blockquote]:border-border/80 [&_blockquote]:ps-2 [&_blockquote]:italic",
+              "[&_code]:rounded [&_code]:bg-muted/80 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em]",
+              "[&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted/80 [&_pre]:p-2 [&_pre]:font-mono [&_pre]:text-[0.85em]",
+              "[&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:ps-4",
+              "[&_ol]:my-0.5 [&_ol]:list-decimal [&_ol]:ps-4",
+              "[&_h2]:mt-1 [&_h2]:mb-0.5 [&_h2]:text-[1.15em] [&_h2]:font-semibold",
+              "[&_h3]:mt-1 [&_h3]:mb-0.5 [&_h3]:text-[1.05em] [&_h3]:font-semibold",
+              "[&_p]:my-0.5 [&_p]:min-h-[1em]",
+              "[&_a]:text-primary [&_a]:underline",
+              "[&_hr]:my-2 [&_hr]:border-border",
+            )}
+            dangerouslySetInnerHTML={{ __html: html }}
+          />
+        </div>
+      </div>
     </div>
   );
 }

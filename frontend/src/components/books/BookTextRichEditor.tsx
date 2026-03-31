@@ -1,8 +1,16 @@
 import Placeholder from "@tiptap/extension-placeholder";
+import TextAlign from "@tiptap/extension-text-align";
 import { Color, FontSize, TextStyle } from "@tiptap/extension-text-style";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import {
+  AlignCenter,
+  AlignJustify,
+  AlignLeft,
+  AlignRight,
+  AlignVerticalJustifyCenter,
+  AlignVerticalJustifyEnd,
+  AlignVerticalJustifyStart,
   Bold,
   Heading2,
   Heading3,
@@ -39,6 +47,9 @@ type Props = {
   html: string;
   placeholder?: string;
   onRichPatch: (patch: { richHtml: string; text: string }) => void;
+  /** 위젯 박스가 글보다 클 때 블록 세로 위치 — 좌우 맞춤과 같은 툴바 */
+  verticalAlign?: "top" | "middle" | "bottom";
+  onVerticalAlignChange?: (v: "top" | "middle" | "bottom") => void;
 };
 
 export function BookTextRichEditor({
@@ -46,6 +57,8 @@ export function BookTextRichEditor({
   html,
   placeholder = "내용을 입력하세요…",
   onRichPatch,
+  verticalAlign = "top",
+  onVerticalAlignChange,
 }: Props) {
   const lastEmitted = useRef("");
   const colorInputRef = useRef<HTMLInputElement>(null);
@@ -68,6 +81,9 @@ export function BookTextRichEditor({
               target: "_blank",
             },
           },
+        }),
+        TextAlign.configure({
+          types: ["heading", "paragraph", "blockquote", "listItem"],
         }),
         TextStyle,
         Color,
@@ -227,6 +243,68 @@ export function BookTextRichEditor({
             >
               <Heading3 className="size-3.5" />
             </Btn>
+            <span className="mx-0.5 w-px self-stretch bg-border" aria-hidden />
+            <span className="sr-only">문단 정렬</span>
+            <Btn
+              title="왼쪽 맞춤"
+              active={
+                editor.isActive({ textAlign: "left" }) ||
+                (!editor.isActive({ textAlign: "center" }) &&
+                  !editor.isActive({ textAlign: "right" }) &&
+                  !editor.isActive({ textAlign: "justify" }))
+              }
+              onClick={() => editor.chain().focus().setTextAlign("left").run()}
+            >
+              <AlignLeft className="size-3.5" />
+            </Btn>
+            <Btn
+              title="가운데 맞춤"
+              active={editor.isActive({ textAlign: "center" })}
+              onClick={() => editor.chain().focus().setTextAlign("center").run()}
+            >
+              <AlignCenter className="size-3.5" />
+            </Btn>
+            <Btn
+              title="오른쪽 맞춤"
+              active={editor.isActive({ textAlign: "right" })}
+              onClick={() => editor.chain().focus().setTextAlign("right").run()}
+            >
+              <AlignRight className="size-3.5" />
+            </Btn>
+            <Btn
+              title="양쪽 맞춤"
+              active={editor.isActive({ textAlign: "justify" })}
+              onClick={() => editor.chain().focus().setTextAlign("justify").run()}
+            >
+              <AlignJustify className="size-3.5" />
+            </Btn>
+            {onVerticalAlignChange ? (
+              <>
+                <span className="mx-0.5 w-px self-stretch bg-border" aria-hidden />
+                <span className="sr-only">위젯 박스 안 세로 맞춤</span>
+                <Btn
+                  title="위젯 박스 안 세로: 위쪽 (글 블록을 박스 위에 붙임)"
+                  active={verticalAlign === "top"}
+                  onClick={() => onVerticalAlignChange("top")}
+                >
+                  <AlignVerticalJustifyStart className="size-3.5" />
+                </Btn>
+                <Btn
+                  title="위젯 박스 안 세로: 가운데"
+                  active={verticalAlign === "middle"}
+                  onClick={() => onVerticalAlignChange("middle")}
+                >
+                  <AlignVerticalJustifyCenter className="size-3.5" />
+                </Btn>
+                <Btn
+                  title="위젯 박스 안 세로: 아래쪽"
+                  active={verticalAlign === "bottom"}
+                  onClick={() => onVerticalAlignChange("bottom")}
+                >
+                  <AlignVerticalJustifyEnd className="size-3.5" />
+                </Btn>
+              </>
+            ) : null}
             <span className="mx-0.5 w-px self-stretch bg-border" aria-hidden />
             <Btn
               title="글머리 목록"

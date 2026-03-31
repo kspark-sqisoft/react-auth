@@ -18,6 +18,7 @@ import {
 } from "@/lib/book-canvas";
 import {
   bookRichHtmlFromContentEditable,
+  mergeTextWidgetHeightAfterMeasure,
   richHtmlToPlainText,
   textWidgetHitHeight,
 } from "@/lib/book-text-widget";
@@ -106,12 +107,13 @@ export const BookTextWidgetInlineEditor = forwardRef<BookTextWidgetInlineEditorH
       const sanitized = bookRichHtmlFromContentEditable(raw);
       const richHtml = sanitized.trim() ? sanitized : "<p></p>";
       const text = richHtmlToPlainText(richHtml);
-      const height = Math.max(
-        28,
-        Math.min(4000, Math.ceil(node.scrollHeight / scale)),
+      const height = mergeTextWidgetHeightAfterMeasure(
+        node.scrollHeight / scale,
+        el.height,
+        el.fontSize,
       );
       onCommit({ richHtml, text, height });
-    }, [onCommit, scale]);
+    }, [onCommit, scale, el.height, el.fontSize]);
 
     useImperativeHandle(ref, () => ({ commit: doCommit }), [doCommit]);
 
@@ -165,7 +167,10 @@ export const BookTextWidgetInlineEditor = forwardRef<BookTextWidgetInlineEditorH
       const ro = new ResizeObserver(() => measure());
       ro.observe(node);
       return () => ro.disconnect();
-    }, [scale, onReportLogicalHeight, fw, fh, liveFrame]);
+    }, [scale, onReportLogicalHeight, fw, fh, liveFrame, el.verticalAlign]);
+
+    const cellVerticalAlign: "top" | "middle" | "bottom" =
+      el.verticalAlign === "middle" || el.verticalAlign === "bottom" ? el.verticalAlign : "top";
 
     return (
       <div
@@ -182,57 +187,75 @@ export const BookTextWidgetInlineEditor = forwardRef<BookTextWidgetInlineEditorH
         onMouseDown={(e) => e.stopPropagation()}
       >
         <div
-          ref={editorRef}
-          role="textbox"
-          tabIndex={-1}
-          aria-multiline
-          aria-label="슬라이드 텍스트 편집"
-          contentEditable
-          suppressContentEditableWarning
-          className={cn(
-            "book-text-widget-content max-h-[min(70vh,4000px)] min-h-[1.5em] w-full cursor-text overflow-auto rounded-sm border-2 px-1.5 py-1 text-left shadow-xl outline-none ring-2 ring-primary/35",
-            "[&_blockquote]:border-s-2 [&_blockquote]:border-border/80 [&_blockquote]:ps-2 [&_blockquote]:italic",
-            "[&_code]:rounded [&_code]:bg-muted/80 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em]",
-            "[&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted/80 [&_pre]:p-2 [&_pre]:font-mono [&_pre]:text-[0.85em]",
-            "[&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:ps-4",
-            "[&_ol]:my-0.5 [&_ol]:list-decimal [&_ol]:ps-4",
-            "[&_h2]:mt-1 [&_h2]:mb-0.5 [&_h2]:text-[1.15em] [&_h2]:font-semibold",
-            "[&_h3]:mt-1 [&_h3]:mb-0.5 [&_h3]:text-[1.05em] [&_h3]:font-semibold",
-            "[&_p]:my-0.5 [&_p]:min-h-[1em]",
-            "[&_a]:text-primary [&_a]:underline",
-            "[&_hr]:my-2 [&_hr]:border-border",
-          )}
           style={{
-            fontSize: el.fontSize * scale,
-            backgroundColor: pad.backgroundColor,
-            color: pad.color,
-            borderColor: pad.borderColor,
-            lineHeight: 1.35,
-            borderRadius: Math.max(0, tBr * scale),
-            boxShadow: outlineShadow
-              ? `${outlineShadow}, 0 10px 40px rgba(0,0,0,0.18)`
-              : "0 10px 40px rgba(0,0,0,0.18)",
-            caretColor: pad.color,
+            display: "table",
+            width: "100%",
+            minHeight: fh * scale,
+            tableLayout: "fixed",
           }}
-          onBlur={() => {
-            if (escapeCancelRef.current) {
-              escapeCancelRef.current = false;
-              return;
-            }
-            doCommit();
-          }}
-          onKeyDown={(e) => {
-            if (e.key === "Escape") {
-              e.preventDefault();
-              e.stopPropagation();
-              escapeCancelRef.current = true;
-              const node = editorRef.current;
-              if (node) node.innerHTML = snapshotHtmlRef.current;
-              didCommitRef.current = true;
-              onCancel();
-            }
-          }}
-        />
+        >
+          <div
+            style={{
+              display: "table-cell",
+              verticalAlign: cellVerticalAlign,
+              height: "100%",
+              width: "100%",
+            }}
+          >
+            <div
+              ref={editorRef}
+              role="textbox"
+              tabIndex={-1}
+              aria-multiline
+              aria-label="슬라이드 텍스트 편집"
+              contentEditable
+              suppressContentEditableWarning
+              className={cn(
+                "book-text-widget-content max-h-[min(70vh,4000px)] min-h-[1.5em] w-full max-w-full cursor-text overflow-auto rounded-sm border-2 px-1.5 py-1 shadow-xl outline-none ring-2 ring-primary/35",
+                "[&_blockquote]:border-s-2 [&_blockquote]:border-border/80 [&_blockquote]:ps-2 [&_blockquote]:italic",
+                "[&_code]:rounded [&_code]:bg-muted/80 [&_code]:px-1 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.9em]",
+                "[&_pre]:overflow-x-auto [&_pre]:rounded-md [&_pre]:bg-muted/80 [&_pre]:p-2 [&_pre]:font-mono [&_pre]:text-[0.85em]",
+                "[&_ul]:my-0.5 [&_ul]:list-disc [&_ul]:ps-4",
+                "[&_ol]:my-0.5 [&_ol]:list-decimal [&_ol]:ps-4",
+                "[&_h2]:mt-1 [&_h2]:mb-0.5 [&_h2]:text-[1.15em] [&_h2]:font-semibold",
+                "[&_h3]:mt-1 [&_h3]:mb-0.5 [&_h3]:text-[1.05em] [&_h3]:font-semibold",
+                "[&_p]:my-0.5 [&_p]:min-h-[1em]",
+                "[&_a]:text-primary [&_a]:underline",
+                "[&_hr]:my-2 [&_hr]:border-border",
+              )}
+              style={{
+                fontSize: el.fontSize * scale,
+                backgroundColor: pad.backgroundColor,
+                color: pad.color,
+                borderColor: pad.borderColor,
+                lineHeight: 1.35,
+                borderRadius: Math.max(0, tBr * scale),
+                boxShadow: outlineShadow
+                  ? `${outlineShadow}, 0 10px 40px rgba(0,0,0,0.18)`
+                  : "0 10px 40px rgba(0,0,0,0.18)",
+                caretColor: pad.color,
+              }}
+              onBlur={() => {
+                if (escapeCancelRef.current) {
+                  escapeCancelRef.current = false;
+                  return;
+                }
+                doCommit();
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  escapeCancelRef.current = true;
+                  const node = editorRef.current;
+                  if (node) node.innerHTML = snapshotHtmlRef.current;
+                  didCommitRef.current = true;
+                  onCancel();
+                }
+              }}
+            />
+          </div>
+        </div>
       </div>
     );
   },
