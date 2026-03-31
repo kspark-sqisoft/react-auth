@@ -220,6 +220,7 @@ export function BookAiAssistantPanel({
         ...(layoutAiMediaSelection
           ? { selection: layoutAiMediaSelection }
           : {}),
+        ...(bookId != null && bookId > 0 ? { bookId } : {}),
       });
       const safeActions = actions as BookLayoutAiAction[];
 

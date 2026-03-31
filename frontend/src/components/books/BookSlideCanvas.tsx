@@ -425,6 +425,26 @@ function BookSlideVideoOverlay({
     };
   }, [src, syncFromVideo]);
 
+  /** 포스터가 없을 때: 메타만 로드하면 캔버스에 그릴 디코딩 프레임이 없어 하얗게 보이는 경우가 있어, 짧게 seek 해 첫 화면을 받도록 함 */
+  useEffect(() => {
+    if (poster) return;
+    const v = videoRef.current;
+    if (!v) return;
+    const prime = () => {
+      if (v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) return;
+      if (!Number.isFinite(v.duration) || v.duration <= 0) return;
+      const t = Math.min(0.08, Math.max(0.001, v.duration * 0.002));
+      try {
+        v.currentTime = t;
+      } catch {
+        /* ignore */
+      }
+    };
+    v.addEventListener("loadedmetadata", prime);
+    if (v.readyState >= HTMLMediaElement.HAVE_METADATA) queueMicrotask(prime);
+    return () => v.removeEventListener("loadedmetadata", prime);
+  }, [src, poster]);
+
   const togglePlay = () => {
     const v = videoRef.current;
     if (!v) return;
@@ -480,7 +500,7 @@ function BookSlideVideoOverlay({
         poster={poster || undefined}
         muted
         playsInline
-        preload="metadata"
+        preload="auto"
         controls={false}
         onError={(e) => {
           appLog("bookSlideVideo", "<video> 로드/디코드 실패", {
@@ -1156,140 +1176,140 @@ export function BookSlideCanvas({
         ))}
       <div className="relative z-[1]">
         <Stage width={sw} height={sh} style={{ background: "transparent" }}>
-        <Layer scaleX={scale} scaleY={scale}>
-          <Rect
-            width={pageWidth}
-            height={pageHeight}
-            fill="transparent"
-            listening={mode === "edit"}
-            onMouseDown={(e) => {
-              if (mode !== "edit") return;
-              e.cancelBubble = true;
-              onSelect({ id: null });
-            }}
-          />
-          {visibleElements.map((el) => {
-            const isSelected = selectedIdSet.has(el.id);
-            const locked = isBookElementLocked(el);
-            if (el.type === "text") {
-              return (
-                <BookTextHitShape
-                  key={el.id}
-                  el={el}
-                  locked={locked}
-                  liveSync={shapeLiveSync}
-                  registerKonvaNode={registerKonvaNode}
-                  mode={mode}
-                  onSelect={onSelect}
-                  onElementChange={onElementChange}
-                  zMenuEnabled={elementContextMenuEnabled && !locked}
-                  onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
-                  inlineTextEditing={inlineTextEdit?.id === el.id}
-                  onRequestInlineTextEdit={beginInlineTextEdit}
-                />
-              );
-            }
-            if (el.type === "weather") {
-              return (
-                <BookWeatherHitShape
-                  key={el.id}
-                  el={el}
-                  locked={locked}
-                  liveSync={shapeLiveSync}
-                  registerKonvaNode={registerKonvaNode}
-                  mode={mode}
-                  onSelect={onSelect}
-                  onElementChange={onElementChange}
-                  zMenuEnabled={elementContextMenuEnabled && !locked}
-                  onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
-                />
-              );
-            }
-            if (el.type === "digitalClock") {
-              return (
-                <BookDigitalClockHitShape
-                  key={el.id}
-                  el={el}
-                  locked={locked}
-                  liveSync={shapeLiveSync}
-                  registerKonvaNode={registerKonvaNode}
-                  mode={mode}
-                  onSelect={onSelect}
-                  onElementChange={onElementChange}
-                  zMenuEnabled={elementContextMenuEnabled && !locked}
-                  onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
-                />
-              );
-            }
-            if (el.type === "image") {
-              return (
-                <BookImageShape
-                  key={`${el.id}:${el.src}`}
-                  el={el}
-                  locked={locked}
-                  liveSync={shapeLiveSync}
-                  registerKonvaNode={registerKonvaNode}
-                  mode={mode}
-                  onSelect={onSelect}
-                  onElementChange={onElementChange}
-                  zMenuEnabled={elementContextMenuEnabled && !locked}
-                  onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
-                />
-              );
-            }
-            if (el.type === "drawing") {
-              return (
-                <BookDrawingHitShape
-                  key={el.id}
-                  el={el}
-                  locked={locked}
-                  liveSync={shapeLiveSync}
-                  registerKonvaNode={registerKonvaNode}
-                  mode={mode}
-                  isSelected={isSelected}
-                  onSelect={onSelect}
-                  zMenuEnabled={elementContextMenuEnabled && !locked}
-                  onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
-                />
-              );
-            }
-            return (
-              <BookVideoBox
-                key={`${el.id}:${el.src}`}
-                el={el}
-                htmlVideoEl={videoHtmlById.get(el.id) ?? null}
-                locked={locked}
-                liveSync={shapeLiveSync}
-                registerKonvaNode={registerKonvaNode}
-                mode={mode}
-                onSelect={onSelect}
-                onElementChange={onElementChange}
-                onVideoHoverEnter={() => showVideoBar(el.id)}
-                onVideoHoverLeave={() => scheduleHideVideoBar(el.id)}
-                zMenuEnabled={elementContextMenuEnabled && !locked}
-                onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
-              />
-            );
-          })}
-          {mode === "edit" &&
-          selectedIds.length > 0 &&
-          !(inlineTextEdit && selectedIds.length === 1 && selectedIds[0] === inlineTextEdit.id) ? (
-            <Transformer
-              ref={trRef}
-              rotateEnabled
-              /** 기본 true면 비율 고정이라 한쪽 핸들만 잡아도 다른 축·반대쪽까지 같이 변하는 느낌이 남. Shift 누르면 비율 유지 */
-              keepRatio={false}
-              centeredScaling={false}
-              borderStroke="#3b82f6"
-              anchorFill="#fff"
-              anchorStroke="#3b82f6"
-              boundBoxFunc={(_oldBox, newBox) => {
-                if (newBox.width < 24 || newBox.height < 24) return _oldBox;
-                return newBox;
+          <Layer scaleX={scale} scaleY={scale}>
+            <Rect
+              width={pageWidth}
+              height={pageHeight}
+              fill="transparent"
+              listening={mode === "edit"}
+              onMouseDown={(e) => {
+                if (mode !== "edit") return;
+                e.cancelBubble = true;
+                onSelect({ id: null });
               }}
             />
-          ) : null}
-        </Layer>
+            {visibleElements.map((el) => {
+              const isSelected = selectedIdSet.has(el.id);
+              const locked = isBookElementLocked(el);
+              if (el.type === "text") {
+                return (
+                  <BookTextHitShape
+                    key={el.id}
+                    el={el}
+                    locked={locked}
+                    liveSync={shapeLiveSync}
+                    registerKonvaNode={registerKonvaNode}
+                    mode={mode}
+                    onSelect={onSelect}
+                    onElementChange={onElementChange}
+                    zMenuEnabled={elementContextMenuEnabled && !locked}
+                    onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                    inlineTextEditing={inlineTextEdit?.id === el.id}
+                    onRequestInlineTextEdit={beginInlineTextEdit}
+                  />
+                );
+              }
+              if (el.type === "weather") {
+                return (
+                  <BookWeatherHitShape
+                    key={el.id}
+                    el={el}
+                    locked={locked}
+                    liveSync={shapeLiveSync}
+                    registerKonvaNode={registerKonvaNode}
+                    mode={mode}
+                    onSelect={onSelect}
+                    onElementChange={onElementChange}
+                    zMenuEnabled={elementContextMenuEnabled && !locked}
+                    onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                  />
+                );
+              }
+              if (el.type === "digitalClock") {
+                return (
+                  <BookDigitalClockHitShape
+                    key={el.id}
+                    el={el}
+                    locked={locked}
+                    liveSync={shapeLiveSync}
+                    registerKonvaNode={registerKonvaNode}
+                    mode={mode}
+                    onSelect={onSelect}
+                    onElementChange={onElementChange}
+                    zMenuEnabled={elementContextMenuEnabled && !locked}
+                    onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                  />
+                );
+              }
+              if (el.type === "image") {
+                return (
+                  <BookImageShape
+                    key={`${el.id}:${el.src}`}
+                    el={el}
+                    locked={locked}
+                    liveSync={shapeLiveSync}
+                    registerKonvaNode={registerKonvaNode}
+                    mode={mode}
+                    onSelect={onSelect}
+                    onElementChange={onElementChange}
+                    zMenuEnabled={elementContextMenuEnabled && !locked}
+                    onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                  />
+                );
+              }
+              if (el.type === "drawing") {
+                return (
+                  <BookDrawingHitShape
+                    key={el.id}
+                    el={el}
+                    locked={locked}
+                    liveSync={shapeLiveSync}
+                    registerKonvaNode={registerKonvaNode}
+                    mode={mode}
+                    isSelected={isSelected}
+                    onSelect={onSelect}
+                    zMenuEnabled={elementContextMenuEnabled && !locked}
+                    onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                  />
+                );
+              }
+              return (
+                <BookVideoBox
+                  key={`${el.id}:${el.src}`}
+                  el={el}
+                  htmlVideoEl={videoHtmlById.get(el.id) ?? null}
+                  locked={locked}
+                  liveSync={shapeLiveSync}
+                  registerKonvaNode={registerKonvaNode}
+                  mode={mode}
+                  onSelect={onSelect}
+                  onElementChange={onElementChange}
+                  onVideoHoverEnter={() => showVideoBar(el.id)}
+                  onVideoHoverLeave={() => scheduleHideVideoBar(el.id)}
+                  zMenuEnabled={elementContextMenuEnabled && !locked}
+                  onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                />
+              );
+            })}
+            {mode === "edit" &&
+              selectedIds.length > 0 &&
+              !(inlineTextEdit && selectedIds.length === 1 && selectedIds[0] === inlineTextEdit.id) ? (
+              <Transformer
+                ref={trRef}
+                rotateEnabled
+                /** 기본 true면 비율 고정이라 한쪽 핸들만 잡아도 다른 축·반대쪽까지 같이 변하는 느낌이 남. Shift 누르면 비율 유지 */
+                keepRatio={false}
+                centeredScaling={false}
+                borderStroke="#3b82f6"
+                anchorFill="#fff"
+                anchorStroke="#3b82f6"
+                boundBoxFunc={(_oldBox, newBox) => {
+                  if (newBox.width < 24 || newBox.height < 24) return _oldBox;
+                  return newBox;
+                }}
+              />
+            ) : null}
+          </Layer>
         </Stage>
       </div>
       {mode === "edit" && editInteractionTool === "draw" && onAppendElement ? (
@@ -1342,14 +1362,14 @@ export function BookSlideCanvas({
                   onReportLogicalHeight={
                     mode === "edit"
                       ? (logical) => {
-                          const next = nextTextWidgetHeightGrowOnly(
-                            logical,
-                            el.height,
-                            el.fontSize,
-                          );
-                          if (next == null) return;
-                          scheduleTextBoxHeight(el.id, next);
-                        }
+                        const next = nextTextWidgetHeightGrowOnly(
+                          logical,
+                          el.height,
+                          el.fontSize,
+                        );
+                        if (next == null) return;
+                        scheduleTextBoxHeight(el.id, next);
+                      }
                       : undefined
                   }
                 />
@@ -1385,176 +1405,176 @@ export function BookSlideCanvas({
           })}
         {mode === "edit" && inlineTextEdit
           ? (() => {
-              const tel = elements.find(
-                (e): e is Extract<BookCanvasElement, { type: "text" }> =>
-                  e.id === inlineTextEdit.id && e.type === "text",
-              );
-              if (!tel) return null;
-              const tw = tel.width ?? 720;
-              const th = textWidgetHitHeight(tel);
-              const textLive = overlayLiveFrame(tel.id, dragLive, transformLive, {
-                w: tw,
-                h: th,
-                rotation: resolveBookElementRotation(tel.rotation),
-              });
-              return (
-                <BookTextWidgetInlineEditor
-                  ref={inlineTextEditorRef}
-                  key={`inline-${inlineTextEdit.id}`}
-                  el={tel}
-                  scale={scale}
-                  liveFrame={textLive}
-                  initialDisplayHtml={inlineTextEdit.initialHtml}
-                  onCommit={(patch) => {
-                    onElementChange(inlineTextEdit.id, patch);
-                    setInlineTextEdit(null);
-                  }}
-                  onCancel={() => setInlineTextEdit(null)}
-                  onReportLogicalHeight={(logical) => {
-                    const next = nextTextWidgetHeightGrowOnly(
-                      logical,
-                      tel.height,
-                      tel.fontSize,
-                    );
-                    if (next == null) return;
-                    scheduleTextBoxHeight(tel.id, next);
-                  }}
-                />
-              );
-            })()
+            const tel = elements.find(
+              (e): e is Extract<BookCanvasElement, { type: "text" }> =>
+                e.id === inlineTextEdit.id && e.type === "text",
+            );
+            if (!tel) return null;
+            const tw = tel.width ?? 720;
+            const th = textWidgetHitHeight(tel);
+            const textLive = overlayLiveFrame(tel.id, dragLive, transformLive, {
+              w: tw,
+              h: th,
+              rotation: resolveBookElementRotation(tel.rotation),
+            });
+            return (
+              <BookTextWidgetInlineEditor
+                ref={inlineTextEditorRef}
+                key={`inline-${inlineTextEdit.id}`}
+                el={tel}
+                scale={scale}
+                liveFrame={textLive}
+                initialDisplayHtml={inlineTextEdit.initialHtml}
+                onCommit={(patch) => {
+                  onElementChange(inlineTextEdit.id, patch);
+                  setInlineTextEdit(null);
+                }}
+                onCancel={() => setInlineTextEdit(null)}
+                onReportLogicalHeight={(logical) => {
+                  const next = nextTextWidgetHeightGrowOnly(
+                    logical,
+                    tel.height,
+                    tel.fontSize,
+                  );
+                  if (next == null) return;
+                  scheduleTextBoxHeight(tel.id, next);
+                }}
+              />
+            );
+          })()
           : null}
       </div>
       {zMenu && mode === "edit"
         ? createPortal(
-            <ContextMenuFloatingPanel
-              ref={zMenuRef}
-              className="z-[320] flex min-w-[11rem] flex-col gap-0.5"
-              style={{
-                position: "fixed",
-                left: Math.min(
-                  zMenu.x,
-                  typeof window !== "undefined" ? Math.max(8, window.innerWidth - 200) : zMenu.x,
-                ),
-                top: Math.min(
-                  zMenu.y,
-                  typeof window !== "undefined" ? Math.max(8, window.innerHeight - 320) : zMenu.y,
-                ),
-              }}
-            >
-              <div className="flex flex-col gap-0.5" role="group" aria-label="크기">
-                <ContextMenuFloatingItem onClick={() => applyFitToStage()}>
-                  슬라이드 전체(0,0)로 맞추기
+          <ContextMenuFloatingPanel
+            ref={zMenuRef}
+            className="z-[320] flex min-w-[11rem] flex-col gap-0.5"
+            style={{
+              position: "fixed",
+              left: Math.min(
+                zMenu.x,
+                typeof window !== "undefined" ? Math.max(8, window.innerWidth - 200) : zMenu.x,
+              ),
+              top: Math.min(
+                zMenu.y,
+                typeof window !== "undefined" ? Math.max(8, window.innerHeight - 320) : zMenu.y,
+              ),
+            }}
+          >
+            <div className="flex flex-col gap-0.5" role="group" aria-label="크기">
+              <ContextMenuFloatingItem onClick={() => applyFitToStage()}>
+                슬라이드 전체(0,0)로 맞추기
+              </ContextMenuFloatingItem>
+            </div>
+            {(() => {
+              const zTarget = elements.find((e) => e.id === zMenu.elementId);
+              const mk =
+                zTarget?.type === "image"
+                  ? ("image" as const)
+                  : zTarget?.type === "video"
+                    ? ("video" as const)
+                    : null;
+              const showFile = mk && onRequestReplaceMediaFromFile;
+              const showLib =
+                mk && mediaLibraryReplaceEnabled && onRequestPickLibraryMediaForReplace;
+              if (!showFile && !showLib) return null;
+              return (
+                <>
+                  <div
+                    className="-mx-1 my-0.5 h-px shrink-0 bg-border"
+                    role="separator"
+                    aria-hidden="true"
+                  />
+                  <div className="flex flex-col gap-0.5" role="group" aria-label="미디어 교체">
+                    {showFile ? (
+                      <ContextMenuFloatingItem
+                        onClick={() => {
+                          onRequestReplaceMediaFromFile?.({
+                            elementId: zMenu.elementId,
+                            kind: mk,
+                          });
+                          setZMenu(null);
+                        }}
+                      >
+                        <FolderOpen className="opacity-70" aria-hidden />
+                        파일에서 바꾸기…
+                      </ContextMenuFloatingItem>
+                    ) : null}
+                    {showLib ? (
+                      <ContextMenuFloatingItem
+                        onClick={() => {
+                          onRequestPickLibraryMediaForReplace?.({
+                            elementId: zMenu.elementId,
+                          });
+                          setZMenu(null);
+                        }}
+                      >
+                        <Library className="opacity-70" aria-hidden />
+                        미디어 라이브러리에서 바꾸기…
+                      </ContextMenuFloatingItem>
+                    ) : null}
+                  </div>
+                </>
+              );
+            })()}
+            {onReorderZ || onDeleteElement ? (
+              <div
+                className="-mx-1 my-0.5 h-px shrink-0 bg-border"
+                role="separator"
+                aria-hidden="true"
+              />
+            ) : null}
+            {onReorderZ
+              ? (() => {
+                const zi = elements.findIndex((e) => e.id === zMenu.elementId);
+                const n = elements.length;
+                return (
+                  <div className="flex flex-col gap-0.5" role="group" aria-label="순서">
+                    <ContextMenuFloatingItem
+                      disabled={zi < 0 || zi >= n - 1}
+                      onClick={() => applyZ("forward")}
+                    >
+                      한 칸 앞으로
+                    </ContextMenuFloatingItem>
+                    <ContextMenuFloatingItem
+                      disabled={zi <= 0}
+                      onClick={() => applyZ("backward")}
+                    >
+                      한 칸 뒤로
+                    </ContextMenuFloatingItem>
+                    <ContextMenuFloatingItem
+                      disabled={zi < 0 || zi >= n - 1}
+                      onClick={() => applyZ("front")}
+                    >
+                      맨 앞으로
+                    </ContextMenuFloatingItem>
+                    <ContextMenuFloatingItem
+                      disabled={zi <= 0}
+                      onClick={() => applyZ("back")}
+                    >
+                      맨 뒤로
+                    </ContextMenuFloatingItem>
+                  </div>
+                );
+              })()
+              : null}
+            {onReorderZ && onDeleteElement ? (
+              <div
+                className="-mx-1 my-0.5 h-px shrink-0 bg-border"
+                role="separator"
+                aria-hidden="true"
+              />
+            ) : null}
+            {onDeleteElement ? (
+              <div className="flex flex-col gap-0.5" role="group" aria-label="편집">
+                <ContextMenuFloatingItem variant="destructive" onClick={() => applyDelete()}>
+                  위젯 지우기
                 </ContextMenuFloatingItem>
               </div>
-              {(() => {
-                const zTarget = elements.find((e) => e.id === zMenu.elementId);
-                const mk =
-                  zTarget?.type === "image"
-                    ? ("image" as const)
-                    : zTarget?.type === "video"
-                      ? ("video" as const)
-                      : null;
-                const showFile = mk && onRequestReplaceMediaFromFile;
-                const showLib =
-                  mk && mediaLibraryReplaceEnabled && onRequestPickLibraryMediaForReplace;
-                if (!showFile && !showLib) return null;
-                return (
-                  <>
-                    <div
-                      className="-mx-1 my-0.5 h-px shrink-0 bg-border"
-                      role="separator"
-                      aria-hidden="true"
-                    />
-                    <div className="flex flex-col gap-0.5" role="group" aria-label="미디어 교체">
-                      {showFile ? (
-                        <ContextMenuFloatingItem
-                          onClick={() => {
-                            onRequestReplaceMediaFromFile?.({
-                              elementId: zMenu.elementId,
-                              kind: mk,
-                            });
-                            setZMenu(null);
-                          }}
-                        >
-                          <FolderOpen className="opacity-70" aria-hidden />
-                          파일에서 바꾸기…
-                        </ContextMenuFloatingItem>
-                      ) : null}
-                      {showLib ? (
-                        <ContextMenuFloatingItem
-                          onClick={() => {
-                            onRequestPickLibraryMediaForReplace?.({
-                              elementId: zMenu.elementId,
-                            });
-                            setZMenu(null);
-                          }}
-                        >
-                          <Library className="opacity-70" aria-hidden />
-                          미디어 라이브러리에서 바꾸기…
-                        </ContextMenuFloatingItem>
-                      ) : null}
-                    </div>
-                  </>
-                );
-              })()}
-              {onReorderZ || onDeleteElement ? (
-                <div
-                  className="-mx-1 my-0.5 h-px shrink-0 bg-border"
-                  role="separator"
-                  aria-hidden="true"
-                />
-              ) : null}
-              {onReorderZ
-                ? (() => {
-                    const zi = elements.findIndex((e) => e.id === zMenu.elementId);
-                    const n = elements.length;
-                    return (
-                      <div className="flex flex-col gap-0.5" role="group" aria-label="순서">
-                        <ContextMenuFloatingItem
-                          disabled={zi < 0 || zi >= n - 1}
-                          onClick={() => applyZ("forward")}
-                        >
-                          한 칸 앞으로
-                        </ContextMenuFloatingItem>
-                        <ContextMenuFloatingItem
-                          disabled={zi <= 0}
-                          onClick={() => applyZ("backward")}
-                        >
-                          한 칸 뒤로
-                        </ContextMenuFloatingItem>
-                        <ContextMenuFloatingItem
-                          disabled={zi < 0 || zi >= n - 1}
-                          onClick={() => applyZ("front")}
-                        >
-                          맨 앞으로
-                        </ContextMenuFloatingItem>
-                        <ContextMenuFloatingItem
-                          disabled={zi <= 0}
-                          onClick={() => applyZ("back")}
-                        >
-                          맨 뒤로
-                        </ContextMenuFloatingItem>
-                      </div>
-                    );
-                  })()
-                : null}
-              {onReorderZ && onDeleteElement ? (
-                <div
-                  className="-mx-1 my-0.5 h-px shrink-0 bg-border"
-                  role="separator"
-                  aria-hidden="true"
-                />
-              ) : null}
-              {onDeleteElement ? (
-                <div className="flex flex-col gap-0.5" role="group" aria-label="편집">
-                  <ContextMenuFloatingItem variant="destructive" onClick={() => applyDelete()}>
-                    위젯 지우기
-                  </ContextMenuFloatingItem>
-                </div>
-              ) : null}
-            </ContextMenuFloatingPanel>,
-            document.body,
-          )
+            ) : null}
+          </ContextMenuFloatingPanel>,
+          document.body,
+        )
         : null}
     </div>
   );
@@ -1624,10 +1644,10 @@ function BookDrawingHitShape({
       onContextMenu={
         zMenuEnabled
           ? (e) => {
-              e.cancelBubble = true;
-              e.evt.preventDefault();
-              onZMenu(e.evt.clientX, e.evt.clientY);
-            }
+            e.cancelBubble = true;
+            e.evt.preventDefault();
+            onZMenu(e.evt.clientX, e.evt.clientY);
+          }
           : undefined
       }
       onDragStart={
@@ -1640,8 +1660,8 @@ function BookDrawingHitShape({
         locked
           ? undefined
           : (e) => {
-              liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
-            }
+            liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
+          }
       }
     >
       <Rect
@@ -1752,32 +1772,32 @@ function BookTextHitShape({
       onContextMenu={
         zMenuEnabled
           ? (e) => {
-              e.cancelBubble = true;
-              e.evt.preventDefault();
-              onZMenu(e.evt.clientX, e.evt.clientY);
-            }
+            e.cancelBubble = true;
+            e.evt.preventDefault();
+            onZMenu(e.evt.clientX, e.evt.clientY);
+          }
           : undefined
       }
       onDragStart={
         locked || inlineTextEditing
           ? undefined
           : (e) => {
-              liveSync.onDragLiveStart(el.id, e.target);
-            }
+            liveSync.onDragLiveStart(el.id, e.target);
+          }
       }
       onDragMove={
         locked
           ? undefined
           : (e) => {
-              liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh);
-            }
+            liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh);
+          }
       }
       onDragEnd={
         locked
           ? undefined
           : (e) => {
-              liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
-            }
+            liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
+          }
       }
       onTransformStart={
         locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
@@ -1787,27 +1807,27 @@ function BookTextHitShape({
         locked
           ? undefined
           : (e) => {
-              liveSync.clearTransformLive();
-              const node = e.target;
-              const sx = Math.abs(node.scaleX());
-              const sy = Math.abs(node.scaleY());
-              node.scaleX(1);
-              node.scaleY(1);
-              const nw = Math.max(24, node.width() * sx);
-              const nh = Math.max(28, node.height() * sy);
-              node.width(nw);
-              node.height(nh);
-              node.offsetX(nw / 2);
-              node.offsetY(nh / 2);
-              const tl = konvaBookTopLeftFromNode(node);
-              onElementChange(el.id, {
-                x: tl.x,
-                y: tl.y,
-                width: nw,
-                height: nh,
-                rotation: node.rotation(),
-              });
-            }
+            liveSync.clearTransformLive();
+            const node = e.target;
+            const sx = Math.abs(node.scaleX());
+            const sy = Math.abs(node.scaleY());
+            node.scaleX(1);
+            node.scaleY(1);
+            const nw = Math.max(24, node.width() * sx);
+            const nh = Math.max(28, node.height() * sy);
+            node.width(nw);
+            node.height(nh);
+            node.offsetX(nw / 2);
+            node.offsetY(nh / 2);
+            const tl = konvaBookTopLeftFromNode(node);
+            onElementChange(el.id, {
+              x: tl.x,
+              y: tl.y,
+              width: nw,
+              height: nh,
+              rotation: node.rotation(),
+            });
+          }
       }
     />
   );
@@ -1893,10 +1913,10 @@ function BookDigitalClockHitShape({
       onContextMenu={
         zMenuEnabled
           ? (e) => {
-              e.cancelBubble = true;
-              e.evt.preventDefault();
-              onZMenu(e.evt.clientX, e.evt.clientY);
-            }
+            e.cancelBubble = true;
+            e.evt.preventDefault();
+            onZMenu(e.evt.clientX, e.evt.clientY);
+          }
           : undefined
       }
       onDragStart={
@@ -1909,8 +1929,8 @@ function BookDigitalClockHitShape({
         locked
           ? undefined
           : (e) => {
-              liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
-            }
+            liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
+          }
       }
       onTransformStart={
         locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
@@ -1922,27 +1942,27 @@ function BookDigitalClockHitShape({
         locked
           ? undefined
           : (e) => {
-              liveSync.clearTransformLive();
-              const node = e.target;
-              const sx = Math.abs(node.scaleX());
-              const sy = Math.abs(node.scaleY());
-              node.scaleX(1);
-              node.scaleY(1);
-              const nw = Math.max(DIGITAL_CLOCK_MIN_W, node.width() * sx);
-              const nh = Math.max(DIGITAL_CLOCK_MIN_H, node.height() * sy);
-              node.width(nw);
-              node.height(nh);
-              node.offsetX(nw / 2);
-              node.offsetY(nh / 2);
-              const tl = konvaBookTopLeftFromNode(node);
-              onElementChange(el.id, {
-                x: tl.x,
-                y: tl.y,
-                width: nw,
-                height: nh,
-                rotation: node.rotation(),
-              });
-            }
+            liveSync.clearTransformLive();
+            const node = e.target;
+            const sx = Math.abs(node.scaleX());
+            const sy = Math.abs(node.scaleY());
+            node.scaleX(1);
+            node.scaleY(1);
+            const nw = Math.max(DIGITAL_CLOCK_MIN_W, node.width() * sx);
+            const nh = Math.max(DIGITAL_CLOCK_MIN_H, node.height() * sy);
+            node.width(nw);
+            node.height(nh);
+            node.offsetX(nw / 2);
+            node.offsetY(nh / 2);
+            const tl = konvaBookTopLeftFromNode(node);
+            onElementChange(el.id, {
+              x: tl.x,
+              y: tl.y,
+              width: nw,
+              height: nh,
+              rotation: node.rotation(),
+            });
+          }
       }
     />
   );
@@ -2022,10 +2042,10 @@ function BookWeatherHitShape({
       onContextMenu={
         zMenuEnabled
           ? (e) => {
-              e.cancelBubble = true;
-              e.evt.preventDefault();
-              onZMenu(e.evt.clientX, e.evt.clientY);
-            }
+            e.cancelBubble = true;
+            e.evt.preventDefault();
+            onZMenu(e.evt.clientX, e.evt.clientY);
+          }
           : undefined
       }
       onDragStart={
@@ -2038,8 +2058,8 @@ function BookWeatherHitShape({
         locked
           ? undefined
           : (e) => {
-              liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
-            }
+            liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
+          }
       }
       onTransformStart={
         locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
@@ -2051,27 +2071,27 @@ function BookWeatherHitShape({
         locked
           ? undefined
           : (e) => {
-              liveSync.clearTransformLive();
-              const node = e.target;
-              const sx = Math.abs(node.scaleX());
-              const sy = Math.abs(node.scaleY());
-              node.scaleX(1);
-              node.scaleY(1);
-              const nw = Math.max(WEATHER_WIDGET_MIN_W, node.width() * sx);
-              const nh = Math.max(WEATHER_WIDGET_MIN_H, node.height() * sy);
-              node.width(nw);
-              node.height(nh);
-              node.offsetX(nw / 2);
-              node.offsetY(nh / 2);
-              const tl = konvaBookTopLeftFromNode(node);
-              onElementChange(el.id, {
-                x: tl.x,
-                y: tl.y,
-                width: nw,
-                height: nh,
-                rotation: node.rotation(),
-              });
-            }
+            liveSync.clearTransformLive();
+            const node = e.target;
+            const sx = Math.abs(node.scaleX());
+            const sy = Math.abs(node.scaleY());
+            node.scaleX(1);
+            node.scaleY(1);
+            const nw = Math.max(WEATHER_WIDGET_MIN_W, node.width() * sx);
+            const nh = Math.max(WEATHER_WIDGET_MIN_H, node.height() * sy);
+            node.width(nw);
+            node.height(nh);
+            node.offsetX(nw / 2);
+            node.offsetY(nh / 2);
+            const tl = konvaBookTopLeftFromNode(node);
+            onElementChange(el.id, {
+              x: tl.x,
+              y: tl.y,
+              width: nw,
+              height: nh,
+              rotation: node.rotation(),
+            });
+          }
       }
     />
   );
@@ -2155,10 +2175,10 @@ function BookImageShape({
       onContextMenu={
         zMenuEnabled
           ? (e) => {
-              e.cancelBubble = true;
-              e.evt.preventDefault();
-              onZMenu(e.evt.clientX, e.evt.clientY);
-            }
+            e.cancelBubble = true;
+            e.evt.preventDefault();
+            onZMenu(e.evt.clientX, e.evt.clientY);
+          }
           : undefined
       }
       onDragStart={
@@ -2171,8 +2191,8 @@ function BookImageShape({
         locked
           ? undefined
           : (e) => {
-              liveSync.commitDragEndPosition(el.id, e.target as Konva.Node, fw, fh);
-            }
+            liveSync.commitDragEndPosition(el.id, e.target as Konva.Node, fw, fh);
+          }
       }
       onTransformStart={
         locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
@@ -2184,26 +2204,26 @@ function BookImageShape({
         locked
           ? undefined
           : (e) => {
-              liveSync.clearTransformLive();
-              const node = e.target as Konva.Group;
-              const sx = Math.abs(node.scaleX());
-              const sy = Math.abs(node.scaleY());
-              node.scaleX(1);
-              node.scaleY(1);
-              const { w: nw, h: nh } = clampSize(node.width() * sx, node.height() * sy);
-              node.width(nw);
-              node.height(nh);
-              node.offsetX(nw / 2);
-              node.offsetY(nh / 2);
-              const tl = konvaBookTopLeftFromNode(node);
-              onElementChange(el.id, {
-                x: tl.x,
-                y: tl.y,
-                width: nw,
-                height: nh,
-                rotation: node.rotation(),
-              });
-            }
+            liveSync.clearTransformLive();
+            const node = e.target as Konva.Group;
+            const sx = Math.abs(node.scaleX());
+            const sy = Math.abs(node.scaleY());
+            node.scaleX(1);
+            node.scaleY(1);
+            const { w: nw, h: nh } = clampSize(node.width() * sx, node.height() * sy);
+            node.width(nw);
+            node.height(nh);
+            node.offsetX(nw / 2);
+            node.offsetY(nh / 2);
+            const tl = konvaBookTopLeftFromNode(node);
+            onElementChange(el.id, {
+              x: tl.x,
+              y: tl.y,
+              width: nw,
+              height: nh,
+              rotation: node.rotation(),
+            });
+          }
       }
     >
       {img && layout ? (
@@ -2284,6 +2304,33 @@ function BookVideoBox({
 }) {
   const groupRef = useRef<Konva.Group>(null);
   const [, setVideoDimGen] = useState(0);
+  const [videoFrameReady, setVideoFrameReady] = useState(false);
+
+  const posterSrcKey = el.posterSrc?.trim() ?? "";
+  const posterImg = useBookImage(posterSrcKey);
+
+  useEffect(() => {
+    const v = htmlVideoEl;
+    if (!v) return;
+    const markReady = () => {
+      if (v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) {
+        setVideoFrameReady(true);
+      }
+    };
+    const raf = requestAnimationFrame(() => {
+      setVideoFrameReady(false);
+      markReady();
+    });
+    v.addEventListener("loadeddata", markReady);
+    v.addEventListener("canplay", markReady);
+    v.addEventListener("seeked", markReady);
+    return () => {
+      cancelAnimationFrame(raf);
+      v.removeEventListener("loadeddata", markReady);
+      v.removeEventListener("canplay", markReady);
+      v.removeEventListener("seeked", markReady);
+    };
+  }, [htmlVideoEl, el.src]);
 
   useEffect(() => {
     const v = htmlVideoEl;
@@ -2355,6 +2402,23 @@ function BookVideoBox({
         : null,
     [htmlVideoEl, iw, ih, el.objectFit, fw, fh],
   );
+
+  const posterLayout = useMemo(() => {
+    if (!posterImg?.complete || posterImg.naturalWidth <= 0 || posterImg.naturalHeight <= 0) {
+      return null;
+    }
+    return computeKonvaFittedImageLayout(
+      el.objectFit,
+      fw,
+      fh,
+      posterImg.naturalWidth,
+      posterImg.naturalHeight,
+    );
+  }, [posterImg, el.objectFit, fw, fh]);
+
+  const showPoster = Boolean(posterLayout && posterImg);
+  const showVideoTexture = Boolean(layout && htmlVideoEl && videoFrameReady);
+
   const vBr = resolveBookElementBorderRadius(el);
   const vOw = resolveBookElementOutlineWidth(el);
   const vOc = resolveBookElementOutlineColor(el);
@@ -2390,10 +2454,10 @@ function BookVideoBox({
       onContextMenu={
         zMenuEnabled
           ? (e) => {
-              e.cancelBubble = true;
-              e.evt.preventDefault();
-              onZMenu(e.evt.clientX, e.evt.clientY);
-            }
+            e.cancelBubble = true;
+            e.evt.preventDefault();
+            onZMenu(e.evt.clientX, e.evt.clientY);
+          }
           : undefined
       }
       onDragStart={
@@ -2406,8 +2470,8 @@ function BookVideoBox({
         locked
           ? undefined
           : (e) => {
-              liveSync.commitDragEndPosition(el.id, e.target as Konva.Node, fw, fh);
-            }
+            liveSync.commitDragEndPosition(el.id, e.target as Konva.Node, fw, fh);
+          }
       }
       onTransformStart={
         locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
@@ -2419,39 +2483,50 @@ function BookVideoBox({
         locked
           ? undefined
           : (e) => {
-              liveSync.clearTransformLive();
-              const node = e.target as Konva.Group;
-              const sx = Math.abs(node.scaleX());
-              const sy = Math.abs(node.scaleY());
-              node.scaleX(1);
-              node.scaleY(1);
-              const { w: nw, h: nh } = clampSize(node.width() * sx, node.height() * sy);
-              node.width(nw);
-              node.height(nh);
-              node.offsetX(nw / 2);
-              node.offsetY(nh / 2);
-              const tl = konvaBookTopLeftFromNode(node);
-              onElementChange(el.id, {
-                x: tl.x,
-                y: tl.y,
-                width: nw,
-                height: nh,
-                rotation: node.rotation(),
-              });
-            }
+            liveSync.clearTransformLive();
+            const node = e.target as Konva.Group;
+            const sx = Math.abs(node.scaleX());
+            const sy = Math.abs(node.scaleY());
+            node.scaleX(1);
+            node.scaleY(1);
+            const { w: nw, h: nh } = clampSize(node.width() * sx, node.height() * sy);
+            node.width(nw);
+            node.height(nh);
+            node.offsetX(nw / 2);
+            node.offsetY(nh / 2);
+            const tl = konvaBookTopLeftFromNode(node);
+            onElementChange(el.id, {
+              x: tl.x,
+              y: tl.y,
+              width: nw,
+              height: nh,
+              rotation: node.rotation(),
+            });
+          }
       }
     >
-      {htmlVideoEl && layout ? (
+      {showPoster ? (
         <KonvaImage
-          image={htmlVideoEl}
-          x={layout.x}
-          y={layout.y}
-          width={layout.width}
-          height={layout.height}
-          {...(layout.crop ? { crop: layout.crop } : {})}
+          image={posterImg!}
+          x={posterLayout!.x}
+          y={posterLayout!.y}
+          width={posterLayout!.width}
+          height={posterLayout!.height}
+          {...(posterLayout!.crop ? { crop: posterLayout!.crop } : {})}
           listening={false}
         />
-      ) : (
+      ) : null}
+      {showVideoTexture ? (
+        <KonvaImage
+          image={htmlVideoEl!}
+          x={layout!.x}
+          y={layout!.y}
+          width={layout!.width}
+          height={layout!.height}
+          {...(layout!.crop ? { crop: layout!.crop } : {})}
+          listening={false}
+        />
+      ) : !showPoster ? (
         <Rect
           x={0}
           y={0}
@@ -2463,7 +2538,7 @@ function BookVideoBox({
           strokeWidth={1}
           listening={false}
         />
-      )}
+      ) : null}
       {vOw > 0 ? (
         <Rect
           x={0}

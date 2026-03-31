@@ -137,8 +137,9 @@ export function AppLayout() {
         >
           <div className="space-y-1">
             <p className="font-heading text-sm font-medium text-foreground">react-interactive</p>
-            <p className="max-w-sm text-xs leading-relaxed text-muted-foreground">
-              NestJS와 React로 만든 로그인·게시판 학습 예제입니다.
+            <p className="max-w-md text-xs leading-relaxed text-muted-foreground">
+              NestJS와 React로 짠 풀스택 학습·실험 공간입니다. JWT 로그인, 글·댓글·좋아요, 슬라이드형
+              북 편집기와 레이아웃 AI, 실시간 채팅, Cats CRUD까지 한 프로젝트에서 이어집니다.
             </p>
           </div>
           <nav
