@@ -306,7 +306,7 @@ export function BookNewsWidgetOverlay({ el, scale, mode, isSelected, liveFrame }
   const ow = resolveBookElementOutlineWidth(el);
   const oc = resolveBookElementOutlineColor(el);
   const outlineRing =
-    ow > 0 ? `0 0 0 ${Math.max(0.5, ow * scale)}px ${oc}` : "";
+    mode === "edit" && ow > 0 ? `0 0 0 ${Math.max(0.5, ow * scale)}px ${oc}` : "";
   const bgShadow = !customBg
     ? "0 16px 40px -10px rgba(0,0,0,0.35), 0 6px 20px -8px rgba(0,0,0,0.22)"
     : customBg && backdropChrome && backdropChrome.boxShadow !== "none"
@@ -326,7 +326,9 @@ export function BookNewsWidgetOverlay({ el, scale, mode, isSelected, liveFrame }
     <div
       className={cn(
         "pointer-events-none absolute overflow-hidden",
-        !customBg && "ring-1 ring-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]",
+        !customBg &&
+          mode === "edit" &&
+          "ring-1 ring-white/15 shadow-[inset_0_1px_0_rgba(255,255,255,0.1)]",
         isSelected && mode === "edit" && "ring-2 ring-primary ring-offset-0",
       )}
       style={{

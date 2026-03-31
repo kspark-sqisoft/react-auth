@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
 import { fetchBook, type BookDetail } from "@/lib/api";
 import { bookKeys } from "@/lib/query-keys";
 import {
@@ -18,6 +19,7 @@ import { BookSlideCanvas } from "@/components/books/BookSlideCanvas";
 import { useBookCanvasDisplayScale } from "@/lib/use-book-canvas-display-scale";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 
 function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDetail }) {
   const canvasWrapRef = useRef<HTMLDivElement>(null);
@@ -28,6 +30,8 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
   }, [data]);
 
   const [slideIndex, setSlideIndex] = useState(0);
+  /** 수동 이전/다음 시 자동 재생 타이머 리셋(첫 슬라이드·메타 로드 직후 레이스 완화) */
+  const [manualNavEpoch, setManualNavEpoch] = useState(0);
   const [videoDurationByElementId, setVideoDurationByElementId] = useState<
     Record<string, number>
   >({});
@@ -45,7 +49,8 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
       slideWidth: slideW,
       slideHeight: slideH,
       bottomPad: 0,
-      horizontalPad: 8,
+      horizontalPad: 0,
+      maxFitScale: 4,
     });
 
   const slideDurationSec = useMemo(() => {
@@ -106,12 +111,33 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
       });
     }, ms);
     return () => clearTimeout(t);
-  }, [loop, safeIdx, sortedPages, videoDurationByElementId]);
+  }, [loop, safeIdx, sortedPages, videoDurationByElementId, manualNavEpoch]);
 
   const pageTitle =
     page != null
       ? slideDisplayLabel(typeof page.name === "string" ? page.name : "", safeIdx)
       : "";
+
+  const goPrevSlide = useCallback(() => {
+    setManualNavEpoch((n) => n + 1);
+    setSlideIndex((i) => {
+      const clamped = Math.min(i, sortedPages.length - 1);
+      if (clamped > 0) return clamped - 1;
+      return loop ? sortedPages.length - 1 : clamped;
+    });
+  }, [loop, sortedPages.length]);
+
+  const goNextSlide = useCallback(() => {
+    setManualNavEpoch((n) => n + 1);
+    setSlideIndex((i) => {
+      const clamped = Math.min(i, sortedPages.length - 1);
+      if (clamped + 1 < sortedPages.length) return clamped + 1;
+      return loop ? 0 : clamped;
+    });
+  }, [loop, sortedPages.length]);
+
+  const prevDisabled = !loop && safeIdx <= 0;
+  const nextDisabled = !loop && safeIdx >= maxIdx;
 
   if (sortedPages.length === 0) {
     return (
@@ -124,105 +150,166 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
     );
   }
 
-  return (
-    <div className="fixed inset-0 z-[100] flex flex-col bg-zinc-950 text-zinc-100">
-      <header className="flex shrink-0 flex-col gap-2 border-b border-zinc-800 bg-zinc-950 px-2 py-2 sm:px-3">
-        <div className="flex min-w-0 flex-wrap items-center gap-2">
-          <Button type="button" variant="ghost" size="sm" className="shrink-0 text-zinc-200" asChild>
-            <Link to={`/books/${bookId}`}>
-              <ArrowLeft className="mr-1.5 size-4" />
-              돌아가기
+  const shell = (
+    <div className="fixed inset-0 z-[10000] flex flex-col bg-zinc-950 text-zinc-100">
+      <header className="pointer-events-auto relative z-10 grid h-9 min-h-9 min-w-0 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 border-b border-zinc-800 bg-zinc-950 px-1.5 sm:gap-x-2 sm:px-2">
+        <div className="flex min-w-0 items-center gap-1 overflow-hidden justify-self-start">
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="h-7 w-7 shrink-0 p-0 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-50"
+            asChild
+          >
+            <Link to={`/books/${bookId}`} aria-label="북으로 돌아가기" title="돌아가기">
+              <ArrowLeft className="size-3.5" />
             </Link>
           </Button>
-          <div className="min-w-0 flex-1">
-            <p className="truncate text-[11px] font-medium tracking-tight text-zinc-500">{data.title}</p>
-            <p className="truncate text-sm font-semibold leading-tight text-zinc-50">{pageTitle}</p>
-          </div>
-          <span className="shrink-0 rounded border border-zinc-700/80 bg-zinc-900/60 px-1.5 py-0.5 text-[10px] tabular-nums text-zinc-400">
-            {safeIdx + 1} / {sortedPages.length}
-          </span>
-          {loop ? (
-            <span className="shrink-0 text-[10px] text-zinc-500">반복</span>
-          ) : (
-            <span className="shrink-0 text-[10px] text-zinc-500">1회</span>
-          )}
-          <div className="flex shrink-0 items-center gap-px rounded-md border border-zinc-700/80 bg-zinc-900/70 p-0.5">
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-7 w-7 shrink-0 p-0 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-              onClick={zoomOut}
-              aria-label="축소"
-            >
-              −
-            </Button>
-            <span className="min-w-[2.75rem] text-center text-[10px] tabular-nums text-zinc-400">
-              {zoomPercent}%
+          <div className="min-w-0 truncate leading-tight pointer-events-none">
+            <span className="text-[11px] font-semibold text-zinc-100">{pageTitle}</span>
+            <span className="mx-0.5 text-zinc-600" aria-hidden>
+              ·
             </span>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-7 w-7 shrink-0 p-0 text-sm text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-              onClick={zoomIn}
-              aria-label="확대"
-            >
-              +
-            </Button>
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-7 px-2 text-[10px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-              onClick={zoomReset}
-            >
-              맞춤
-            </Button>
+            <span className="text-[9px] text-zinc-500">{data.title}</span>
           </div>
         </div>
-        <div className="flex min-w-0 items-center gap-2">
-          <div
-            className="h-2 min-h-2 min-w-0 flex-1 overflow-hidden rounded-full bg-zinc-800"
-            role="progressbar"
-            aria-valuenow={Math.round(progressPct)}
-            aria-valuemin={0}
-            aria-valuemax={100}
-            aria-label="이 슬라이드 남은 시간 비율"
+        <nav
+          className="pointer-events-auto relative z-20 flex shrink-0 items-center gap-0.5 sm:gap-1"
+          aria-label="슬라이드 조작"
+        >
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-8 w-8 shrink-0 touch-manipulation p-0 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-50",
+              prevDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-zinc-200",
+            )}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (prevDisabled) return;
+              goPrevSlide();
+            }}
+            aria-disabled={prevDisabled}
+            aria-label="이전 슬라이드"
+            title={prevDisabled ? "첫 슬라이드입니다 (반복 재생 시 마지막으로 이동)" : "이전 슬라이드"}
           >
+            <ChevronLeft className="size-5" />
+          </Button>
+          <div className="flex min-w-0 max-w-[min(52vw,16rem)] items-center gap-1 rounded-md border border-zinc-700/80 bg-zinc-900/70 px-1 py-px sm:max-w-[min(56vw,20rem)] sm:gap-1.5 sm:px-1.5">
             <div
-              className="h-full rounded-full bg-emerald-500/90 transition-[width] duration-100 ease-linear"
-              style={{ width: `${progressPct}%` }}
-            />
+              className="hidden h-0.5 min-h-0.5 w-[min(16vw,5rem)] overflow-hidden rounded-full bg-zinc-800 sm:block"
+              role="progressbar"
+              aria-valuenow={Math.round(progressPct)}
+              aria-valuemin={0}
+              aria-valuemax={100}
+              aria-label="이 슬라이드 진행"
+            >
+              <div
+                className="h-full rounded-full bg-emerald-500/90 transition-[width] duration-100 ease-linear"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <span
+              className="hidden shrink-0 tabular-nums text-[8px] text-zinc-500 md:inline"
+              title="남은 시간 · 슬라이드 길이"
+            >
+              {remainingSec}s/{slideDurationSec}s
+            </span>
+            <span className="shrink-0 tabular-nums text-[9px] text-zinc-400">
+              {safeIdx + 1}/{sortedPages.length}
+            </span>
+            <span className="hidden shrink-0 text-[8px] text-zinc-600 lg:inline">
+              {loop ? "반복" : "1회"}
+            </span>
+            <div className="flex shrink-0 items-center gap-px rounded border border-zinc-700/60 bg-zinc-950/50 p-px">
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-5 w-5 shrink-0 p-0 text-[10px] text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                onClick={zoomOut}
+                aria-label="축소"
+              >
+                −
+              </Button>
+              <span className="min-w-7 text-center text-[8px] tabular-nums text-zinc-400">
+                {zoomPercent}%
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-5 w-5 shrink-0 p-0 text-[10px] text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
+                onClick={zoomIn}
+                aria-label="확대"
+              >
+                +
+              </Button>
+              <Button
+                type="button"
+                variant="ghost"
+                className="h-5 px-1 text-[8px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
+                onClick={zoomReset}
+              >
+                맞춤
+              </Button>
+            </div>
           </div>
-          <span className="shrink-0 tabular-nums text-[11px] text-zinc-400">
-            {remainingSec}초 · {slideDurationSec}초
-          </span>
-        </div>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "h-8 w-8 shrink-0 touch-manipulation p-0 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-50",
+              nextDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-zinc-200",
+            )}
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (nextDisabled) return;
+              goNextSlide();
+            }}
+            aria-disabled={nextDisabled}
+            aria-label="다음 슬라이드"
+            title={nextDisabled ? "마지막 슬라이드입니다 (반복 재생 시 처음으로 이동)" : "다음 슬라이드"}
+          >
+            <ChevronRight className="size-5" />
+          </Button>
+        </nav>
+        <div className="min-w-0 justify-self-end" aria-hidden />
       </header>
-      <div
-        ref={canvasWrapRef}
-        className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden px-1 pb-1 pt-0"
-        onWheel={handleWheel}
-      >
-        {page ? (
-          <BookSlideCanvas
-            pageWidth={slideW}
-            pageHeight={slideH}
-            pageBackgroundColor={
-              typeof page.backgroundColor === "string" && page.backgroundColor.trim()
-                ? page.backgroundColor.trim()
-                : DEFAULT_PAGE_BACKGROUND
-            }
-            scale={displayScale}
-            elements={page.elements}
-            mode="view"
-            selectedIds={[]}
-            onSelect={() => undefined}
-            onElementChange={() => undefined}
-            onVideoDurationKnown={onVideoDurationKnown}
-          />
-        ) : null}
+      <div className="relative z-0 box-border min-h-0 flex-1 px-5 py-5 sm:px-8 sm:py-6 md:px-12 md:py-8 lg:px-14 lg:py-10">
+        <div
+          ref={canvasWrapRef}
+          className="relative flex h-full min-h-0 w-full items-center justify-center overflow-hidden"
+          onWheel={handleWheel}
+        >
+          {page ? (
+            <BookSlideCanvas
+              pageWidth={slideW}
+              pageHeight={slideH}
+              pageBackgroundColor={
+                typeof page.backgroundColor === "string" && page.backgroundColor.trim()
+                  ? page.backgroundColor.trim()
+                  : DEFAULT_PAGE_BACKGROUND
+              }
+              scale={displayScale}
+              elements={page.elements}
+              mode="view"
+              selectedIds={[]}
+              onSelect={() => undefined}
+              onElementChange={() => undefined}
+              onVideoDurationKnown={onVideoDurationKnown}
+            />
+          ) : null}
+        </div>
       </div>
     </div>
   );
+
+  return createPortal(shell, document.body);
 }
 
 export function BookPresentationPage() {

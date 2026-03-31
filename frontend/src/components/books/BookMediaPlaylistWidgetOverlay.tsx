@@ -171,17 +171,16 @@ export function BookMediaPlaylistWidgetOverlay({
     }
   }, [paused, current?.kind, current?.id]);
 
-  /** 보기 모드: 항목 전환 직후 ref 타이밍 보강 */
+  /** 항목 전환 직후 ref/canplay 타이밍 보강(편집·보기 공통, 일시정지 중이면 생략) */
   useEffect(() => {
-    if (mode !== "view") return;
-    if (current?.kind !== "video") return;
+    if (current?.kind !== "video" || paused) return;
     const v = videoRef.current;
     if (!v) return;
     const tryPlay = () => void v.play().catch(() => undefined);
     if (v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) queueMicrotask(tryPlay);
     else v.addEventListener("canplay", tryPlay, { once: true });
     return () => v.removeEventListener("canplay", tryPlay);
-  }, [mode, current?.id, current?.kind]);
+  }, [current?.id, current?.kind, paused]);
 
   /** 진행률·시간 표시 + 선택 시 속성 패널 동기화 */
   useEffect(() => {
@@ -339,7 +338,7 @@ export function BookMediaPlaylistWidgetOverlay({
   const ow = resolveBookElementOutlineWidth(el);
   const oc = resolveBookElementOutlineColor(el);
   const outlineRing =
-    ow > 0 ? `0 0 0 ${Math.max(0.5, ow * scale)}px ${oc}` : "";
+    mode === "edit" && ow > 0 ? `0 0 0 ${Math.max(0.5, ow * scale)}px ${oc}` : "";
 
   const fit = current
     ? resolveBookMediaObjectFit(

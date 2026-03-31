@@ -25,6 +25,7 @@ import {
   reorderBookElementsByDisplayIndex,
   reorderElementsZ,
   reorderPagesArray,
+  resolveEffectivePresentationTimingElementId,
   toBookPagePayloads,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
@@ -139,6 +140,45 @@ export function BookEditorPage() {
     const onPage = new Set(currentPage.elements.map((e) => e.id));
     return selectedIds.filter((id) => onPage.has(id));
   }, [selectedIds, currentPage]);
+
+  const currentPageElementIdsKey = useMemo(
+    () => currentPage?.elements.map((e) => e.id).join("\0") ?? "",
+    [currentPage?.elements],
+  );
+
+  useEffect(() => {
+    const pg = pages[activePageIndex];
+    if (!pg) return;
+    if (pg.elements.length === 0) {
+      if (pg.presentationTimingElementId != null) {
+        updatePages((d) => {
+          const p = d[activePageIndex];
+          if (p && p.elements.length === 0) p.presentationTimingElementId = null;
+        });
+      }
+      return;
+    }
+    const want = resolveEffectivePresentationTimingElementId(
+      pg.elements,
+      pg.presentationTimingElementId,
+    );
+    if (want !== pg.presentationTimingElementId) {
+      updatePages((d) => {
+        const p = d[activePageIndex];
+        if (!p || p.elements.length === 0) return;
+        p.presentationTimingElementId = resolveEffectivePresentationTimingElementId(
+          p.elements,
+          p.presentationTimingElementId,
+        );
+      });
+    }
+  }, [
+    activePageIndex,
+    currentPageElementIdsKey,
+    currentPage?.presentationTimingElementId,
+    pages,
+    updatePages,
+  ]);
 
   const handleCanvasSelect = useCallback((d: BookCanvasSelectDetail) => {
     if (d.id === null) {
@@ -419,6 +459,10 @@ export function BookEditorPage() {
         const p = draft[activePageIndex];
         if (!p) return;
         p.elements = nextElements;
+        p.presentationTimingElementId = resolveEffectivePresentationTimingElementId(
+          p.elements,
+          null,
+        );
       });
       setSelectedIds([]);
       toast.success("슬라이드 내용을 비우고 템플릿을 적용했습니다.");
@@ -695,13 +739,11 @@ export function BookEditorPage() {
       updatePages((draft) => {
         const p = draft[activePageIndex];
         if (!p) return;
-        if (
-          p.presentationTimingElementId != null &&
-          idSet.has(p.presentationTimingElementId)
-        ) {
-          p.presentationTimingElementId = null;
-        }
         p.elements = p.elements.filter((e) => !idSet.has(e.id));
+        p.presentationTimingElementId = resolveEffectivePresentationTimingElementId(
+          p.elements,
+          p.presentationTimingElementId,
+        );
       });
       setSelectedIds((prev) => prev.filter((id) => !idSet.has(id)));
     },

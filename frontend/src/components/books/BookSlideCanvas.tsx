@@ -480,11 +480,11 @@ function BookSlideVideoOverlay({
     (node: HTMLVideoElement | null) => {
       videoRef.current = node;
       onHtmlVideoRef?.(el.id, node);
-      if (node && mode === "view") {
+      if (node) {
         queueMicrotask(() => void node.play().catch(() => undefined));
       }
     },
-    [el.id, onHtmlVideoRef, mode],
+    [el.id, onHtmlVideoRef],
   );
 
   const syncFromVideo = useCallback(() => {
@@ -544,16 +544,15 @@ function BookSlideVideoOverlay({
     return () => v.removeEventListener("loadedmetadata", prime);
   }, [src, poster]);
 
-  /** 보기(미리보기·북 상세): 음소거+인라인이면 자동 재생 정책에 맞게 즉시 재생 */
+  /** 편집·보기: 마운트 후 재생 시도(브라우저 정책으로 막히면 무시) */
   useEffect(() => {
-    if (mode !== "view") return;
     const v = videoRef.current;
     if (!v) return;
     const tryPlay = () => void v.play().catch(() => undefined);
     if (v.readyState >= HTMLMediaElement.HAVE_CURRENT_DATA) tryPlay();
     v.addEventListener("canplay", tryPlay, { once: true });
     return () => v.removeEventListener("canplay", tryPlay);
-  }, [src, mode, poster]);
+  }, [src, poster]);
 
   const togglePlay = () => {
     const v = videoRef.current;
@@ -587,7 +586,9 @@ function BookSlideVideoOverlay({
   const vidOw = resolveBookElementOutlineWidth(el);
   const vidOc = resolveBookElementOutlineColor(el);
   const vidOutlineShadow =
-    vidOw > 0 ? `0 0 0 ${Math.max(0.5, vidOw * scale)}px ${vidOc}` : undefined;
+    mode === "edit" && vidOw > 0
+      ? `0 0 0 ${Math.max(0.5, vidOw * scale)}px ${vidOc}`
+      : undefined;
 
   const boxStyle: CSSProperties = {
     left: vx * scale,
@@ -606,6 +607,7 @@ function BookSlideVideoOverlay({
         ref={setVideoRef}
         className="pointer-events-none fixed -left-[9999px] top-0 size-px max-h-px max-w-px overflow-hidden opacity-0"
         aria-hidden
+        data-book-slide-mode={mode}
         src={src}
         poster={poster || undefined}
         muted
@@ -623,7 +625,10 @@ function BookSlideVideoOverlay({
       {/* Konva보다 위: 하단 바만 클릭 가능. 나머지 영역은 pointer-events-none으로 Konva로 통과 */}
       <div
         className="absolute z-2 overflow-hidden pointer-events-none"
-        style={{ ...boxStyle, ...(vidOutlineShadow ? { boxShadow: vidOutlineShadow } : {}) }}
+        style={{
+          ...boxStyle,
+          ...(vidOutlineShadow ? { boxShadow: vidOutlineShadow } : {}),
+        }}
       >
         <div
           className={cn(
@@ -1988,6 +1993,7 @@ function BookTextHitShape({
   const tBr = resolveBookElementBorderRadius(el);
   const tOw = resolveBookElementOutlineWidth(el);
   const tOc = resolveBookElementOutlineColor(el);
+  const showKonvaOutline = mode === "edit" && tOw > 0;
   const ox = -fw / 2;
   const oy = -fh / 2;
   return (
@@ -2075,8 +2081,8 @@ function BookTextHitShape({
         rotation={0}
         fill="transparent"
         cornerRadius={tBr}
-        stroke={tOw > 0 ? tOc : "transparent"}
-        strokeWidth={tOw > 0 ? tOw : 0}
+        stroke={showKonvaOutline ? tOc : "transparent"}
+        strokeWidth={showKonvaOutline ? tOw : 0}
       />
     </Group>
   );
@@ -2137,6 +2143,7 @@ function BookDigitalClockHitShape({
   const dcBr = resolveBookElementBorderRadius(el);
   const dcOw = resolveBookElementOutlineWidth(el);
   const dcOc = resolveBookElementOutlineColor(el);
+  const showKonvaOutline = mode === "edit" && dcOw > 0;
   return (
     <Group
       ref={(node) => {
@@ -2211,8 +2218,8 @@ function BookDigitalClockHitShape({
         rotation={0}
         fill="transparent"
         cornerRadius={dcBr}
-        stroke={dcOw > 0 ? dcOc : "transparent"}
-        strokeWidth={dcOw > 0 ? dcOw : 0}
+        stroke={showKonvaOutline ? dcOc : "transparent"}
+        strokeWidth={showKonvaOutline ? dcOw : 0}
       />
     </Group>
   );
@@ -2263,6 +2270,7 @@ function BookWeatherHitShape({
   const wBr = resolveBookElementBorderRadius(el);
   const wOw = resolveBookElementOutlineWidth(el);
   const wOc = resolveBookElementOutlineColor(el);
+  const showKonvaOutline = mode === "edit" && wOw > 0;
   return (
     <Group
       ref={(node) => {
@@ -2337,8 +2345,8 @@ function BookWeatherHitShape({
         rotation={0}
         fill="transparent"
         cornerRadius={wBr}
-        stroke={wOw > 0 ? wOc : "transparent"}
-        strokeWidth={wOw > 0 ? wOw : 0}
+        stroke={showKonvaOutline ? wOc : "transparent"}
+        strokeWidth={showKonvaOutline ? wOw : 0}
       />
     </Group>
   );
@@ -2389,6 +2397,7 @@ function BookNewsHitShape({
   const wBr = resolveBookElementBorderRadius(el);
   const wOw = resolveBookElementOutlineWidth(el);
   const wOc = resolveBookElementOutlineColor(el);
+  const showKonvaOutline = mode === "edit" && wOw > 0;
   return (
     <Group
       ref={(node) => {
@@ -2463,8 +2472,8 @@ function BookNewsHitShape({
         rotation={0}
         fill="transparent"
         cornerRadius={wBr}
-        stroke={wOw > 0 ? wOc : "transparent"}
-        strokeWidth={wOw > 0 ? wOw : 0}
+        stroke={showKonvaOutline ? wOc : "transparent"}
+        strokeWidth={showKonvaOutline ? wOw : 0}
       />
     </Group>
   );
@@ -2519,6 +2528,7 @@ function BookMediaPlaylistHitShape({
   const wBr = resolveBookElementBorderRadius(el);
   const wOw = resolveBookElementOutlineWidth(el);
   const wOc = resolveBookElementOutlineColor(el);
+  const showKonvaOutline = mode === "edit" && wOw > 0;
   return (
     <Group
       ref={(node) => {
@@ -2595,8 +2605,8 @@ function BookMediaPlaylistHitShape({
         rotation={0}
         fill="transparent"
         cornerRadius={wBr}
-        stroke={wOw > 0 ? wOc : "transparent"}
-        strokeWidth={wOw > 0 ? wOw : 0}
+        stroke={showKonvaOutline ? wOc : "transparent"}
+        strokeWidth={showKonvaOutline ? wOw : 0}
       />
     </Group>
   );
@@ -2653,6 +2663,7 @@ function BookImageShape({
   const imgBr = resolveBookElementBorderRadius(el);
   const imgOw = resolveBookElementOutlineWidth(el);
   const imgOc = resolveBookElementOutlineColor(el);
+  const showKonvaOutline = mode === "edit" && imgOw > 0;
 
   return (
     <Group
@@ -2733,12 +2744,12 @@ function BookImageShape({
           height={fh}
           cornerRadius={imgBr}
           fill="#e5e7eb"
-          stroke="#94a3b8"
-          strokeWidth={1}
+          stroke={mode === "edit" ? "#94a3b8" : "transparent"}
+          strokeWidth={mode === "edit" ? 1 : 0}
           listening={false}
         />
       )}
-      {imgOw > 0 ? (
+      {showKonvaOutline ? (
         <Rect
           x={ox}
           y={oy}
@@ -2912,6 +2923,7 @@ function BookVideoBox({
   const vBr = resolveBookElementBorderRadius(el);
   const vOw = resolveBookElementOutlineWidth(el);
   const vOc = resolveBookElementOutlineColor(el);
+  const showKonvaOutline = mode === "edit" && vOw > 0;
   const videoEditGuide = mode === "edit" && vOw <= 0;
 
   return (
@@ -3007,12 +3019,12 @@ function BookVideoBox({
           height={fh}
           cornerRadius={vBr}
           fill="#0f172a"
-          stroke="#475569"
-          strokeWidth={1}
+          stroke={mode === "edit" ? "#475569" : "transparent"}
+          strokeWidth={mode === "edit" ? 1 : 0}
           listening={false}
         />
       ) : null}
-      {vOw > 0 ? (
+      {showKonvaOutline ? (
         <Rect
           x={ox}
           y={oy}
@@ -3033,8 +3045,8 @@ function BookVideoBox({
         height={fh}
         cornerRadius={vBr}
         fill="rgba(0,0,0,0.01)"
-        stroke={vOw > 0 ? "transparent" : videoEditGuide ? "#cbd5e1" : "transparent"}
-        strokeWidth={vOw > 0 ? 0 : videoEditGuide ? 1 : 0}
+        stroke={showKonvaOutline ? "transparent" : videoEditGuide ? "#cbd5e1" : "transparent"}
+        strokeWidth={showKonvaOutline ? 0 : videoEditGuide ? 1 : 0}
       />
     </Group>
   );

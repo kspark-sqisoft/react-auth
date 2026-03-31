@@ -1,5 +1,8 @@
 import type { BookCanvasElement, BookEditorPageState } from "@/lib/book-canvas";
-import { resolveMediaPlaylistImageDurationSec } from "@/lib/book-canvas";
+import {
+  resolveEffectivePresentationTimingElementId,
+  resolveMediaPlaylistImageDurationSec,
+} from "@/lib/book-canvas";
 
 /** 미디어(플레이리스트) 위젯 제외 위젯·페이지 기본 체류 초(표시 시간 미지정 시) */
 export const DEFAULT_WIDGET_PRESENTATION_SEC = 10;
@@ -66,7 +69,10 @@ export function computeSlidePresentationDurationSec(
   page: Pick<BookEditorPageState, "elements" | "presentationTimingElementId">,
   opts?: ComputeSlidePresentationDurationOpts,
 ): number {
-  const id = page.presentationTimingElementId?.trim();
+  const id = resolveEffectivePresentationTimingElementId(
+    page.elements,
+    page.presentationTimingElementId,
+  );
   if (!id) return DEFAULT_PRESENTATION_SLIDE_SEC;
   const el = page.elements.find((e) => e.id === id);
   if (!el) return DEFAULT_PRESENTATION_SLIDE_SEC;

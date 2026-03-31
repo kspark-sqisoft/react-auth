@@ -1438,21 +1438,15 @@ export function BookInspectorPanel({
                         }
                       />
                     </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="insp-fs">크기</Label>
-                      <Input
-                        id="insp-fs"
-                        type="number"
-                        min={10}
-                        max={120}
-                        value={selected.fontSize}
-                        onChange={(e) =>
-                          onChange(selected.id, {
-                            fontSize: num(e.target.value, selected.fontSize, 10, 120),
-                          })
-                        }
-                      />
-                    </div>
+                    <InspectorClampedSizeInput
+                      elementId={selected.id}
+                      value={selected.fontSize}
+                      min={10}
+                      max={120}
+                      htmlId="insp-fs"
+                      label="글자 크기 (pt)"
+                      onCommit={(n) => onChange(selected.id, { fontSize: n })}
+                    />
                     <div className="space-y-2">
                       <Label htmlFor="insp-fill">기본 글자색</Label>
                       <p className="text-[11px] text-muted-foreground">

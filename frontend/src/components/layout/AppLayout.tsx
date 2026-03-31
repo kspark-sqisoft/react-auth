@@ -35,6 +35,8 @@ export function AppLayout() {
   /** `BookWorkspaceShell` 사용 라우트 — 사이트 헤더 아래에 맞추려 main 패딩 제거·flex 높이 체인 */
   const bookShellRoute =
     location.pathname === "/books/new" || /^\/books\/\d+$/.test(location.pathname);
+  /** 북 슬라이드쇼 미리보기 — 전체 화면에 가깝게 쓰므로 플로팅 채팅 숨김 */
+  const bookPresentationPreviewRoute = /^\/books\/\d+\/preview$/.test(location.pathname);
   /** 홈: 3D 씬이 헤더~푸터 사이를 꽉 채우도록 뷰포트 높이·main flex 체인 */
   const homeRoute = location.pathname === "/";
   const fullViewportShell = bookShellRoute || homeRoute;
@@ -175,7 +177,7 @@ export function AppLayout() {
           </nav>
         </div>
       </footer>
-      {user ? <ChatDock /> : null}
+      {user && !bookPresentationPreviewRoute ? <ChatDock /> : null}
       <Toaster position="bottom-center" richColors closeButton duration={4000} />
     </div>
   );

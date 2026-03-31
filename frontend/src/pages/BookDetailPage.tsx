@@ -42,6 +42,7 @@ import {
   reorderBookElementsByDisplayIndex,
   reorderElementsZ,
   reorderPagesArray,
+  resolveEffectivePresentationTimingElementId,
   toBookPagePayloads,
   type BookEditorPageState,
   type ElementZOrderOp,
@@ -122,11 +123,12 @@ function mapServerPagesToLocal(pages: BookPageDto[]): BookEditorPageState[] {
           ? p.backgroundColor.trim()
           : DEFAULT_PAGE_BACKGROUND,
       elements: p.elements,
-      presentationTimingElementId:
-        typeof p.presentationTimingElementId === "string" &&
-        p.presentationTimingElementId.trim()
-          ? p.presentationTimingElementId.trim()
+      presentationTimingElementId: resolveEffectivePresentationTimingElementId(
+        p.elements,
+        typeof p.presentationTimingElementId === "string"
+          ? p.presentationTimingElementId
           : null,
+      ),
     })),
   );
 }
@@ -240,6 +242,45 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   const maxPageIdx = Math.max(0, localPages.length - 1);
   const activePageIndex = Math.min(pageIndex, maxPageIdx);
   const activePage = localPages[activePageIndex];
+
+  const activePageElementIdsKey = useMemo(
+    () => activePage?.elements.map((e) => e.id).join("\0") ?? "",
+    [activePage?.elements],
+  );
+
+  useEffect(() => {
+    const pg = localPages[activePageIndex];
+    if (!pg) return;
+    if (pg.elements.length === 0) {
+      if (pg.presentationTimingElementId != null) {
+        updatePages((d) => {
+          const p = d[activePageIndex];
+          if (p && p.elements.length === 0) p.presentationTimingElementId = null;
+        });
+      }
+      return;
+    }
+    const want = resolveEffectivePresentationTimingElementId(
+      pg.elements,
+      pg.presentationTimingElementId,
+    );
+    if (want !== pg.presentationTimingElementId) {
+      updatePages((d) => {
+        const p = d[activePageIndex];
+        if (!p || p.elements.length === 0) return;
+        p.presentationTimingElementId = resolveEffectivePresentationTimingElementId(
+          p.elements,
+          p.presentationTimingElementId,
+        );
+      });
+    }
+  }, [
+    activePageIndex,
+    activePageElementIdsKey,
+    activePage?.presentationTimingElementId,
+    localPages,
+    updatePages,
+  ]);
 
   useEffect(() => {
     queueMicrotask(() => {
@@ -634,7 +675,20 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     (id: string | null) => {
       updatePages((draft) => {
         const p = draft[activePageIndex];
-        if (p) p.presentationTimingElementId = id;
+        if (!p) return;
+        if (p.elements.length === 0) {
+          p.presentationTimingElementId = null;
+          return;
+        }
+        const trimmed = typeof id === "string" ? id.trim() : "";
+        if (trimmed && p.elements.some((e) => e.id === trimmed)) {
+          p.presentationTimingElementId = trimmed;
+          return;
+        }
+        p.presentationTimingElementId = resolveEffectivePresentationTimingElementId(
+          p.elements,
+          p.presentationTimingElementId,
+        );
       });
     },
     [activePageIndex, updatePages],
@@ -1190,13 +1244,11 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       updatePages((draft) => {
         const p = draft[activePageIndex];
         if (!p) return;
-        if (
-          p.presentationTimingElementId != null &&
-          idSet.has(p.presentationTimingElementId)
-        ) {
-          p.presentationTimingElementId = null;
-        }
         p.elements = p.elements.filter((e) => !idSet.has(e.id));
+        p.presentationTimingElementId = resolveEffectivePresentationTimingElementId(
+          p.elements,
+          p.presentationTimingElementId,
+        );
       });
       setSelectedIds((prev) => prev.filter((id) => !idSet.has(id)));
     },
@@ -1982,6 +2034,19 @@ function BookDetailGuestBookView({
   const safeIndex = Math.min(pageIndex, Math.max(0, sortedPagesView.length - 1));
   const viewPage = sortedPagesView[safeIndex];
 
+  const guestPresentationTimingId = useMemo(
+    () =>
+      viewPage
+        ? resolveEffectivePresentationTimingElementId(
+            viewPage.elements,
+            typeof viewPage.presentationTimingElementId === "string"
+              ? viewPage.presentationTimingElementId
+              : null,
+          )
+        : null,
+    [viewPage],
+  );
+
   useEffect(() => {
     warmBookCanvasImagesForNeighborPages(guestThumbSources, safeIndex);
   }, [guestThumbSources, safeIndex]);
@@ -2051,7 +2116,7 @@ function BookDetailGuestBookView({
             selectedIds={[]}
             onSelect={() => undefined}
             readOnly
-            presentationTimingElementId={viewPage.presentationTimingElementId ?? null}
+            presentationTimingElementId={guestPresentationTimingId}
           />
         </aside>
       }

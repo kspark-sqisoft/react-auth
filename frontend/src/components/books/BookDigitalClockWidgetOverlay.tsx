@@ -83,7 +83,7 @@ export function BookDigitalClockWidgetOverlay({ el, scale, mode, isSelected, liv
   const ow = resolveBookElementOutlineWidth(el);
   const oc = resolveBookElementOutlineColor(el);
   const outlineRing =
-    ow > 0 ? `0 0 0 ${Math.max(0.5, ow * scale)}px ${oc}` : "";
+    mode === "edit" && ow > 0 ? `0 0 0 ${Math.max(0.5, ow * scale)}px ${oc}` : "";
   const bgShadow = !customBg
     ? "0 12px 40px -8px rgba(0,0,0,0.45)"
     : customBg && backdropChrome && backdropChrome.boxShadow !== "none"
@@ -95,7 +95,10 @@ export function BookDigitalClockWidgetOverlay({ el, scale, mode, isSelected, liv
     <div
       className={cn(
         "pointer-events-none absolute overflow-hidden",
-        !customBg && "border border-white/10 bg-linear-to-br from-slate-900 via-slate-800 to-slate-950",
+        !customBg &&
+          mode === "edit" &&
+          "border border-white/10 bg-linear-to-br from-slate-900 via-slate-800 to-slate-950",
+        !customBg && mode === "view" && "bg-linear-to-br from-slate-900 via-slate-800 to-slate-950",
         isSelected && mode === "edit" && "ring-2 ring-primary ring-offset-0",
       )}
       style={{

@@ -295,7 +295,7 @@ function LayerRowActions({
             disabled={readOnly || !onPresentationTimingElementIdChange}
             onCheckedChange={(c) => {
               if (!onPresentationTimingElementIdChange) return;
-              onPresentationTimingElementIdChange(c === true ? el.id : null);
+              if (c === true) onPresentationTimingElementIdChange(el.id);
             }}
             className="size-4"
             aria-label={`${label}: 페이지 시간 기준`}

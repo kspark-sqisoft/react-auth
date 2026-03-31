@@ -20,9 +20,19 @@ export function useBookCanvasDisplayScale(
     bottomPad: number;
     /** 좌우 여백 합에 가깝게 빼는 값(기본 48). 미리보기 등에서 작게 줄여 슬라이드를 크게 맞춤 */
     horizontalPad?: number;
+    /**
+     * 맞춤 배율 상한(기본 1). 미리보기에서 뷰포트가 슬라이드 논리 크기보다 크면 1 초과로 확대해 화면을 채움.
+     */
+    maxFitScale?: number;
   },
 ) {
-  const { slideWidth, slideHeight, bottomPad, horizontalPad = 48 } = opts;
+  const {
+    slideWidth,
+    slideHeight,
+    bottomPad,
+    horizontalPad = 48,
+    maxFitScale = 1,
+  } = opts;
   const [fitScale, setFitScale] = useState(0.55);
   const [zoomMul, setZoomMul] = useState(1);
 
@@ -34,13 +44,13 @@ export function useBookCanvasDisplayScale(
       const s = Math.min(
         (cr.width - horizontalPad) / slideWidth,
         (cr.height - bottomPad) / slideHeight,
-        1,
+        maxFitScale,
       );
-      setFitScale(Math.max(0.22, Math.min(s, 1)));
+      setFitScale(Math.max(0.22, Math.min(s, maxFitScale)));
     });
     ro.observe(el);
     return () => ro.disconnect();
-  }, [wrapRef, slideWidth, slideHeight, bottomPad, horizontalPad]);
+  }, [wrapRef, slideWidth, slideHeight, bottomPad, horizontalPad, maxFitScale]);
 
   const displayScale = fitScale * zoomMul;
 

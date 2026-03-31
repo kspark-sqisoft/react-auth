@@ -67,7 +67,9 @@ export function BookTextWidgetOverlay({
   const tOw = resolveBookElementOutlineWidth(el);
   const tOc = resolveBookElementOutlineColor(el);
   const outlineShadow =
-    tOw > 0 ? `0 0 0 ${Math.max(0.5, tOw * scale)}px ${tOc}` : undefined;
+    mode === "edit" && tOw > 0
+      ? `0 0 0 ${Math.max(0.5, tOw * scale)}px ${tOc}`
+      : undefined;
 
   useLayoutEffect(() => {
     if (mode !== "edit" || !onReportLogicalHeight) return;

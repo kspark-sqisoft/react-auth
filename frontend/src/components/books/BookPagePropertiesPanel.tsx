@@ -13,6 +13,7 @@ import {
 } from "@/components/ui/select";
 import {
   DEFAULT_PAGE_BACKGROUND,
+  resolveEffectivePresentationTimingElementId,
   slideDisplayLabel,
   type BookCanvasElement,
 } from "@/lib/book-canvas";
@@ -86,11 +87,12 @@ export function BookPagePropertiesPanel({
   }, [elements]);
 
   const timingSelectValue =
-    presentationTimingElementId != null &&
-    presentationTimingElementId !== "" &&
-    elements.some((e) => e.id === presentationTimingElementId)
-      ? presentationTimingElementId
-      : "__none__";
+    elements.length === 0
+      ? ""
+      : (resolveEffectivePresentationTimingElementId(
+          elements,
+          presentationTimingElementId,
+        ) ?? "");
 
   const Root = embedded ? "div" : "aside";
   return (
@@ -127,30 +129,34 @@ export function BookPagePropertiesPanel({
           <div className="space-y-2 rounded-md border border-border/60 bg-muted/[0.06] p-2.5">
             <p className="text-xs font-medium text-foreground">미리보기(슬라이드쇼)</p>
             <p className="text-[11px] leading-snug text-muted-foreground">
-              레이어 목록의 「기준」체크로 이 페이지의 시간 기준 위젯을 고를 수 있습니다. 미디어(플레이리스트)
-              위젯은 목록 항목 시간 합이 슬라이드 길이입니다. 그 외 위젯은 기본 10초이며 레이어 목록·위젯 속성에서
-              바꿀 수 있습니다. 아래에서도 기준을 고를 수 있습니다.
+              레이어 목록의 「기준」체크로 이 페이지의 시간 기준 위젯을 고를 수 있습니다(한 페이지에 위젯이 있으면
+              항상 하나는 기준이며, 같은 체크를 다시 눌러 해제할 수 없습니다). 미디어(플레이리스트) 위젯은 목록
+              항목 시간 합이 슬라이드 길이입니다. 그 외 위젯은 기본 10초이며 레이어 목록·위젯 속성에서 바꿀 수
+              있습니다. 아래에서도 기준을 고를 수 있습니다.
             </p>
             <div className="space-y-1">
               <Label className="text-[11px]">시간 기준 레이어</Label>
-              <Select
-                value={timingSelectValue}
-                onValueChange={(v) =>
-                  onChangePresentationTimingElementId(v === "__none__" ? null : v)
-                }
-              >
-                <SelectTrigger size="sm" className="h-9 w-full">
-                  <SelectValue placeholder="기본(페이지당 고정 초)" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="__none__">없음 · 기본 시간</SelectItem>
-                  {layerOptions.map((o) => (
-                    <SelectItem key={o.id} value={o.id}>
-                      {o.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              {elements.length === 0 ? (
+                <p className="text-[11px] text-muted-foreground">
+                  이 슬라이드에 위젯이 없습니다.
+                </p>
+              ) : (
+                <Select
+                  value={timingSelectValue}
+                  onValueChange={(v) => onChangePresentationTimingElementId(v)}
+                >
+                  <SelectTrigger size="sm" className="h-9 w-full">
+                    <SelectValue placeholder="레이어 선택" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {layerOptions.map((o) => (
+                      <SelectItem key={o.id} value={o.id}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              )}
             </div>
             <label className="flex cursor-pointer items-start gap-2 rounded-md border border-transparent px-0.5 py-1 hover:bg-muted/30">
               <Checkbox

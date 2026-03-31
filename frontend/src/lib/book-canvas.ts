@@ -780,6 +780,19 @@ export type BookEditorPageState = {
   presentationTimingElementId?: string | null;
 };
 
+/**
+ * 시간 기준 레이어 id. 위젯이 하나 이상이면 항상 하나(저장값이 유효하지 않으면 배열 첫 요소 = 먼저 추가된 레이어).
+ */
+export function resolveEffectivePresentationTimingElementId(
+  elements: BookCanvasElement[],
+  stored: string | null | undefined,
+): string | null {
+  if (elements.length === 0) return null;
+  const t = typeof stored === "string" ? stored.trim() : "";
+  if (t && elements.some((e) => e.id === t)) return t;
+  return elements[0]!.id;
+}
+
 export const DEFAULT_SLIDE_WIDTH = 960;
 export const DEFAULT_SLIDE_HEIGHT = 540;
 
@@ -1039,8 +1052,11 @@ export function createEmptyEditorPage(sortOrder: number): BookEditorPageState {
 export function duplicateBookEditorPage(
   page: BookEditorPageState,
 ): BookEditorPageState {
+  const oldTiming = page.presentationTimingElementId?.trim() ?? "";
+  let mappedTimingId: string | null = null;
   const elements = page.elements.map((el) => {
     const id = crypto.randomUUID();
+    if (oldTiming !== "" && el.id === oldTiming) mappedTimingId = id;
     if (el.type === "text") {
       return { ...el, id };
     }
@@ -1189,7 +1205,10 @@ export function duplicateBookEditorPage(
     name: page.name,
     backgroundColor: page.backgroundColor,
     elements,
-    presentationTimingElementId: null,
+    presentationTimingElementId: resolveEffectivePresentationTimingElementId(
+      elements,
+      mappedTimingId,
+    ),
   };
 }
 
@@ -1202,7 +1221,10 @@ export function toBookPagePayloads(pages: BookEditorPageState[]) {
       p.backgroundColor || DEFAULT_PAGE_BACKGROUND,
     ),
     elements: normalizeBookElementsForSave(p.elements),
-    presentationTimingElementId: p.presentationTimingElementId ?? null,
+    presentationTimingElementId: resolveEffectivePresentationTimingElementId(
+      p.elements,
+      p.presentationTimingElementId,
+    ),
   }));
 }
 

@@ -426,7 +426,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   const ow = resolveBookElementOutlineWidth(el);
   const oc = resolveBookElementOutlineColor(el);
   const outlineRing =
-    ow > 0 ? `0 0 0 ${Math.max(0.5, ow * scale)}px ${oc}` : "";
+    mode === "edit" && ow > 0 ? `0 0 0 ${Math.max(0.5, ow * scale)}px ${oc}` : "";
   const bgShadow = !customBg
     ? "0 20px 50px -12px rgba(0,0,0,0.4), 0 8px 24px -8px rgba(0,0,0,0.25)"
     : customBg && backdropChrome && backdropChrome.boxShadow !== "none"
@@ -521,7 +521,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
     <div
       className={cn(
         "pointer-events-none absolute overflow-hidden",
-        !customBg && ringAccent,
+        !customBg && mode === "edit" && ringAccent,
         isSelected && mode === "edit" && "ring-2 ring-primary ring-offset-0",
       )}
       style={{
