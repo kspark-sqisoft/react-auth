@@ -430,6 +430,7 @@ mindmap
 | 슬라이드 캔버스 | `components/books/BookSlideCanvas.tsx` |
 | AI 패널 | `components/books/BookAiAssistantPanel.tsx` |
 | 캔버스 타입·도구 | `lib/book-canvas.ts`, `lib/book-text-widget.ts` |
+| 슬라이드 템플릿(사이니지) | `lib/book-slide-templates.ts` — 카테고리: 메뉴·공지·**실생활**·뉴스·비주얼 |
 | AI 배치 해석 | `lib/book-ai-placement.ts` |
 
 ---
