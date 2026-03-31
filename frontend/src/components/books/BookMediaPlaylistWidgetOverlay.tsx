@@ -360,14 +360,10 @@ export function BookMediaPlaylistWidgetOverlay({
       ? (publicAssetUrl(current.posterSrc) ?? current.posterSrc)
       : undefined;
 
-  const barH = Math.max(20 * scale, fh * scale * 0.11);
-  const barBtn = Math.round(Math.max(22 * scale, barH * 0.82));
-  const barIcon = Math.max(10 * scale, barH * 0.38);
-  const barMono = Math.max(8 * scale, barH * 0.3);
-  const barProgH = Math.max(3 * scale, barH * 0.22);
-  const barGap = Math.max(2 * scale, 2);
+  /** 빈 상태 힌트만 위젯 크기에 맞춤 — 컨트롤 바는 단일 비디오 위젯(BookSlideVideoOverlay)과 동일한 고정 높이·버튼 크기 */
   const emptyHintPx = Math.max(10 * scale, fh * scale * 0.032);
   const emptyIconPx = Math.max(14 * scale, fh * scale * 0.055);
+  const videoBarProgressH = Math.max(3, Math.min(7, 36 * 0.22));
   const atFirst =
     items.length === 0 || (!loop && clampedIndex <= 0);
   const atLast =
@@ -395,9 +391,9 @@ export function BookMediaPlaylistWidgetOverlay({
         {items.length === 0 ? (
           <div
             className="flex size-full flex-col items-center justify-center px-3 text-center text-zinc-400"
-            style={{ gap: barGap * 1.5, fontSize: emptyHintPx }}
+            style={{ gap: Math.max(8, scale * 6), fontSize: emptyHintPx }}
           >
-            <div className="flex items-center opacity-80" style={{ gap: barGap * 1.25 }}>
+            <div className="flex items-center gap-2 opacity-80">
               <ImageIcon
                 aria-hidden
                 style={{ width: emptyIconPx, height: emptyIconPx }}
@@ -454,17 +450,9 @@ export function BookMediaPlaylistWidgetOverlay({
         {showControls && items.length > 0 ? (
           <div
             className={cn(
-              "absolute bottom-0 left-0 right-0 z-10 flex items-center border-t border-white/15 bg-black/75 transition-opacity duration-200",
+              "absolute bottom-0 left-0 right-0 z-10 flex h-9 min-h-9 items-center gap-1 border-t border-white/15 bg-black/75 px-1 py-0.5 transition-opacity duration-200",
               barVisible ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
             )}
-            style={{
-              minHeight: barH,
-              gap: barGap,
-              paddingLeft: barGap * 0.5,
-              paddingRight: barGap * 0.5,
-              paddingTop: barGap * 0.5,
-              paddingBottom: barGap * 0.5,
-            }}
             onMouseDown={(e) => e.stopPropagation()}
             onPointerDown={(e) => e.stopPropagation()}
             onPointerDownCapture={(e) => e.stopPropagation()}
@@ -473,56 +461,47 @@ export function BookMediaPlaylistWidgetOverlay({
           >
             <button
               type="button"
-              className="flex shrink-0 items-center justify-center rounded-md text-white hover:bg-white/15 disabled:opacity-35"
-              style={{ width: barBtn, height: barBtn, minWidth: barBtn, minHeight: barBtn }}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-white hover:bg-white/15 disabled:opacity-35"
               aria-label="이전"
               disabled={atFirst}
               onClick={goPrev}
             >
-              <SkipBack style={{ width: barIcon, height: barIcon }} />
+              <SkipBack className="size-3.5" aria-hidden />
             </button>
             <button
               type="button"
-              className="flex shrink-0 items-center justify-center rounded-md text-white hover:bg-white/15"
-              style={{ width: barBtn, height: barBtn, minWidth: barBtn, minHeight: barBtn }}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-white hover:bg-white/15"
               aria-label={paused ? "재생" : "일시정지"}
               onClick={togglePause}
             >
               {paused ? (
-                <Play className="pl-0.5" style={{ width: barIcon, height: barIcon }} />
+                <Play className="size-3.5 pl-0.5" aria-hidden />
               ) : (
-                <Pause style={{ width: barIcon, height: barIcon }} />
+                <Pause className="size-3.5" aria-hidden />
               )}
             </button>
             <button
               type="button"
-              className="flex shrink-0 items-center justify-center rounded-md text-white hover:bg-white/15 disabled:opacity-35"
-              style={{ width: barBtn, height: barBtn, minWidth: barBtn, minHeight: barBtn }}
+              className="flex size-7 shrink-0 items-center justify-center rounded-md text-white hover:bg-white/15 disabled:opacity-35"
               aria-label="다음"
               disabled={atLast}
               onClick={goNext}
             >
-              <SkipForward style={{ width: barIcon, height: barIcon }} />
+              <SkipForward className="size-3.5" aria-hidden />
             </button>
             <div
               className="relative min-w-0 flex-1 rounded-full bg-white/15"
-              style={{ height: barProgH }}
+              style={{ height: videoBarProgressH }}
             >
               <div
-                className="absolute inset-y-0 left-0 rounded-full bg-sky-400/90"
+                className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-sky-400/90"
                 style={{ width: `${Math.round(progress * 100)}%` }}
               />
             </div>
-            <span
-              className="shrink-0 text-center font-mono tabular-nums text-white/80"
-              style={{ fontSize: barMono, minWidth: barMono * 4.2 }}
-            >
+            <span className="shrink-0 text-center font-mono text-[10px] tabular-nums leading-none text-white/80">
               {clampedIndex + 1}/{items.length}
             </span>
-            <span
-              className="shrink-0 text-right font-mono tabular-nums leading-none text-white/90"
-              style={{ fontSize: barMono, minWidth: barMono * 6.8 }}
-            >
+            <span className="shrink-0 text-right font-mono text-[10px] tabular-nums leading-none text-white/90">
               {formatBookMediaClock(timeUi.current)} / {formatBookMediaClock(timeUi.total)}
             </span>
           </div>

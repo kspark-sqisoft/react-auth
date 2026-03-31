@@ -572,6 +572,18 @@ function BookSlideVideoOverlay({
 
   const progress = duration > 0 ? currentTime / duration : 0;
 
+  const seekFromClientX = useCallback(
+    (track: HTMLDivElement, clientX: number) => {
+      const v = videoRef.current;
+      if (!v || duration <= 0) return;
+      const r = track.getBoundingClientRect();
+      const w = r.width || 1;
+      v.currentTime = (Math.min(Math.max(0, clientX - r.left), w) / w) * duration;
+      syncFromVideo();
+    },
+    [duration, syncFromVideo],
+  );
+
   const vOpacity = resolveBookElementOpacity(el.opacity);
   const vRot = resolveBookElementRotation(el.rotation);
   const vPivot = bookElementPivotKonva(el);
@@ -657,23 +669,46 @@ function BookSlideVideoOverlay({
           >
             <Square className="size-3 fill-current" />
           </button>
-          <input
-            type="range"
-            min={0}
-            max={1}
-            step={0.001}
-            value={progress}
-            disabled={duration <= 0}
-            onChange={(e) => {
-              const v = videoRef.current;
-              if (!v || duration <= 0) return;
-              v.currentTime = Number(e.target.value) * duration;
-              syncFromVideo();
-            }}
-            className="h-1 min-w-0 flex-1 cursor-pointer accent-primary disabled:opacity-40"
+          {/* 미디어 플레이리스트와 동일: 네이티브 range 대신 div 막대 — OS별 슬라이더 스타일 차이 제거 */}
+          <div
+            className={cn(
+              "relative min-w-0 flex-1 rounded-full bg-white/15",
+              duration > 0 ? "cursor-pointer" : "cursor-default opacity-40",
+            )}
+            style={{ height: Math.max(3, Math.min(7, 36 * 0.22)) }}
+            role="slider"
+            aria-valuemin={0}
+            aria-valuemax={100}
+            aria-valuenow={Math.round(progress * 100)}
             aria-label="재생 위치"
-          />
-          <span className="shrink-0 text-[10px] tabular-nums leading-none text-white/90">
+            aria-disabled={duration <= 0}
+            onPointerDown={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              if (duration <= 0) return;
+              const track = e.currentTarget;
+              track.setPointerCapture(e.pointerId);
+              seekFromClientX(track, e.clientX);
+              const onMove = (ev: PointerEvent) => seekFromClientX(track, ev.clientX);
+              const cleanup = (ev: PointerEvent) => {
+                if (track.hasPointerCapture(ev.pointerId)) {
+                  track.releasePointerCapture(ev.pointerId);
+                }
+                track.removeEventListener("pointermove", onMove);
+                track.removeEventListener("pointerup", cleanup);
+                track.removeEventListener("pointercancel", cleanup);
+              };
+              track.addEventListener("pointermove", onMove);
+              track.addEventListener("pointerup", cleanup);
+              track.addEventListener("pointercancel", cleanup);
+            }}
+          >
+            <div
+              className="pointer-events-none absolute inset-y-0 left-0 rounded-full bg-sky-400/90"
+              style={{ width: `${Math.round(progress * 100)}%` }}
+            />
+          </div>
+          <span className="shrink-0 text-right font-mono text-[10px] tabular-nums leading-none text-white/90">
             {formatMediaClock(currentTime)} / {formatMediaClock(duration)}
           </span>
         </div>
