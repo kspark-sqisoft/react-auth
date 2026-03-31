@@ -131,7 +131,7 @@ export function AppLayout() {
       <footer className="mt-auto shrink-0 border-t border-border bg-card/40 backdrop-blur-sm">
         <div
           className={cn(
-            "mx-auto flex w-full flex-col gap-6 px-4 py-8 sm:flex-row sm:items-start sm:justify-between",
+            "mx-auto flex w-full flex-col gap-4 px-4 py-4 sm:flex-row sm:items-start sm:justify-between sm:py-5",
             bookShellRoute ? "max-w-3xl" : wideMain ? "max-w-6xl" : "max-w-3xl",
           )}
         >

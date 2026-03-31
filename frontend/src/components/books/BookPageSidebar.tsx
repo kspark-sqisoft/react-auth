@@ -621,7 +621,7 @@ export function BookPageSidebar({
         {listBody}
       </div>
       {edit ? (
-        <div className={bookDockedPanelFooterClass(!fluid ? "gap-1.5 p-2" : undefined)}>
+        <div className={bookDockedPanelFooterClass()}>
           <Button type="button" variant="secondary" size="sm" className="w-full font-medium" onClick={onAddPage}>
             <Plus className={cn("mr-1", fluid ? "size-4" : "size-3.5")} aria-hidden />
             페이지 추가

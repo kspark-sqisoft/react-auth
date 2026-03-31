@@ -60,7 +60,10 @@ import {
 } from "@/lib/book-slide-templates";
 import { defaultTextWidgetBoxHeight } from "@/lib/book-text-widget";
 import { warmBookCanvasImagesForNeighborPages } from "@/lib/book-image-cache";
-import { bookLeftDockContentColumnClass } from "@/lib/book-workspace-ui";
+import {
+  bookCanvasStageMatClass,
+  bookLeftDockContentColumnClass,
+} from "@/lib/book-workspace-ui";
 import { bookKeys } from "@/lib/query-keys";
 import { useBookCanvasDisplayScale } from "@/lib/use-book-canvas-display-scale";
 import { useBookDocumentHistory } from "@/lib/use-book-document-history";
@@ -1615,7 +1618,9 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
             </div>
             <div
               ref={canvasWrapRef}
-              className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 pb-24"
+              className={bookCanvasStageMatClass(
+                "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 pb-24",
+              )}
               onWheel={handleWheel}
               onPointerDown={(e) => {
                 const slide = (e.currentTarget as HTMLElement).querySelector(
@@ -1965,7 +1970,9 @@ function BookDetailGuestBookView({
           </div>
           <div
             ref={canvasWrapRef}
-            className="relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4"
+            className={bookCanvasStageMatClass(
+              "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4",
+            )}
             onWheel={guestCanvasScale.handleWheel}
           >
             <BookSlideCanvas

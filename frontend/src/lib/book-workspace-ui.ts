@@ -36,7 +36,16 @@ export function bookLeftDockContentColumnClass(className?: string) {
 /** 패널 하단 액션 바(페이지 추가 등) */
 export function bookDockedPanelFooterClass(className?: string) {
   return cn(
-    "flex shrink-0 flex-col gap-2 border-t border-border/70 bg-muted/[0.04] p-3 backdrop-blur-[6px]",
+    "flex shrink-0 flex-col gap-1.5 border-t border-border/70 bg-muted/[0.04] p-2 backdrop-blur-[6px]",
+    className,
+  );
+}
+
+/** 중앙 스테이지(툴바 아래 슬라이드 영역) — 라이트/다크에서 크롬과 구분 */
+export function bookCanvasStageMatClass(className?: string) {
+  return cn(
+    "border-t border-border/35 bg-zinc-200/80 supports-[backdrop-filter]:backdrop-blur-[2px]",
+    "dark:border-border/60 dark:bg-zinc-800/50 dark:ring-1 dark:ring-inset dark:ring-border/55 dark:shadow-[inset_0_1px_0_rgba(255,255,255,0.05)]",
     className,
   );
 }
