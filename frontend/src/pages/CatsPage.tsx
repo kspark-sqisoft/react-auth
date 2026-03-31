@@ -1,8 +1,13 @@
-import { useActionState, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRef, useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuth } from "@/stores/auth-store";
-import { createCat, deleteCat, fetchCats } from "@/lib/api";
+import {
+  createCat,
+  deleteCat,
+  fetchCats,
+  uploadCatImage,
+} from "@/lib/api";
 import { appLog } from "@/lib/app-log";
 import { formDataGetString } from "@/lib/form-data-utils";
 import { fieldErrorsFromZodIssues } from "@/lib/zod-form";
@@ -13,7 +18,6 @@ import {
 import { catKeys } from "@/lib/query-keys";
 import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
 import { FormFieldError } from "@/components/forms/FormFieldError";
-import { FormStatusSubmitButton } from "@/components/forms/FormStatusSubmitButton";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -25,6 +29,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SafeImage } from "@/components/ui/safe-image";
 import {
   Table,
   TableBody,
@@ -47,20 +52,21 @@ import { formatDateMediumShort } from "@/lib/format-date";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
 
-type CatCreateActionState = {
-  serverError: string | null;
-  fieldErrors: Partial<Record<keyof CatCreateFormValues, string>>;
-};
-
 /**
- * 고양이 목록은 누구나 조회. 등록·삭제는 로그인 사용자만 (백엔드 JwtAuthGuard와 동일).
+ * 고양이 목록은 누구나 조회. 등록·삭제·사진 업로드는 로그인 사용자만 (백엔드 JwtAuthGuard와 동일).
  */
 export function CatsPage() {
   const { user } = useAuth();
   const queryClient = useQueryClient();
   const listKey = catKeys.list();
+  const formRef = useRef<HTMLFormElement>(null);
+  const imageInputRef = useRef<HTMLInputElement>(null);
 
   const [deleteTargetId, setDeleteTargetId] = useState<number | null>(null);
+  const [createFieldErrors, setCreateFieldErrors] = useState<
+    Partial<Record<keyof CatCreateFormValues, string>>
+  >({});
+  const [createServerError, setCreateServerError] = useState<string | null>(null);
 
   const {
     data: cats = [],
@@ -89,55 +95,72 @@ export function CatsPage() {
     },
   });
 
-  const initialCreateState: CatCreateActionState = {
-    serverError: null,
-    fieldErrors: {},
-  };
-
-  async function createAction(
-    _prev: CatCreateActionState,
-    formData: FormData,
-  ): Promise<CatCreateActionState> {
-    const parsed = catCreateSchema.safeParse({
-      name: formDataGetString(formData, "name"),
-      breed: formDataGetString(formData, "breed"),
-      age: formDataGetString(formData, "age"),
-    });
-    if (!parsed.success) {
-      return {
-        serverError: null,
-        fieldErrors: fieldErrorsFromZodIssues<keyof CatCreateFormValues>(
-          parsed.error.issues,
-        ),
-      };
-    }
-
-    try {
-      await createCat({
-        name: parsed.data.name,
-        ...(parsed.data.age.trim()
-          ? { age: Number(parsed.data.age.trim()) }
-          : {}),
-        ...(parsed.data.breed.trim()
-          ? { breed: parsed.data.breed.trim() }
+  const createMutation = useMutation({
+    mutationFn: async (input: {
+      name: string;
+      age?: number;
+      breed?: string;
+      image: File | null;
+    }) => {
+      const cat = await createCat({
+        name: input.name,
+        ...(input.age !== undefined ? { age: input.age } : {}),
+        ...(input.breed !== undefined && input.breed !== ""
+          ? { breed: input.breed }
           : {}),
       });
+      if (input.image && input.image.size > 0) {
+        return uploadCatImage(cat.id, input.image);
+      }
+      return cat;
+    },
+    onSuccess: () => {
       toast.success("고양이를 등록했습니다.");
+      setCreateFieldErrors({});
+      setCreateServerError(null);
+      formRef.current?.reset();
+      if (imageInputRef.current) imageInputRef.current.value = "";
       void queryClient.invalidateQueries({ queryKey: catKeys.all });
       appLog("cats", "등록 성공");
-      return { serverError: null, fieldErrors: {} };
-    } catch (err) {
+    },
+    onError: (err) => {
       const msg =
         err instanceof Error ? err.message : "등록에 실패했습니다.";
+      setCreateServerError(msg);
       toast.error(msg);
-      return { serverError: msg, fieldErrors: {} };
-    }
-  }
+    },
+  });
 
-  const [createState, createFormAction] = useActionState(
-    createAction,
-    initialCreateState,
-  );
+  function onSubmitCreate(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setCreateServerError(null);
+    const fd = new FormData(e.currentTarget);
+    const parsed = catCreateSchema.safeParse({
+      name: formDataGetString(fd, "name"),
+      breed: formDataGetString(fd, "breed"),
+      age: formDataGetString(fd, "age"),
+    });
+    if (!parsed.success) {
+      setCreateFieldErrors(
+        fieldErrorsFromZodIssues<keyof CatCreateFormValues>(
+          parsed.error.issues,
+        ),
+      );
+      return;
+    }
+    setCreateFieldErrors({});
+    const file = imageInputRef.current?.files?.[0] ?? null;
+    createMutation.mutate({
+      name: parsed.data.name,
+      ...(parsed.data.age.trim()
+        ? { age: Number(parsed.data.age.trim()) }
+        : {}),
+      ...(parsed.data.breed.trim()
+        ? { breed: parsed.data.breed.trim() }
+        : {}),
+      image: file && file.size > 0 ? file : null,
+    });
+  }
 
   const listErrMsg =
     listError && listQueryError instanceof Error
@@ -153,7 +176,7 @@ export function CatsPage() {
           Cats (학습)
         </h1>
         <p className="text-sm text-muted-foreground">
-          목록·상세는 공개입니다. 등록과 삭제는 로그인한 사용자만 할 수 있습니다.
+          목록·상세는 공개입니다. 등록·삭제·사진 업로드는 로그인한 사용자만 할 수 있습니다.
         </p>
       </div>
 
@@ -163,11 +186,12 @@ export function CatsPage() {
             <CardTitle className="text-lg">고양이 등록</CardTitle>
             <CardDescription>
               이름은 필수입니다. 나이·품종은 선택(나이 비우면 서버 기본값 1, 품종 비우면 mixed).
+              사진은 선택(JPEG·PNG·GIF·WebP, 최대 3MB) — 등록 직후 같은 요청 흐름에서 업로드됩니다.
             </CardDescription>
           </CardHeader>
-          <form action={createFormAction}>
+          <form ref={formRef} onSubmit={onSubmitCreate}>
             <CardContent className="space-y-4">
-              <FormErrorAlert message={createState.serverError} />
+              <FormErrorAlert message={createServerError} />
               <div className="space-y-2">
                 <Label htmlFor="cat-name">이름</Label>
                 <Input
@@ -175,9 +199,9 @@ export function CatsPage() {
                   name="name"
                   autoComplete="off"
                   placeholder="예: 나비"
-                  aria-invalid={Boolean(createState.fieldErrors.name)}
+                  aria-invalid={Boolean(createFieldErrors.name)}
                 />
-                <FormFieldError message={createState.fieldErrors.name} />
+                <FormFieldError message={createFieldErrors.name} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="cat-age">나이 (0~40, 비워 두면 기본)</Label>
@@ -188,9 +212,9 @@ export function CatsPage() {
                   inputMode="numeric"
                   autoComplete="off"
                   placeholder="예: 3"
-                  aria-invalid={Boolean(createState.fieldErrors.age)}
+                  aria-invalid={Boolean(createFieldErrors.age)}
                 />
-                <FormFieldError message={createState.fieldErrors.age} />
+                <FormFieldError message={createFieldErrors.age} />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="cat-breed">품종</Label>
@@ -199,14 +223,33 @@ export function CatsPage() {
                   name="breed"
                   autoComplete="off"
                   placeholder="예: 코리안숏헤어"
-                  aria-invalid={Boolean(createState.fieldErrors.breed)}
-                  className="mb-4"
+                  aria-invalid={Boolean(createFieldErrors.breed)}
                 />
-                <FormFieldError message={createState.fieldErrors.breed} />
+                <FormFieldError message={createFieldErrors.breed} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cat-image">사진 (선택)</Label>
+                <Input
+                  id="cat-image"
+                  ref={imageInputRef}
+                  name="image"
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="cursor-pointer text-sm file:me-3 file:rounded-md file:border-0 file:bg-muted file:px-3 file:py-1.5 file:text-xs file:font-medium mb-4"
+                />
               </div>
             </CardContent>
             <CardFooter>
-              <FormStatusSubmitButton>등록</FormStatusSubmitButton>
+              <Button type="submit" disabled={createMutation.isPending}>
+                {createMutation.isPending ? (
+                  <span className="inline-flex items-center gap-2">
+                    <Spinner className="size-4 shrink-0" />
+                    등록 중…
+                  </span>
+                ) : (
+                  "등록"
+                )}
+              </Button>
             </CardFooter>
           </form>
         </Card>
@@ -243,6 +286,7 @@ export function CatsPage() {
             <Table>
               <TableHeader>
                 <TableRow>
+                  <TableHead className="w-14">사진</TableHead>
                   <TableHead className="w-16">ID</TableHead>
                   <TableHead>이름</TableHead>
                   <TableHead className="w-16">나이</TableHead>
@@ -258,6 +302,31 @@ export function CatsPage() {
               <TableBody>
                 {cats.map((c) => (
                   <TableRow key={c.id}>
+                    <TableCell className="py-2">
+                      <Link
+                        to={`/cats/${c.id}`}
+                        className="block size-11 overflow-hidden rounded-md bg-muted ring-1 ring-border"
+                        aria-label={`${c.name} 사진`}
+                      >
+                        {c.imageUrl ? (
+                          <SafeImage
+                            src={c.imageUrl}
+                            alt=""
+                            className="size-full object-cover"
+                            placeholderLabel={`${c.name} 사진`}
+                            fallback={
+                              <span className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
+                                —
+                              </span>
+                            }
+                          />
+                        ) : (
+                          <span className="flex size-full items-center justify-center text-[10px] text-muted-foreground">
+                            없음
+                          </span>
+                        )}
+                      </Link>
+                    </TableCell>
                     <TableCell className="font-mono text-xs text-muted-foreground">
                       {c.id}
                     </TableCell>

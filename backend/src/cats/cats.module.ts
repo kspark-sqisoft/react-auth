@@ -12,6 +12,7 @@ import { CatsLoggingInterceptor } from './interceptors/cats-logging.interceptor'
 import { CatsLoggerMiddleware } from './middleware/cats-logger.middleware';
 import { CatsParseIntIdPipe } from './pipes/cats-parse-int-id.pipe';
 import { ParseCreateCatPipe } from './pipes/parse-create-cat.pipe';
+import { ParseUpdateCatPipe } from './pipes/parse-update-cat.pipe';
 
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -115,6 +116,7 @@ import { ParseCreateCatPipe } from './pipes/parse-create-cat.pipe';
     CatsLoggingInterceptor,
     CatNotFoundFilter,
     ParseCreateCatPipe,
+    ParseUpdateCatPipe,
     CatsParseIntIdPipe,
     CatsBeforeJwtLogGuard,
     CatsJwtLogGuard,

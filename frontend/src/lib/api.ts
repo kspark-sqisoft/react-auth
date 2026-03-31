@@ -497,6 +497,8 @@ export type Cat = {
   name: string;
   age: number;
   breed: string;
+  /** `/uploads/cat-images/...` 또는 null */
+  imageUrl: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -548,6 +550,34 @@ export async function createCat(input: {
     return data;
   } catch (e) {
     appLog("cats-api", "[CATS-CERR] POST /cats 실패", e);
+    rethrowAsApiError(e);
+  }
+}
+
+/** JWT 필요. `name`·`age`·`breed` 중 최소 하나. */
+export async function patchCat(
+  id: number,
+  body: { name?: string; age?: number; breed?: string },
+): Promise<Cat> {
+  try {
+    const { data } = await api.patch<Cat>(`/cats/${id}`, body);
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+/** JWT 필요. `image` 필드로 JPEG/PNG/GIF/WebP (최대 3MB). */
+export async function uploadCatImage(id: number, file: File): Promise<Cat> {
+  appLog("cats-api", `[CATS-C09] POST /cats/${id}/image → 요청`);
+  try {
+    const body = new FormData();
+    body.append("image", file);
+    const { data } = await api.post<Cat>(`/cats/${id}/image`, body);
+    appLog("cats-api", `[CATS-C10] POST /cats/${id}/image ← 응답`);
+    return data;
+  } catch (e) {
+    appLog("cats-api", `[CATS-CERR] POST /cats/${id}/image 실패`, e);
     rethrowAsApiError(e);
   }
 }

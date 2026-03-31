@@ -33,6 +33,10 @@ export class Cat {
   @Column({ default: 'mixed' })
   breed: string;
 
+  /** `uploads/cat-images/` 아래 파일명(확장자 포함). 없으면 null */
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  imageFilename: string | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

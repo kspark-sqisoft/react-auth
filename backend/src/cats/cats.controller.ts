@@ -1,17 +1,28 @@
 import {
+  BadRequestException,
   Body,
   Controller,
   Delete,
   Get,
   Logger,
   Param,
+  Patch,
   Post,
+  UploadedFile,
   UseFilters,
   UseGuards,
   UseInterceptors,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiBody, ApiOperation, ApiTags } from '@nestjs/swagger';
+import { FileInterceptor } from '@nestjs/platform-express';
+import {
+  ApiBearerAuth,
+  ApiBody,
+  ApiConsumes,
+  ApiOperation,
+  ApiTags,
+} from '@nestjs/swagger';
 import { CreateCatDto } from './dto/create-cat.dto';
+import { UpdateCatDto } from './dto/update-cat.dto';
 import {
   CatsClientMeta,
   type CatsClientSnapshot,
@@ -23,6 +34,8 @@ import { CatsJwtLogGuard } from './guards/cats-jwt-log.guard';
 import { CatsLoggingInterceptor } from './interceptors/cats-logging.interceptor';
 import { CatsParseIntIdPipe } from './pipes/cats-parse-int-id.pipe';
 import { ParseCreateCatPipe } from './pipes/parse-create-cat.pipe';
+import { ParseUpdateCatPipe } from './pipes/parse-update-cat.pipe';
+import { catImageMulterOptions } from './cat-image-upload.options';
 import { CatsService } from './cats.service';
 
 /**
@@ -78,6 +91,56 @@ export class CatsController {
   findOne(@Param('id', CatsParseIntIdPipe) id: number) {
     this.logger.log(`[CATS·컨트롤러] findOne(${id}) 핸들러 진입`);
     return this.catsService.findOne(id);
+  }
+
+  @Patch(':id')
+  @UseGuards(CatsBeforeJwtLogGuard, CatsJwtLogGuard, CatsAfterJwtLogGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiBody({ type: UpdateCatDto })
+  @ApiOperation({
+    summary: '[학습] 정보 수정 (로그인 필요)',
+    description: 'name, age, breed 중 최소 하나. 생략한 필드는 그대로 둡니다.',
+  })
+  update(
+    @Param('id', CatsParseIntIdPipe) id: number,
+    @Body(ParseUpdateCatPipe) dto: UpdateCatDto,
+  ) {
+    this.logger.log(`[CATS·컨트롤러] patch(${id}) 핸들러 진입`);
+    return this.catsService.update(id, dto);
+  }
+
+  @Post(':id/image')
+  @UseGuards(CatsBeforeJwtLogGuard, CatsJwtLogGuard, CatsAfterJwtLogGuard)
+  @ApiBearerAuth('JWT-auth')
+  @ApiConsumes('multipart/form-data')
+  @ApiBody({
+    schema: {
+      type: 'object',
+      required: ['image'],
+      properties: {
+        image: {
+          type: 'string',
+          format: 'binary',
+          description: 'JPEG/PNG/GIF/WebP, 최대 3MB',
+        },
+      },
+    },
+  })
+  @UseInterceptors(FileInterceptor('image', catImageMulterOptions()))
+  @ApiOperation({
+    summary: '[학습] 고양이 사진 업로드·교체 (로그인 필요)',
+    description:
+      'multipart 필드명 `image`. 기존 파일이 있으면 서버에서 삭제 후 교체합니다.',
+  })
+  uploadImage(
+    @Param('id', CatsParseIntIdPipe) id: number,
+    @UploadedFile() file?: Express.Multer.File,
+  ) {
+    this.logger.log(`[CATS·컨트롤러] uploadImage(${id}) 핸들러 진입`);
+    if (!file?.filename) {
+      throw new BadRequestException('image 파일이 필요합니다.');
+    }
+    return this.catsService.uploadImage(id, file.filename);
   }
 
   @Post()

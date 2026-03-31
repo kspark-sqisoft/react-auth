@@ -36,6 +36,9 @@ export const BOOK_VIDEOS_SUBDIR = 'book-videos';
 /** 북 동영상 포스터 */
 export const BOOK_VIDEO_POSTERS_SUBDIR = 'book-video-posters';
 
+/** Cats(학습) 고양이 사진 */
+export const CAT_IMAGES_SUBDIR = 'cat-images';
+
 export const JWT_ACCESS_SECRET =
   process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret-change-me';
 
