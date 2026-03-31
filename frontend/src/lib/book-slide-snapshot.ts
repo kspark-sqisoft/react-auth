@@ -518,6 +518,61 @@ export async function captureBookSlideToDataURL(
             opacity: elOp,
           }),
         );
+      } else if (el.type === "news") {
+        const nw = sx(el.width);
+        const nh = sx(el.height);
+        const np = bookElementPivotKonva({
+          x: sx(el.x),
+          y: sx(el.y),
+          width: nw,
+          height: nh,
+          rotation: el.rotation,
+        });
+        const newsFill = parseBookWeatherBackground(el.newsBackground) ?? "#172554";
+        const newsStrokeA = bookWidgetBackdropAlphaFromCss(newsFill);
+        const newsStrokeW = newsStrokeA < 0.02 ? 0 : Math.max(0.5, scale);
+        const newsStroke =
+          newsStrokeW === 0 ? "transparent" : `rgba(99,102,241,${newsStrokeA * 0.85})`;
+        const nUserOw = resolveBookElementOutlineWidth(el);
+        const nUserOc = resolveBookElementOutlineColor(el);
+        const nCorner = sx(resolveBookElementBorderRadius(el));
+        const nStroke = nUserOw > 0 ? nUserOc : newsStroke;
+        const nStrokeW = nUserOw > 0 ? Math.max(0.5, sx(nUserOw)) : newsStrokeW;
+        layer.add(
+          new Konva.Rect({
+            x: np.cx,
+            y: np.cy,
+            offsetX: np.offsetX,
+            offsetY: np.offsetY,
+            width: nw,
+            height: nh,
+            rotation: np.rotation,
+            fill: newsFill,
+            stroke: nStroke,
+            strokeWidth: nStrokeW,
+            cornerRadius: Math.max(0, nCorner),
+            opacity: elOp,
+          }),
+        );
+        const nTextFill = parseBookWidgetTextColor(el.newsTextColor) ?? "#e0e7ff";
+        layer.add(
+          new Konva.Text({
+            x: np.cx,
+            y: np.cy,
+            offsetX: np.offsetX,
+            offsetY: np.offsetY,
+            width: nw,
+            height: nh,
+            rotation: np.rotation,
+            text: "뉴스",
+            fontSize: Math.max(7, 11 * scale),
+            fontFamily: "Geist Variable, ui-sans-serif, system-ui, sans-serif",
+            fill: nTextFill,
+            align: "center",
+            verticalAlign: "middle",
+            opacity: elOp,
+          }),
+        );
       } else if (el.type === "digitalClock") {
         const cw = sx(el.width);
         const ch = sx(el.height);

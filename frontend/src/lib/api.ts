@@ -494,6 +494,39 @@ export async function fetchSeoulWeather(): Promise<SeoulWeatherPayload> {
   return fetchWeatherCurrent(null);
 }
 
+// --- News (NewsAPI.org, 키는 백엔드 NEWSAPI_KEY) — https://newsapi.org/docs/endpoints/top-headlines
+
+export type NewsArticlePayload = {
+  title: string;
+  url: string;
+  source: string;
+  publishedAt: string;
+};
+
+export type NewsHeadlinesPayload = {
+  articles: NewsArticlePayload[];
+  fetchedAt: string;
+};
+
+export async function fetchNewsHeadlines(params?: {
+  country?: string;
+  category?: string;
+  pageSize?: number;
+}): Promise<NewsHeadlinesPayload> {
+  try {
+    const { data } = await api.get<NewsHeadlinesPayload>("/news/headlines", {
+      params: {
+        ...(params?.country ? { country: params.country } : {}),
+        ...(params?.category ? { category: params.category } : {}),
+        pageSize: params?.pageSize ?? 5,
+      },
+    });
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
 // --- Cats (학습용 API; 목록·상세는 공개, 등록·삭제는 JWT) ---
 
 export type Cat = {
@@ -703,7 +736,7 @@ export async function createBook(input: {
 
 export type BookLayoutAiAddWidgetDto = {
   type: "add_widget";
-  widget: "weather" | "digitalClock" | "text" | "image" | "video";
+  widget: "weather" | "digitalClock" | "news" | "text" | "image" | "video";
   anchor: string;
   slideNumber?: number;
   cityQuery?: string;

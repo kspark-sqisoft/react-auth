@@ -50,7 +50,7 @@ type VisualKind =
   | "snow"
   | "mist";
 
-type LayoutVariant = "standard" | "minimal" | "air-only" | "split-air";
+type LayoutVariant = "standard" | "minimal" | "air-only" | "split-air" | "time-only";
 
 function visualKindFromOwmIcon(icon: string): VisualKind {
   const code = icon.slice(0, 2);
@@ -97,6 +97,8 @@ function pickLayoutVariant(d: BookWeatherDisplayResolved): LayoutVariant {
     d.temp || d.feelsLike || d.description || d.icon || d.humidity || d.wind;
   const nAir = (d.pm25 ? 1 : 0) + (d.pm10 ? 1 : 0) + (d.aqi ? 1 : 0);
   if (!weatherCore && nAir > 0) return "air-only";
+  /** 날씨·대기 숫자 없이 시계/날짜만 — 2열 그리드 빈 칸 방지 */
+  if (!weatherCore && nAir === 0 && (d.clock || d.date)) return "time-only";
   if (weatherCore && nAir >= 2) return "split-air";
   if (weatherCore && nAir === 0 && !d.clock && !d.date) return "minimal";
   return "standard";
@@ -365,20 +367,24 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   const fRot = liveFrame != null ? liveFrame.rotation : rot;
 
   const boxH = fh * scale;
-  const condSize = Math.max(14, Math.min(26, boxH * 0.14));
-  const tempSize = Math.max(26, Math.min(52, boxH * 0.36));
-  const tempSizeMinimal = Math.max(34, Math.min(64, boxH * 0.48));
-  const clockSize = Math.max(16, Math.min(30, boxH * 0.2));
-  const bodySize = Math.max(9, Math.min(13, boxH * 0.085));
-  /** 대기(PM·AQI) 전용 — 본문보다 한 단계 크게 */
-  const airTextSize = Math.max(11, Math.min(16, bodySize * 1.22));
-  const aqiHuge = Math.max(34, Math.min(58, boxH * 0.42));
+  const boxW = fw * scale;
+  /** 작은 위젯에서 글자·아이콘을 한 단계 줄여 잘림 완화 */
+  const fitScale = Math.min(1, Math.max(0.68, Math.min(boxH / 200, boxW / 260)));
 
   const errMsg = error instanceof Error ? error.message : "불러오지 못했습니다.";
 
   const kind = data ? visualKindFromOwmIcon(data.icon || "02d") : "cloudy-day";
   const LineIcon = WEATHER_LINE_ICONS[kind];
   const variant = data ? pickLayoutVariant(disp) : "standard";
+
+  const condSize = Math.round(Math.max(14, Math.min(26, boxH * 0.14)) * fitScale);
+  const tempSize = Math.round(Math.max(26, Math.min(52, boxH * 0.36)) * fitScale);
+  const tempSizeMinimal = Math.round(Math.max(34, Math.min(64, boxH * 0.48)) * fitScale);
+  const clockSize = Math.round(Math.max(16, Math.min(30, boxH * 0.2)) * fitScale);
+  const bodySize = Math.round(Math.max(9, Math.min(13, boxH * 0.085)) * fitScale);
+  /** 대기(PM·AQI) 전용 — 본문보다 한 단계 크게 */
+  const airTextSize = Math.max(10, Math.min(16, bodySize * 1.22));
+  const aqiHuge = Math.round(Math.max(34, Math.min(58, boxH * 0.42)) * fitScale);
   const customTextColor = parseBookWidgetTextColor(el.weatherTextColor);
   const useCustomText = Boolean(customTextColor);
   const snowLike = !useCustomText && kind === "snow" && variant !== "air-only";
@@ -394,6 +400,18 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
 
   const showTimeCol = disp.clock || disp.date;
   const hasAir = disp.pm25 || disp.pm10 || disp.aqi;
+
+  /** 2열일 때 왼쪽이 비면(예: 습도만+시계) 빈 칸 대신 세로 스택 레이아웃 사용 */
+  const leftHasPrimary =
+    variant === "split-air"
+      ? Boolean(disp.icon || disp.description || disp.temp || hasAir)
+      : variant === "standard"
+        ? Boolean(disp.icon || disp.description || disp.temp)
+        : true;
+  const useWeatherTimeColumns =
+    (variant === "standard" || variant === "split-air") &&
+    showTimeCol &&
+    (variant === "split-air" || leftHasPrimary);
 
   const ringAccent =
     variant === "split-air"
@@ -564,7 +582,10 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
         </div>
       ) : data ? (
         <div
-          className={cn("relative h-full min-h-0 w-full", !useCustomText && "text-white")}
+          className={cn(
+            "relative h-full min-h-0 w-full overflow-hidden",
+            !useCustomText && "text-white",
+          )}
           style={contentTextStyle}
         >
           {!customBg && variant === "air-only" ? (
@@ -635,10 +656,43 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                 {renderAirBlock(data, { compact: true })}
               </div>
             </div>
+          ) : variant === "time-only" ? (
+            <div
+              className={cn(
+                "relative z-1 flex h-full min-h-0 flex-col items-center justify-center gap-2 overflow-hidden px-[6%] py-[7%] text-center",
+                textMain,
+              )}
+            >
+              {disp.clock ? (
+                <div
+                  className={cn(
+                    "font-bold tabular-nums tracking-tight",
+                    !useCustomText && !snowLike && "drop-shadow-md",
+                  )}
+                  style={{ fontSize: clockSize, lineHeight: 1 }}
+                >
+                  {timeStr}
+                </div>
+              ) : null}
+              {disp.date ? (
+                <div
+                  className={cn("max-w-full font-medium leading-snug", textFaint)}
+                  style={{ fontSize: bodySize * 0.92 }}
+                >
+                  {dateStr}
+                </div>
+              ) : null}
+              <div
+                className={cn("mt-0.5 font-semibold uppercase tracking-[0.14em]", textMuted)}
+                style={{ fontSize: bodySize * 0.88 }}
+              >
+                {data.locationLabel}
+              </div>
+            </div>
           ) : variant === "minimal" ? (
             <div
               className={cn(
-                "relative z-1 flex h-full min-h-0 flex-col items-center justify-center gap-1.5 px-[6%] py-[6%]",
+                "relative z-1 flex h-full min-h-0 flex-col items-center justify-center gap-1.5 overflow-hidden px-[6%] py-[6%]",
                 textMain,
               )}
             >
@@ -699,11 +753,50 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                 {data.locationLabel}
               </div>
             </div>
+          ) : variant === "standard" && showTimeCol && !leftHasPrimary ? (
+            <div
+              className={cn(
+                "relative z-1 flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden px-[5%] py-[6%]",
+                textMain,
+              )}
+            >
+              <div className="flex shrink-0 flex-col items-center gap-1 sm:items-start">
+                {disp.clock ? (
+                  <div
+                    className={cn(
+                      "font-bold tabular-nums tracking-tight",
+                      !useCustomText && !snowLike && "drop-shadow-md",
+                    )}
+                    style={{ fontSize: clockSize, lineHeight: 1 }}
+                  >
+                    {timeStr}
+                  </div>
+                ) : null}
+                {disp.date ? (
+                  <div
+                    className={cn("font-medium leading-snug opacity-90", textFaint)}
+                    style={{ fontSize: bodySize * 0.88 }}
+                  >
+                    {dateStr}
+                  </div>
+                ) : null}
+              </div>
+              <div className="min-w-0 space-y-2">
+                <div
+                  className={cn("font-semibold uppercase tracking-[0.12em]", textMain)}
+                  style={{ fontSize: bodySize }}
+                >
+                  {data.locationLabel}
+                </div>
+                {hasAir ? renderAirBlock(data, {}) : null}
+                {renderSecondaryWeather(data)}
+              </div>
+            </div>
           ) : (
             <div
               className={cn(
                 "relative z-1 grid h-full min-h-0 min-w-0 gap-x-3 px-[5%] py-[6%]",
-                showTimeCol ? "grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)]" : "grid-cols-1",
+                useWeatherTimeColumns ? "grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)]" : "grid-cols-1",
                 textMain,
               )}
             >
@@ -731,7 +824,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                     {disp.description ? (
                       <span
                         className={cn(
-                          "min-w-0 truncate font-medium capitalize leading-tight",
+                          "line-clamp-3 min-w-0 break-words font-medium capitalize leading-tight",
                           textMuted,
                           !useCustomText && !snowLike && "drop-shadow-sm",
                         )}
@@ -773,10 +866,10 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                 </div>
               </div>
 
-              {showTimeCol ? (
+              {useWeatherTimeColumns ? (
                 <div
                   className={cn(
-                    "flex min-h-0 min-w-0 flex-col items-end justify-between border-l ps-3 text-end",
+                    "flex min-h-0 min-w-0 flex-col items-end justify-between overflow-hidden border-l ps-3 text-end",
                     useCustomText ? "border-current/18" : snowLike ? "border-slate-600/30" : "border-white/22",
                   )}
                 >

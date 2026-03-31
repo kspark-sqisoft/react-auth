@@ -2,6 +2,8 @@ import {
   BOOK_CANVAS_DRAG_GRID_PX,
   DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
   DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
+  DEFAULT_BOOK_NEWS_WIDGET_HEIGHT,
+  DEFAULT_BOOK_NEWS_WIDGET_WIDTH,
   DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
   DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
   snapBookElementTopLeftToGrid,
@@ -11,7 +13,7 @@ import { defaultTextWidgetBoxHeight } from "@/lib/book-text-widget";
 
 export type BookLayoutAiAddWidgetAction = {
   type: "add_widget";
-  widget: "weather" | "digitalClock" | "text" | "image" | "video";
+  widget: "weather" | "digitalClock" | "news" | "text" | "image" | "video";
   anchor: string;
   /** 왼쪽 목록 1번째 슬라이드 = 1. 없으면 현재 보는 슬라이드 */
   slideNumber?: number;
@@ -157,6 +159,12 @@ function widgetSize(
     return {
       w: DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
       h: DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
+    };
+  }
+  if (a.widget === "news") {
+    return {
+      w: DEFAULT_BOOK_NEWS_WIDGET_WIDTH,
+      h: DEFAULT_BOOK_NEWS_WIDGET_HEIGHT,
     };
   }
   if (a.widget === "image") {
@@ -346,6 +354,20 @@ export function widgetPlacementsFromLayoutAiActions(
         element: {
           id,
           type: "digitalClock",
+          x: snapped.x,
+          y: snapped.y,
+          width: w,
+          height: h,
+        },
+        targetSlideNumber,
+      });
+      continue;
+    }
+    if (a.widget === "news") {
+      out.push({
+        element: {
+          id,
+          type: "news",
           x: snapped.x,
           y: snapped.y,
           width: w,

@@ -1,6 +1,8 @@
+import { useState } from "react";
 import { Expand, FolderOpen, Library, SlidersHorizontal, Trash2 } from "lucide-react";
 import {
   BOOK_MEDIA_OBJECT_FIT_VALUES,
+  BOOK_NEWS_CATEGORIES,
   BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS,
   type BookCanvasElement,
   type BookDigitalClockDisplay,
@@ -66,6 +68,66 @@ type BookInspectorPanelProps = {
   /** `false`면 라이브러리 버튼 숨김 */
   mediaLibraryReplaceEnabled?: boolean;
 };
+
+/** 캐러셀 간격: 입력 중 1→10처럼 잠깐 범위 밖이 되므로 blur까지 draft만 두고 커밋 */
+function NewsCarouselIntervalInputInner({
+  elementId,
+  seconds,
+  onChange,
+}: {
+  elementId: string;
+  seconds: number | undefined;
+  onChange: BookInspectorPanelProps["onChange"];
+}) {
+  const [draft, setDraft] = useState(
+    () => (seconds != null && Number.isInteger(seconds) ? String(seconds) : ""),
+  );
+
+  return (
+    <div className="space-y-1">
+      <Input
+        id="insp-news-iv"
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        placeholder="기본 5"
+        className="font-mono"
+        value={draft}
+        onChange={(e) => {
+          const t = e.target.value.replace(/\D/g, "").slice(0, 3);
+          setDraft(t);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+        }}
+        onBlur={() => {
+          if (draft.trim() === "") {
+            onChange(elementId, { newsCarouselIntervalSec: undefined });
+            return;
+          }
+          const n = Number(draft);
+          if (Number.isInteger(n) && n >= 3 && n <= 120) {
+            onChange(elementId, { newsCarouselIntervalSec: n });
+          } else {
+            setDraft(
+              seconds != null && Number.isInteger(seconds) ? String(seconds) : "",
+            );
+          }
+        }}
+      />
+      <p className="text-[11px] text-muted-foreground leading-snug">3~120초, 비우면 5초</p>
+    </div>
+  );
+}
+
+function NewsCarouselIntervalInput(props: {
+  elementId: string;
+  seconds: number | undefined;
+  onChange: BookInspectorPanelProps["onChange"];
+}) {
+  const k = `${props.elementId}:${props.seconds == null ? "u" : props.seconds}`;
+  return <NewsCarouselIntervalInputInner key={k} {...props} />;
+}
 
 function num(v: string, fallback: number, min: number, max: number) {
   const n = Number(v);
@@ -272,8 +334,12 @@ function parseDigitalClockBgForInspector(raw: string | undefined): { hex: string
   return fallback;
 }
 
-type WidgetBackdropFieldKey = "clockBackground" | "weatherBackground";
-type WidgetTextColorFieldKey = "weatherTextColor" | "clockTextColor";
+type WidgetBackdropFieldKey = "clockBackground" | "weatherBackground" | "newsBackground";
+type WidgetTextColorFieldKey =
+  | "weatherTextColor"
+  | "clockTextColor"
+  | "newsTextColor"
+  | "newsMetaColor";
 
 function OptionalWidgetTextColorFields({
   elementId,
@@ -282,6 +348,8 @@ function OptionalWidgetTextColorFields({
   defaultHex,
   colorAriaLabel,
   defaultHint,
+  labelText = "텍스트 색",
+  appliedHint = "본문·아이콘(선)에 적용됩니다.",
   onChange,
 }: {
   elementId: string;
@@ -290,6 +358,10 @@ function OptionalWidgetTextColorFields({
   defaultHex: string;
   colorAriaLabel: string;
   defaultHint: string;
+  /** 인스펙터 라벨 (기본: 텍스트 색) */
+  labelText?: string;
+  /** 사용자 지정 켜졌을 때 색 적용 범위 안내 */
+  appliedHint?: string;
   onChange: BookInspectorPanelProps["onChange"];
 }) {
   const sanitized = parseBookWidgetTextColor(value);
@@ -303,7 +375,7 @@ function OptionalWidgetTextColorFields({
 
   return (
     <div className="space-y-2">
-      <Label>텍스트 색</Label>
+      <Label>{labelText}</Label>
       <label className="flex cursor-pointer items-center gap-2 text-sm leading-none">
         <Checkbox
           checked={usesCustom}
@@ -326,9 +398,7 @@ function OptionalWidgetTextColorFields({
             onChange={(e) => patch(digitalClockHexToRgba(e.target.value, 1))}
             aria-label={colorAriaLabel}
           />
-          <span className="text-[11px] text-muted-foreground">
-            본문·아이콘(선)에 적용됩니다.
-          </span>
+          <span className="text-[11px] text-muted-foreground">{appliedHint}</span>
         </div>
       ) : (
         <p className="text-[11px] text-muted-foreground">{defaultHint}</p>
@@ -446,7 +516,7 @@ function ElementShapeChromeFields({
   const colorPick = outlineInspectorHex(ocResolved);
 
   const typeHint =
-    el.type === "weather" || el.type === "digitalClock"
+    el.type === "weather" || el.type === "digitalClock" || el.type === "news"
       ? `저장하지 않으면 기본 ${BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS}px(둥근 카드)입니다.`
       : "텍스트·이미지·동영상은 기본 0(각진 모서리)입니다.";
 
@@ -650,7 +720,7 @@ export function BookInspectorPanel({
                         }
                         verticalAlign={
                           selected.verticalAlign === "middle" ||
-                          selected.verticalAlign === "bottom"
+                            selected.verticalAlign === "bottom"
                             ? selected.verticalAlign
                             : "top"
                         }
@@ -718,43 +788,26 @@ export function BookInspectorPanel({
                       opacity={selected.opacity}
                       onChange={onChange}
                     />
-                    <div className="space-y-1">
-                      <Label htmlFor="insp-tw">줄 너비</Label>
-                      <Input
-                        id="insp-tw"
-                        type="number"
-                        min={80}
-                        max={2000}
-                        value={selected.width ?? 640}
-                        onChange={(e) =>
-                          onChange(selected.id, {
-                            width: num(e.target.value, selected.width ?? 640, 80, 2000),
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label htmlFor="insp-th">박스 높이</Label>
-                      <Input
-                        id="insp-th"
-                        type="number"
-                        min={28}
-                        max={4000}
-                        value={Math.round(
-                          selected.height ?? defaultTextWidgetBoxHeight(selected.fontSize),
-                        )}
-                        onChange={(e) =>
-                          onChange(selected.id, {
-                            height: num(
-                              e.target.value,
-                              selected.height ?? defaultTextWidgetBoxHeight(selected.fontSize),
-                              28,
-                              4000,
-                            ),
-                          })
-                        }
-                      />
-                    </div>
+                    <InspectorClampedSizeInput
+                      elementId={selected.id}
+                      value={selected.width ?? 640}
+                      min={80}
+                      max={2000}
+                      htmlId="insp-tw"
+                      label="줄 너비"
+                      onCommit={(n) => onChange(selected.id, { width: n })}
+                    />
+                    <InspectorClampedSizeInput
+                      elementId={selected.id}
+                      value={Math.round(
+                        selected.height ?? defaultTextWidgetBoxHeight(selected.fontSize),
+                      )}
+                      min={28}
+                      max={4000}
+                      htmlId="insp-th"
+                      label="박스 높이"
+                      onCommit={(n) => onChange(selected.id, { height: n })}
+                    />
                     <ElementShapeChromeFields el={selected} onChange={onChange} />
                     <PositionSizeFields el={selected} onChange={onChange} />
                   </>
@@ -786,7 +839,8 @@ export function BookInspectorPanel({
                     <div className="space-y-2">
                       <Label>표시 항목</Label>
                       <p className="text-[11px] text-muted-foreground">
-                        날씨만 남기면 큰 기온 카드, 대기 항목만 켜면 대기질 전용 톤으로 바뀝니다.
+                        날씨만 남기면 큰 기온 카드, 대기 항목만 켜면 대기질 전용 톤으로 바뀝니다. 시계·날짜만 켠 경우·기온·아이콘 없이
+                        습도 등만 켠 경우에도 빈 칸 없이 한 열로 정리됩니다.
                       </p>
                       <div className="flex flex-col gap-2">
                         {WEATHER_INSPECTOR_FIELDS.map(({ key, label }) => {
@@ -829,6 +883,305 @@ export function BookInspectorPanel({
                       defaultHint="끄면 배경 테마에 맞는 기본 글자색을 씁니다."
                       onChange={onChange}
                     />
+                    <ElementOpacitySlider
+                      elementId={selected.id}
+                      opacity={selected.opacity}
+                      onChange={onChange}
+                    />
+                    <ElementShapeChromeFields el={selected} onChange={onChange} />
+                    <PositionSizeFields el={selected} onChange={onChange} />
+                  </>
+                ) : selected.type === "news" ? (
+                  <>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      <a
+                        href="https://newsapi.org/"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="underline underline-offset-2"
+                      >
+                        NewsAPI.org
+                      </a>{" "}
+                      top-headlines. 서버{" "}
+                      <code className="rounded bg-muted px-1 py-0.5 text-[10px]">NEWSAPI_KEY</code> 필요.
+                    </p>
+                    <div className="space-y-1">
+                      <Label htmlFor="insp-news-country">국가 코드 (ISO 2자)</Label>
+                      <Input
+                        id="insp-news-country"
+                        maxLength={2}
+                        placeholder="KR"
+                        className="font-mono uppercase"
+                        title="한 글자만 있어도 입력 가능합니다. 비우면 기본 kr로 요청됩니다."
+                        value={(selected.newsCountry ?? "").toUpperCase()}
+                        onChange={(e) => {
+                          const v = e.target.value
+                            .replace(/[^a-zA-Z]/g, "")
+                            .slice(0, 2)
+                            .toLowerCase();
+                          onChange(selected.id, {
+                            newsCountry: v === "" ? undefined : v,
+                          });
+                        }}
+                      />
+                      <p className="text-[11px] text-muted-foreground leading-snug">
+                        비우면 <span className="font-mono">kr</span>, 한 자리만 있으면 입력 마칠 때까지 위젯은{" "}
+                        <span className="font-mono">kr</span>로 불러옵니다.
+                      </p>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="insp-news-cat">카테고리</Label>
+                      <Select
+                        value={selected.newsCategory ?? "__all__"}
+                        onValueChange={(v) =>
+                          onChange(selected.id, {
+                            newsCategory: v === "__all__" ? undefined : v,
+                          })
+                        }
+                      >
+                        <SelectTrigger id="insp-news-cat">
+                          <SelectValue placeholder="전체" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__all__">전체</SelectItem>
+                          {BOOK_NEWS_CATEGORIES.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="insp-news-ps">기사 수 (1~10)</Label>
+                        <Input
+                          id="insp-news-ps"
+                          type="number"
+                          min={1}
+                          max={10}
+                          value={selected.newsPageSize ?? 5}
+                          onChange={(e) => {
+                            const n = Number(e.target.value);
+                            onChange(selected.id, {
+                              newsPageSize:
+                                Number.isInteger(n) && n >= 1 && n <= 10 ? n : undefined,
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="insp-news-iv">캐러셀 간격(초)</Label>
+                        <NewsCarouselIntervalInput
+                          elementId={selected.id}
+                          seconds={selected.newsCarouselIntervalSec}
+                          onChange={onChange}
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="insp-news-mode">표시 방식</Label>
+                      <Select
+                        value={selected.newsDisplayMode ?? "carousel"}
+                        onValueChange={(v) =>
+                          onChange(selected.id, {
+                            newsDisplayMode: v === "list" ? "list" : "carousel",
+                          })
+                        }
+                      >
+                        <SelectTrigger id="insp-news-mode">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="carousel">캐러셀 (한 줄씩 전환)</SelectItem>
+                          <SelectItem value="list">목록 (여러 줄)</SelectItem>
+                        </SelectContent>
+                      </Select>
+                      <p className="text-[11px] text-muted-foreground">
+                        캐러셀은 위 간격마다 부드럽게 다음 기사로 넘어갑니다.
+                      </p>
+                    </div>
+                    <div className="space-y-2 rounded-md border border-border/60 bg-muted/15 px-2.5 py-2">
+                      <p className="text-[11px] font-medium text-muted-foreground">표시 항목</p>
+                      <label className="flex cursor-pointer items-center gap-2 text-sm leading-none">
+                        <Checkbox
+                          checked={selected.newsShowHeader !== false}
+                          onCheckedChange={(c) =>
+                            onChange(selected.id, {
+                              newsShowHeader: c === true,
+                            })
+                          }
+                        />
+                        <span>상단 헤더 (아이콘·제목·캐러셀 번호)</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2 text-sm leading-none">
+                        <Checkbox
+                          checked={selected.newsShowSource !== false}
+                          onCheckedChange={(c) =>
+                            onChange(selected.id, {
+                              newsShowSource: c === true,
+                            })
+                          }
+                        />
+                        <span>기사 출처</span>
+                      </label>
+                      <label className="flex cursor-pointer items-center gap-2 text-sm leading-none">
+                        <Checkbox
+                          checked={selected.newsLinksEnabled !== false}
+                          onCheckedChange={(c) =>
+                            onChange(selected.id, {
+                              newsLinksEnabled: c === true,
+                            })
+                          }
+                        />
+                        <span>제목 링크 (원문 열기)</span>
+                      </label>
+                    </div>
+                    <OptionalWidgetBackdropFields
+                      elementId={selected.id}
+                      value={selected.newsBackground}
+                      field="newsBackground"
+                      defaultRgba="rgba(15,23,42,0.92)"
+                      colorAriaLabel="뉴스 카드 배경색"
+                      defaultHint="끄면 기본 다크 그라데이션을 씁니다."
+                      onChange={onChange}
+                    />
+                    <OptionalWidgetTextColorFields
+                      elementId={selected.id}
+                      value={selected.newsTextColor}
+                      field="newsTextColor"
+                      defaultHex="#ffffff"
+                      colorAriaLabel="뉴스 제목·링크 색"
+                      defaultHint="끄면 밝은 기본 제목색을 씁니다."
+                      labelText="제목·링크 색"
+                      appliedHint="기사 제목 링크에 적용됩니다."
+                      onChange={onChange}
+                    />
+                    <OptionalWidgetTextColorFields
+                      elementId={selected.id}
+                      value={selected.newsMetaColor}
+                      field="newsMetaColor"
+                      defaultHex="#cbd5e1"
+                      colorAriaLabel="뉴스 보조 글자색"
+                      defaultHint="끄면 제목색(또는 기본)에 맞춰 출처·헤더가 보입니다."
+                      labelText="출처·헤더 색"
+                      appliedHint="상단 띠·출처·캐러셀 번호에 적용됩니다."
+                      onChange={onChange}
+                    />
+                    <div className="space-y-1">
+                      <Label htmlFor="insp-news-section-title">상단 제목</Label>
+                      <Input
+                        id="insp-news-section-title"
+                        maxLength={36}
+                        placeholder="Headlines"
+                        value={selected.newsSectionTitle ?? ""}
+                        onChange={(e) => {
+                          const t = e.target.value.replace(/[<>]/g, "").slice(0, 36);
+                          onChange(selected.id, {
+                            newsSectionTitle: t.trim() === "" ? undefined : t,
+                          });
+                        }}
+                      />
+                      <p className="text-[11px] text-muted-foreground">
+                        비우면 &quot;Headlines&quot; 로 표시합니다.
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="insp-news-title-fs">제목 글자(px)</Label>
+                        <Input
+                          id="insp-news-title-fs"
+                          type="number"
+                          min={10}
+                          max={32}
+                          placeholder="자동"
+                          value={selected.newsTitleFontSize ?? ""}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              onChange(selected.id, { newsTitleFontSize: undefined });
+                              return;
+                            }
+                            const n = Number(raw);
+                            onChange(selected.id, {
+                              newsTitleFontSize:
+                                Number.isInteger(n) && n >= 10 && n <= 32 ? n : undefined,
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="insp-news-meta-fs">보조 글자(px)</Label>
+                        <Input
+                          id="insp-news-meta-fs"
+                          type="number"
+                          min={8}
+                          max={22}
+                          placeholder="자동"
+                          value={selected.newsMetaFontSize ?? ""}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              onChange(selected.id, { newsMetaFontSize: undefined });
+                              return;
+                            }
+                            const n = Number(raw);
+                            onChange(selected.id, {
+                              newsMetaFontSize:
+                                Number.isInteger(n) && n >= 8 && n <= 22 ? n : undefined,
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <div className="space-y-1">
+                        <Label htmlFor="insp-news-clamp">제목 줄 수</Label>
+                        <Input
+                          id="insp-news-clamp"
+                          type="number"
+                          min={1}
+                          max={6}
+                          placeholder="목록3·캐4"
+                          value={selected.newsTitleLineClamp ?? ""}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              onChange(selected.id, { newsTitleLineClamp: undefined });
+                              return;
+                            }
+                            const n = Number(raw);
+                            onChange(selected.id, {
+                              newsTitleLineClamp:
+                                Number.isInteger(n) && n >= 1 && n <= 6 ? n : undefined,
+                            });
+                          }}
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <Label htmlFor="insp-news-pad">안쪽 여백(px)</Label>
+                        <Input
+                          id="insp-news-pad"
+                          type="number"
+                          min={4}
+                          max={40}
+                          placeholder="자동"
+                          value={selected.newsContentPaddingPx ?? ""}
+                          onChange={(e) => {
+                            const raw = e.target.value;
+                            if (raw === "") {
+                              onChange(selected.id, { newsContentPaddingPx: undefined });
+                              return;
+                            }
+                            const n = Number(raw);
+                            onChange(selected.id, {
+                              newsContentPaddingPx:
+                                Number.isInteger(n) && n >= 4 && n <= 40 ? n : undefined,
+                            });
+                          }}
+                        />
+                      </div>
+                    </div>
                     <ElementOpacitySlider
                       elementId={selected.id}
                       opacity={selected.opacity}
@@ -1056,6 +1409,75 @@ export function BookInspectorPanel({
   );
 }
 
+/**
+ * 너비·높이: 매 글자마다 min(24) 클램프하면 56→5 입력 시 24로 튀는 문제가 있어 blur·Enter에만 반영.
+ */
+function InspectorClampedSizeInputInner({
+  value,
+  min,
+  max,
+  htmlId,
+  label,
+  onCommit,
+}: {
+  value: number;
+  min: number;
+  max: number;
+  htmlId: string;
+  label: string;
+  onCommit: (n: number) => void;
+}) {
+  const [draft, setDraft] = useState(() => String(Math.round(value)));
+
+  const commit = () => {
+    if (draft.trim() === "") {
+      setDraft(String(Math.round(value)));
+      return;
+    }
+    const n = Number(draft);
+    if (!Number.isFinite(n) || !Number.isInteger(n)) {
+      setDraft(String(Math.round(value)));
+      return;
+    }
+    const clamped = Math.min(max, Math.max(min, n));
+    onCommit(clamped);
+    setDraft(String(clamped));
+  };
+
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={htmlId}>{label}</Label>
+      <Input
+        id={htmlId}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        className="font-mono tabular-nums"
+        value={draft}
+        onChange={(e) => setDraft(e.target.value.replace(/\D/g, "").slice(0, 5))}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+        }}
+      />
+    </div>
+  );
+}
+
+function InspectorClampedSizeInput(props: {
+  elementId: string;
+  value: number;
+  min: number;
+  max: number;
+  htmlId: string;
+  label: string;
+  onCommit: (n: number) => void;
+}) {
+  const { elementId, ...rest } = props;
+  const k = `${elementId}:${props.htmlId}:${Math.round(props.value)}`;
+  return <InspectorClampedSizeInputInner key={k} {...rest} />;
+}
+
 function PositionSizeFields({
   el,
   onChange,
@@ -1086,30 +1508,24 @@ function PositionSizeFields({
       </div>
       {el.type !== "text" ? (
         <>
-          <div className="space-y-1">
-            <Label htmlFor="insp-w">너비</Label>
-            <Input
-              id="insp-w"
-              type="number"
-              min={24}
-              value={Math.round(el.width)}
-              onChange={(e) =>
-                onChange(el.id, { width: num(e.target.value, el.width, 24, 4000) })
-              }
-            />
-          </div>
-          <div className="space-y-1">
-            <Label htmlFor="insp-h">높이</Label>
-            <Input
-              id="insp-h"
-              type="number"
-              min={24}
-              value={Math.round(el.height)}
-              onChange={(e) =>
-                onChange(el.id, { height: num(e.target.value, el.height, 24, 4000) })
-              }
-            />
-          </div>
+          <InspectorClampedSizeInput
+            elementId={el.id}
+            value={el.width}
+            min={24}
+            max={4000}
+            htmlId="insp-w"
+            label="너비"
+            onCommit={(n) => onChange(el.id, { width: n })}
+          />
+          <InspectorClampedSizeInput
+            elementId={el.id}
+            value={el.height}
+            min={24}
+            max={4000}
+            htmlId="insp-h"
+            label="높이"
+            onCommit={(n) => onChange(el.id, { height: n })}
+          />
         </>
       ) : (
         <>

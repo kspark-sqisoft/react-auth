@@ -30,6 +30,7 @@
 | **북(Books)** | 슬라이드형 문서, 캔버스 위젯, 미디어 업로드, **레이아웃 AI**(OpenAI), **AI 대화 DB 저장** |
 | **채팅(Chat)** | Socket.IO 네임스페이스 `/chat`, 로비·사용자 방, 메시지 영속화 |
 | **날씨** | 위젯용 현재 날씨 API 프록시 |
+| **뉴스** | 북 편집기 뉴스 위젯용 [NewsAPI](https://newsapi.org/) 헤드라인 프록시 (`NEWSAPI_KEY`) |
 | **Cats** | 학습용 CRUD (`study_cats` 테이블) |
 | **사용자** | 내 정보 조회/수정, 아바타 |
 
@@ -71,7 +72,7 @@ flowchart LR
 | 서버 | NestJS 11, class-validator, Swagger (`/api` 등) |
 | DB | SQLite, TypeORM (`synchronize: true` — **개발용**) |
 | 실시간 | Socket.IO (`/chat`) |
-| 외부 연동 | OpenAI Chat Completions(북 AI), Pexels(이미지·영상 검색) |
+| 외부 연동 | OpenAI Chat Completions(북 AI), Pexels(이미지·영상 검색), NewsAPI(뉴스 위젯 헤드라인) |
 
 ---
 
@@ -91,6 +92,7 @@ flowchart TB
   API --> BooksM[Books + AI]
   API --> CatsM[Cats]
   API --> WxM[Weather]
+  API --> NewsM[News]
   AuthM --> DB[(SQLite)]
   PostsM --> DB
   BooksM --> DB
@@ -99,6 +101,7 @@ flowchart TB
   ChatSvc --> DB
   BooksM --> OAI[OpenAI API]
   BooksM --> PX[Pexels API]
+  NewsM --> NAPI[NewsAPI.org]
 ```
 
 ---
@@ -188,6 +191,7 @@ flowchart LR
   App --> Books[BooksModule]
   App --> Chat[ChatModule]
   App --> Weather[WeatherModule]
+  App --> News[NewsModule]
   App --> Cats[CatsModule]
   Books --> BookAI[BookAiService / Pexels]
   Books --> BooksAIController["books/ai/*"]
@@ -248,6 +252,7 @@ flowchart LR
 | 컨트롤러 | 대표 엔드포인트 |
 |----------|-----------------|
 | `WeatherController` | `GET /weather/current`, `GET /weather/seoul` |
+| `NewsController` | `GET /news/headlines` — 쿼리 `country`, 선택 `category`, `pageSize`(1–10); 서버 `NEWSAPI_KEY` 필요 |
 | `CatsController` | `GET/POST/DELETE /cats`, `GET /cats/:id` |
 | `AppController` | `GET /` 헬스 등 |
 
@@ -402,7 +407,7 @@ mindmap
       페이지 추가·삭제·순서
       썸네일
     캔버스
-      텍스트·이미지·비디오·날씨·시계
+      텍스트·이미지·비디오·날씨·시계·뉴스
       그리기 레이어
       정렬·가이드
     속성
@@ -440,6 +445,7 @@ react-auth/
 │       ├── posts/
 │       ├── users/
 │       ├── weather/
+│       ├── news/            # NewsAPI 헤드라인 프록시
 │       ├── cats/
 │       └── main.ts
 ├── frontend/                # Vite + React
@@ -461,6 +467,7 @@ react-auth/
 | DB 스키마 | `app.module.ts`에서 `synchronize: true` — **운영에서는 마이그레이션 + synchronize 끄기 권장** |
 | 비밀 값 | `backend/.env`, `frontend/.env` — 예시는 각 `.env.example` |
 | 북 AI | `OPENAI_API_KEY`, 선택 `OPENAI_MODEL`; Pexels 키는 서버 설정에 따름 |
+| 뉴스 위젯 | `NEWSAPI_KEY` — [NewsAPI](https://newsapi.org/) 개발자 키 |
 | 정적·업로드 | `uploads/` 아바타·북 미디어·글 첨부 등 |
 | 글 시드(개발) | `backend`에서 `npm run seed:posts` — 가장 오래된 사용자에게 IT 주제 글 20개 삽입(무한 스크롤 테스트용). **재실행 시 20개씩 추가** |
 

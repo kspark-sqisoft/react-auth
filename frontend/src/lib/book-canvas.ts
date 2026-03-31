@@ -4,18 +4,28 @@
 
 import type Konva from "konva";
 
-export const BOOK_MEDIA_OBJECT_FIT_VALUES = ["cover", "contain", "fill", "none", "scale-down"] as const;
+export const BOOK_MEDIA_OBJECT_FIT_VALUES = [
+  "cover",
+  "contain",
+  "fill",
+  "none",
+  "scale-down",
+] as const;
 export type BookMediaObjectFit = (typeof BOOK_MEDIA_OBJECT_FIT_VALUES)[number];
 export const DEFAULT_BOOK_MEDIA_OBJECT_FIT: BookMediaObjectFit = "cover";
 
-export function parseBookMediaObjectFit(raw: unknown): BookMediaObjectFit | undefined {
+export function parseBookMediaObjectFit(
+  raw: unknown,
+): BookMediaObjectFit | undefined {
   if (typeof raw !== "string") return undefined;
   return (BOOK_MEDIA_OBJECT_FIT_VALUES as readonly string[]).includes(raw)
     ? (raw as BookMediaObjectFit)
     : undefined;
 }
 
-export function resolveBookMediaObjectFit(raw: BookMediaObjectFit | undefined): BookMediaObjectFit {
+export function resolveBookMediaObjectFit(
+  raw: BookMediaObjectFit | undefined,
+): BookMediaObjectFit {
   return raw ?? DEFAULT_BOOK_MEDIA_OBJECT_FIT;
 }
 
@@ -23,7 +33,8 @@ export function resolveBookMediaObjectFit(raw: BookMediaObjectFit | undefined): 
 export const DEFAULT_BOOK_ELEMENT_OPACITY = 1;
 
 export function resolveBookElementOpacity(opacity: number | undefined): number {
-  if (typeof opacity !== "number" || !Number.isFinite(opacity)) return DEFAULT_BOOK_ELEMENT_OPACITY;
+  if (typeof opacity !== "number" || !Number.isFinite(opacity))
+    return DEFAULT_BOOK_ELEMENT_OPACITY;
   return Math.min(1, Math.max(0, opacity));
 }
 
@@ -31,7 +42,8 @@ export function resolveBookElementOpacity(opacity: number | undefined): number {
 export const DEFAULT_BOOK_ELEMENT_ROTATION = 0;
 
 export function resolveBookElementRotation(deg: number | undefined): number {
-  if (typeof deg !== "number" || !Number.isFinite(deg)) return DEFAULT_BOOK_ELEMENT_ROTATION;
+  if (typeof deg !== "number" || !Number.isFinite(deg))
+    return DEFAULT_BOOK_ELEMENT_ROTATION;
   return deg;
 }
 
@@ -56,7 +68,13 @@ export function bookElementPivotKonva(el: {
   width: number;
   height: number;
   rotation?: number;
-}): { cx: number; cy: number; offsetX: number; offsetY: number; rotation: number } {
+}): {
+  cx: number;
+  cy: number;
+  offsetX: number;
+  offsetY: number;
+  rotation: number;
+} {
   const w = el.width;
   const h = el.height;
   const deg = resolveBookElementRotation(el.rotation);
@@ -93,9 +111,85 @@ export function bookElementOverlayTopLeftFromPivot(
  * 드래그·변형 후 저장용 (x,y): 로컬 원점 (0,0)이 박스 왼쪽 위일 때( Rect / clip 과 동일 ),
  * Konva가 적용하는 변환 순서와 동일하게 부모 좌표로 옮깁니다. 수식 역변환보다 정확합니다.
  */
-export function konvaBookTopLeftFromNode(node: Konva.Node): { x: number; y: number } {
+export function konvaBookTopLeftFromNode(node: Konva.Node): {
+  x: number;
+  y: number;
+} {
   const p = node.getTransform().point({ x: 0, y: 0 });
   return { x: p.x, y: p.y };
+}
+
+/** `BookSlideCanvas` 위젯 히트: `Group`(중심·회전) 안의 투명 `Rect` — Transformer가 로컬 좌상단 기준으로 잡기 쉬움 */
+export const KONVA_BOOK_WIDGET_HIT_RECT_NAME = "bookWidgetHitRect";
+
+/**
+ * 박스 중심 (cx,cy)·크기·회전(도)에서 저장용 왼쪽 위 좌표.
+ * `bookElementPivotKonva`의 역변환(회전축 = 중심).
+ */
+export function bookElementTopLeftFromCenterRotation(
+  cx: number,
+  cy: number,
+  width: number,
+  height: number,
+  rotationDeg: number,
+): { x: number; y: number } {
+  const deg = resolveBookElementRotation(rotationDeg);
+  const rad = (deg * Math.PI) / 180;
+  const cos = Math.cos(rad);
+  const sin = Math.sin(rad);
+  return {
+    x: cx - (width / 2) * cos + (height / 2) * sin,
+    y: cy - (width / 2) * sin - (height / 2) * cos,
+  };
+}
+
+/** 드래그 종료 시: 중심 `Group`+히트 Rect 셸 vs 기존 offset `Rect` */
+export function konvaBookTopLeftFromCommitNode(
+  node: Konva.Node,
+  logicalW: number,
+  logicalH: number,
+): { x: number; y: number } {
+  if (node.getClassName() === "Group") {
+    const inner = node.findOne(`.${KONVA_BOOK_WIDGET_HIT_RECT_NAME}`) as
+      | Konva.Node
+      | undefined;
+    if (inner) {
+      return bookElementTopLeftFromCenterRotation(
+        node.x(),
+        node.y(),
+        logicalW,
+        logicalH,
+        node.rotation(),
+      );
+    }
+  }
+  return konvaBookTopLeftFromNode(node);
+}
+
+export function snapKonvaBookCenterPivotGroupToGrid(
+  node: Konva.Node,
+  logical: { width: number; height: number; rotation?: number },
+  gridPx: number = BOOK_CANVAS_DRAG_GRID_PX,
+): void {
+  const rot = logical.rotation ?? node.rotation();
+  const tl = bookElementTopLeftFromCenterRotation(
+    node.x(),
+    node.y(),
+    logical.width,
+    logical.height,
+    rot,
+  );
+  const snapped = snapBookElementTopLeftToGrid(tl.x, tl.y, gridPx);
+  if (snapped.x === tl.x && snapped.y === tl.y) return;
+  const p = bookElementPivotKonva({
+    x: snapped.x,
+    y: snapped.y,
+    width: logical.width,
+    height: logical.height,
+    rotation: rot,
+  });
+  node.x(p.cx);
+  node.y(p.cy);
 }
 
 /** 드래그 시 저장 좌표(박스 왼쪽 위)를 이 간격(px)에 맞춥니다. */
@@ -121,6 +215,13 @@ export function snapKonvaBookNodePositionToGrid(
   logical: { width: number; height: number; rotation?: number },
   gridPx: number = BOOK_CANVAS_DRAG_GRID_PX,
 ): void {
+  if (
+    node.getClassName() === "Group" &&
+    node.findOne(`.${KONVA_BOOK_WIDGET_HIT_RECT_NAME}`)
+  ) {
+    snapKonvaBookCenterPivotGroupToGrid(node, logical, gridPx);
+    return;
+  }
   const tl = konvaBookTopLeftFromNode(node);
   const snapped = snapBookElementTopLeftToGrid(tl.x, tl.y, gridPx);
   if (snapped.x === tl.x && snapped.y === tl.y) return;
@@ -134,6 +235,9 @@ export function snapKonvaBookNodePositionToGrid(
   node.x(p.cx);
   node.y(p.cy);
 }
+
+/** 뉴스 위젯 나열 방식 */
+export type BookNewsDisplayMode = "list" | "carousel";
 
 export type BookCanvasElement =
   | {
@@ -252,6 +356,52 @@ export type BookCanvasElement =
     }
   | {
       id: string;
+      type: "news";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      /** ISO 3166-1 alpha-2. 생략 시 kr */
+      newsCountry?: string;
+      /** NewsAPI category. 생략 시 전체 성격의 헤드라인 */
+      newsCategory?: string;
+      /** 1~10, 기본 5 */
+      newsPageSize?: number;
+      /** list: 여러 줄 나열, carousel: 한 줄씩 전환 */
+      newsDisplayMode?: BookNewsDisplayMode;
+      /** 캐러셀 전환 간격(초) 3~120, 기본 5 */
+      newsCarouselIntervalSec?: number;
+      newsBackground?: string;
+      /** 기사 제목·링크 색 (생략 시 테마 기본) */
+      newsTextColor?: string;
+      /** 출처·헤더·캐러셀 카운터 등 보조 텍스트 색 (생략 시 제목색 또는 기본) */
+      newsMetaColor?: string;
+      /** 제목 글꼴 크기(px), 10~32. 생략 시 위젯 높이에 비례 */
+      newsTitleFontSize?: number;
+      /** 보조 글꼴 크기(px), 8~22 */
+      newsMetaFontSize?: number;
+      /** 상단 띠 제목 (기본 Headlines), 최대 36자 */
+      newsSectionTitle?: string;
+      /** 제목 최대 줄 수(말줄임), 1~6 */
+      newsTitleLineClamp?: number;
+      /** 본문 영역 안쪽 여백(캔버스 px), 4~40 */
+      newsContentPaddingPx?: number;
+      /** false면 상단 아이콘·섹션 제목·캐러셀 번호 숨김 (기본 표시) */
+      newsShowHeader?: boolean;
+      /** false면 기사 출처(미디어명) 숨김 (기본 표시) */
+      newsShowSource?: boolean;
+      /** false면 제목을 링크로 열지 않음 (기본 클릭 시 원문) */
+      newsLinksEnabled?: boolean;
+      opacity?: number;
+      rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
+    }
+  | {
+      id: string;
       type: "drawing";
       /** 바운딩 박스 중심(다른 위젯과 동일 피벗) */
       x: number;
@@ -298,7 +448,9 @@ export type BookWeatherDisplayResolved = {
 };
 
 /** 모두 끄면 기본(전체 표시)으로 되돌립니다. */
-export function resolveBookWeatherDisplay(raw?: BookWeatherDisplay | null): BookWeatherDisplayResolved {
+export function resolveBookWeatherDisplay(
+  raw?: BookWeatherDisplay | null,
+): BookWeatherDisplayResolved {
   const out: BookWeatherDisplayResolved = {
     temp: raw?.temp !== false,
     feelsLike: raw?.feelsLike !== false,
@@ -381,7 +533,9 @@ export function parseBookWidgetTextColor(raw: unknown): string | undefined {
  */
 export function bookWidgetBackdropAlphaFromCss(css: string): number {
   const s = css.trim();
-  const rgba = /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)$/i.exec(s);
+  const rgba = /^rgba\(\s*\d+\s*,\s*\d+\s*,\s*\d+\s*,\s*([\d.]+)\s*\)$/i.exec(
+    s,
+  );
   if (rgba) return Math.min(1, Math.max(0, parseFloat(rgba[1])));
   if (/^rgb\(/i.test(s)) return 1;
   if (/^#[0-9a-fA-F]{8}$/.test(s)) {
@@ -439,9 +593,16 @@ function parseStoredOutlineWidth(raw: unknown): number | undefined {
 export function resolveBookElementBorderRadius(el: BookCanvasElement): number {
   if (el.type === "drawing") return 0;
   if (typeof el.borderRadius === "number" && Number.isFinite(el.borderRadius)) {
-    return Math.min(BOOK_WIDGET_BORDER_RADIUS_MAX, Math.max(0, el.borderRadius));
+    return Math.min(
+      BOOK_WIDGET_BORDER_RADIUS_MAX,
+      Math.max(0, el.borderRadius),
+    );
   }
-  if (el.type === "weather" || el.type === "digitalClock") {
+  if (
+    el.type === "weather" ||
+    el.type === "digitalClock" ||
+    el.type === "news"
+  ) {
     return BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS;
   }
   return 0;
@@ -449,7 +610,8 @@ export function resolveBookElementBorderRadius(el: BookCanvasElement): number {
 
 export function resolveBookElementOutlineWidth(el: BookCanvasElement): number {
   if (el.type === "drawing") return 0;
-  if (typeof el.outlineWidth !== "number" || !Number.isFinite(el.outlineWidth)) return 0;
+  if (typeof el.outlineWidth !== "number" || !Number.isFinite(el.outlineWidth))
+    return 0;
   return Math.min(BOOK_WIDGET_OUTLINE_WIDTH_MAX, Math.max(0, el.outlineWidth));
 }
 
@@ -524,9 +686,12 @@ export type BookEditorPageState = {
 export const DEFAULT_SLIDE_WIDTH = 960;
 export const DEFAULT_SLIDE_HEIGHT = 540;
 
-/** 날씨 위젯 기본 프레임(px) — 가로 카드 비율 */
-export const DEFAULT_BOOK_WEATHER_WIDGET_WIDTH = 340;
-export const DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT = 156;
+/** 날씨 위젯 기본 프레임(px) — 380×320보다 작게, 360×228보다는 여유 있게 */
+export const DEFAULT_BOOK_WEATHER_WIDGET_WIDTH = 364;
+export const DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT = 256;
+/** 뉴스 위젯 기본 프레임(px) — 캐러셀 1줄·목록 여러 줄 */
+export const DEFAULT_BOOK_NEWS_WIDGET_WIDTH = 420;
+export const DEFAULT_BOOK_NEWS_WIDGET_HEIGHT = 200;
 /** 디지털 시계 위젯 기본 프레임(px) */
 export const DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH = 280;
 export const DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT = 96;
@@ -548,7 +713,10 @@ const BOOK_MEDIA_SRC_MAX = 2000;
 /**
  * 저장 시 `src`·`posterSrc`: `/uploads/...`·`/cards/...`는 그대로 두고, 외부 https URL은 상한까지 유지합니다.
  */
-export function bookMediaSrcForApi(src: string, maxLen = BOOK_MEDIA_SRC_MAX): string {
+export function bookMediaSrcForApi(
+  src: string,
+  maxLen = BOOK_MEDIA_SRC_MAX,
+): string {
   const t = src.trim();
   if (!t) return t;
   const noQuery = t.includes("?") ? t.slice(0, t.indexOf("?")) : t;
@@ -572,7 +740,12 @@ function finiteXY(x: unknown, y: unknown): { x: number; y: number } {
   };
 }
 
-function finiteWH(w: unknown, h: unknown, fallbackW: number, fallbackH: number) {
+function finiteWH(
+  w: unknown,
+  h: unknown,
+  fallbackW: number,
+  fallbackH: number,
+) {
   const nw = Number(w);
   const nh = Number(h);
   return {
@@ -583,14 +756,18 @@ function finiteWH(w: unknown, h: unknown, fallbackW: number, fallbackH: number) 
 
 /** API 본문: `visible: false`·`locked: true`만 명시(나머지 키 생략). */
 function finalizeElementForApi(el: BookCanvasElement): BookCanvasElement {
-  const copy = { ...(el as BookCanvasElement & { visible?: boolean; locked?: boolean }) };
+  const copy = {
+    ...(el as BookCanvasElement & { visible?: boolean; locked?: boolean }),
+  };
   if (copy.visible !== false) delete copy.visible;
   if (copy.locked !== true) delete copy.locked;
   return copy as BookCanvasElement;
 }
 
 /** POST/PATCH `pages[].elements` 직전: 숫자·경로 정규화로 서버 검증 실패를 줄임 */
-function normalizeBookElementsForSave(elements: BookCanvasElement[]): BookCanvasElement[] {
+function normalizeBookElementsForSave(
+  elements: BookCanvasElement[],
+): BookCanvasElement[] {
   return elements.map((el) => {
     const xy = finiteXY(el.x, el.y);
     if (el.type === "image") {
@@ -611,7 +788,9 @@ function normalizeBookElementsForSave(elements: BookCanvasElement[]): BookCanvas
         ...wh,
         src: bookMediaSrcForApi(el.src),
         posterSrc:
-          ps != null && String(ps).trim() !== "" ? bookMediaSrcForApi(String(ps)) : ps,
+          ps != null && String(ps).trim() !== ""
+            ? bookMediaSrcForApi(String(ps))
+            : ps,
       });
     }
     if (el.type === "weather") {
@@ -629,6 +808,15 @@ function normalizeBookElementsForSave(elements: BookCanvasElement[]): BookCanvas
         el.height,
         DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
         DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
+      );
+      return finalizeElementForApi({ ...el, ...xy, ...wh });
+    }
+    if (el.type === "news") {
+      const wh = finiteWH(
+        el.width,
+        el.height,
+        DEFAULT_BOOK_NEWS_WIDGET_WIDTH,
+        DEFAULT_BOOK_NEWS_WIDGET_HEIGHT,
       );
       return finalizeElementForApi({ ...el, ...xy, ...wh });
     }
@@ -668,7 +856,10 @@ function normalizeBookElementsForSave(elements: BookCanvasElement[]): BookCanvas
   });
 }
 
-export function slideDisplayLabel(name: string | undefined | null, indexZero: number): string {
+export function slideDisplayLabel(
+  name: string | undefined | null,
+  indexZero: number,
+): string {
   const t = name?.trim();
   if (t) return t;
   return `슬라이드 ${indexZero + 1}`;
@@ -677,7 +868,9 @@ export function slideDisplayLabel(name: string | undefined | null, indexZero: nu
 /** 빈 제목 또는 `슬라이드 12` 형태만 현재 순서에 맞게 다시 번호 매김(직접 지은 제목은 유지). */
 export const AUTO_SLIDE_TITLE_RE = /^슬라이드\s*\d+$/;
 
-export function applyAutoSlideNamesByIndex(pages: BookEditorPageState[]): BookEditorPageState[] {
+export function applyAutoSlideNamesByIndex(
+  pages: BookEditorPageState[],
+): BookEditorPageState[] {
   return pages.map((p, i) => {
     const t = (p.name ?? "").trim();
     if (t === "" || AUTO_SLIDE_TITLE_RE.test(t)) {
@@ -698,7 +891,9 @@ export function createEmptyEditorPage(sortOrder: number): BookEditorPageState {
 }
 
 /** 같은 내용의 새 페이지(새 `clientKey`·요소 `id`). 목록에 바로 아래에 끼워 넣은 뒤 `applyAutoSlideNamesByIndex` 권장. */
-export function duplicateBookEditorPage(page: BookEditorPageState): BookEditorPageState {
+export function duplicateBookEditorPage(
+  page: BookEditorPageState,
+): BookEditorPageState {
   const elements = page.elements.map((el) => {
     const id = crypto.randomUUID();
     if (el.type === "text") {
@@ -712,24 +907,111 @@ export function duplicateBookEditorPage(page: BookEditorPageState): BookEditorPa
         ...el,
         id,
         ...(el.cityQuery !== undefined ? { cityQuery: el.cityQuery } : {}),
-        ...(el.weatherDisplay !== undefined ? { weatherDisplay: { ...el.weatherDisplay } } : {}),
-        ...(el.weatherBackground !== undefined ? { weatherBackground: el.weatherBackground } : {}),
-        ...(el.weatherTextColor !== undefined ? { weatherTextColor: el.weatherTextColor } : {}),
-        ...(el.borderRadius !== undefined ? { borderRadius: el.borderRadius } : {}),
-        ...(el.outlineWidth !== undefined ? { outlineWidth: el.outlineWidth } : {}),
-        ...(el.outlineColor !== undefined ? { outlineColor: el.outlineColor } : {}),
+        ...(el.weatherDisplay !== undefined
+          ? { weatherDisplay: { ...el.weatherDisplay } }
+          : {}),
+        ...(el.weatherBackground !== undefined
+          ? { weatherBackground: el.weatherBackground }
+          : {}),
+        ...(el.weatherTextColor !== undefined
+          ? { weatherTextColor: el.weatherTextColor }
+          : {}),
+        ...(el.borderRadius !== undefined
+          ? { borderRadius: el.borderRadius }
+          : {}),
+        ...(el.outlineWidth !== undefined
+          ? { outlineWidth: el.outlineWidth }
+          : {}),
+        ...(el.outlineColor !== undefined
+          ? { outlineColor: el.outlineColor }
+          : {}),
       };
     }
     if (el.type === "digitalClock") {
       return {
         ...el,
         id,
-        ...(el.clockDisplay !== undefined ? { clockDisplay: { ...el.clockDisplay } } : {}),
-        ...(el.clockBackground !== undefined ? { clockBackground: el.clockBackground } : {}),
-        ...(el.clockTextColor !== undefined ? { clockTextColor: el.clockTextColor } : {}),
-        ...(el.borderRadius !== undefined ? { borderRadius: el.borderRadius } : {}),
-        ...(el.outlineWidth !== undefined ? { outlineWidth: el.outlineWidth } : {}),
-        ...(el.outlineColor !== undefined ? { outlineColor: el.outlineColor } : {}),
+        ...(el.clockDisplay !== undefined
+          ? { clockDisplay: { ...el.clockDisplay } }
+          : {}),
+        ...(el.clockBackground !== undefined
+          ? { clockBackground: el.clockBackground }
+          : {}),
+        ...(el.clockTextColor !== undefined
+          ? { clockTextColor: el.clockTextColor }
+          : {}),
+        ...(el.borderRadius !== undefined
+          ? { borderRadius: el.borderRadius }
+          : {}),
+        ...(el.outlineWidth !== undefined
+          ? { outlineWidth: el.outlineWidth }
+          : {}),
+        ...(el.outlineColor !== undefined
+          ? { outlineColor: el.outlineColor }
+          : {}),
+      };
+    }
+    if (el.type === "news") {
+      return {
+        ...el,
+        id,
+        ...(el.newsCountry !== undefined
+          ? { newsCountry: el.newsCountry }
+          : {}),
+        ...(el.newsCategory !== undefined
+          ? { newsCategory: el.newsCategory }
+          : {}),
+        ...(el.newsPageSize !== undefined
+          ? { newsPageSize: el.newsPageSize }
+          : {}),
+        ...(el.newsDisplayMode !== undefined
+          ? { newsDisplayMode: el.newsDisplayMode }
+          : {}),
+        ...(el.newsCarouselIntervalSec !== undefined
+          ? { newsCarouselIntervalSec: el.newsCarouselIntervalSec }
+          : {}),
+        ...(el.newsBackground !== undefined
+          ? { newsBackground: el.newsBackground }
+          : {}),
+        ...(el.newsTextColor !== undefined
+          ? { newsTextColor: el.newsTextColor }
+          : {}),
+        ...(el.newsMetaColor !== undefined
+          ? { newsMetaColor: el.newsMetaColor }
+          : {}),
+        ...(el.newsTitleFontSize !== undefined
+          ? { newsTitleFontSize: el.newsTitleFontSize }
+          : {}),
+        ...(el.newsMetaFontSize !== undefined
+          ? { newsMetaFontSize: el.newsMetaFontSize }
+          : {}),
+        ...(el.newsSectionTitle !== undefined
+          ? { newsSectionTitle: el.newsSectionTitle }
+          : {}),
+        ...(el.newsTitleLineClamp !== undefined
+          ? { newsTitleLineClamp: el.newsTitleLineClamp }
+          : {}),
+        ...(el.newsContentPaddingPx !== undefined
+          ? { newsContentPaddingPx: el.newsContentPaddingPx }
+          : {}),
+        ...(typeof el.newsShowHeader === "boolean"
+          ? { newsShowHeader: el.newsShowHeader }
+          : {}),
+        ...(typeof el.newsShowSource === "boolean"
+          ? { newsShowSource: el.newsShowSource }
+          : {}),
+        ...(typeof el.newsLinksEnabled === "boolean"
+          ? { newsLinksEnabled: el.newsLinksEnabled }
+          : {}),
+        ...(el.borderRadius !== undefined
+          ? { borderRadius: el.borderRadius }
+          : {}),
+        ...(el.outlineWidth !== undefined
+          ? { outlineWidth: el.outlineWidth }
+          : {}),
+        ...(el.outlineColor !== undefined
+          ? { outlineColor: el.outlineColor }
+          : {}),
       };
     }
     if (el.type === "drawing") {
@@ -758,8 +1040,18 @@ export function toBookPagePayloads(pages: BookEditorPageState[]) {
   }));
 }
 
-export function reorderPagesArray<T>(pages: T[], from: number, to: number): T[] {
-  if (from === to || from < 0 || to < 0 || from >= pages.length || to >= pages.length) {
+export function reorderPagesArray<T>(
+  pages: T[],
+  from: number,
+  to: number,
+): T[] {
+  if (
+    from === to ||
+    from < 0 ||
+    to < 0 ||
+    from >= pages.length ||
+    to >= pages.length
+  ) {
     return pages;
   }
   const next = [...pages];
@@ -769,7 +1061,11 @@ export function reorderPagesArray<T>(pages: T[], from: number, to: number): T[] 
 }
 
 /** 드래그로 `from`→`to` 이동한 뒤, 이전에 `active`였던 페이지의 새 인덱스 */
-export function pageIndexAfterReorder(active: number, from: number, to: number): number {
+export function pageIndexAfterReorder(
+  active: number,
+  from: number,
+  to: number,
+): number {
   if (from === to) return active;
   if (active === from) return to;
   if (from < to) {
@@ -879,8 +1175,11 @@ const WEATHER_DISPLAY_KEYS = [
 
 const DIGITAL_CLOCK_DISPLAY_KEYS = ["seconds", "date", "hour12"] as const;
 
-function parseBookDigitalClockDisplay(raw: unknown): BookDigitalClockDisplay | undefined {
-  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+function parseBookDigitalClockDisplay(
+  raw: unknown,
+): BookDigitalClockDisplay | undefined {
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw))
+    return undefined;
   const o = raw as Record<string, unknown>;
   const out: BookDigitalClockDisplay = {};
   let any = false;
@@ -894,7 +1193,8 @@ function parseBookDigitalClockDisplay(raw: unknown): BookDigitalClockDisplay | u
 }
 
 function parseBookWeatherDisplay(raw: unknown): BookWeatherDisplay | undefined {
-  if (raw == null || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  if (raw == null || typeof raw !== "object" || Array.isArray(raw))
+    return undefined;
   const o = raw as Record<string, unknown>;
   const out: BookWeatherDisplay = {};
   let any = false;
@@ -905,6 +1205,86 @@ function parseBookWeatherDisplay(raw: unknown): BookWeatherDisplay | undefined {
     }
   }
   return any ? out : undefined;
+}
+
+export const BOOK_NEWS_CATEGORIES = [
+  "business",
+  "entertainment",
+  "general",
+  "health",
+  "science",
+  "sports",
+  "technology",
+] as const;
+
+function parseBookNewsCountry(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const s = raw.trim().toLowerCase().slice(0, 2);
+  if (s.length === 2 && /^[a-z]{2}$/i.test(s)) return s.toLowerCase();
+  return undefined;
+}
+
+function parseBookNewsCategory(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const c = raw.trim().toLowerCase();
+  return (BOOK_NEWS_CATEGORIES as readonly string[]).includes(c)
+    ? c
+    : undefined;
+}
+
+function parseBookNewsPageSize(raw: unknown): number | undefined {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 10) return undefined;
+  return n;
+}
+
+function parseBookNewsDisplayMode(
+  raw: unknown,
+): BookNewsDisplayMode | undefined {
+  if (raw === "list" || raw === "carousel") return raw;
+  return undefined;
+}
+
+function parseBookNewsCarouselIntervalSec(raw: unknown): number | undefined {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 3 || n > 120) return undefined;
+  return n;
+}
+
+function parseBookNewsTitleFontSize(raw: unknown): number | undefined {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 10 || n > 32) return undefined;
+  return n;
+}
+
+function parseBookNewsMetaFontSize(raw: unknown): number | undefined {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 8 || n > 22) return undefined;
+  return n;
+}
+
+function parseBookNewsSectionTitle(raw: unknown): string | undefined {
+  if (typeof raw !== "string") return undefined;
+  const t = raw.replace(/[<>]/g, "").trim().slice(0, 36);
+  return t.length > 0 ? t : undefined;
+}
+
+function parseBookNewsTitleLineClamp(raw: unknown): number | undefined {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 1 || n > 6) return undefined;
+  return n;
+}
+
+function parseBookNewsContentPaddingPx(raw: unknown): number | undefined {
+  const n = Number(raw);
+  if (!Number.isInteger(n) || n < 4 || n > 40) return undefined;
+  return n;
+}
+
+function parseBookNewsVisibilityFlag(raw: unknown): boolean | undefined {
+  if (raw === true) return true;
+  if (raw === false) return false;
+  return undefined;
 }
 
 export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
@@ -1027,6 +1407,52 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(o.visible === false ? { visible: false as const } : {}),
         ...(o.locked === true ? { locked: true as const } : {}),
       });
+    } else if (o.type === "news") {
+      const country = parseBookNewsCountry(o.newsCountry);
+      const nCat = parseBookNewsCategory(o.newsCategory);
+      const nPage = parseBookNewsPageSize(o.newsPageSize);
+      const nMode = parseBookNewsDisplayMode(o.newsDisplayMode);
+      const nIv = parseBookNewsCarouselIntervalSec(o.newsCarouselIntervalSec);
+      const nb = parseBookWeatherBackground(o.newsBackground);
+      const ntc = parseBookWidgetTextColor(o.newsTextColor);
+      const nmc = parseBookWidgetTextColor(o.newsMetaColor);
+      const ntfs = parseBookNewsTitleFontSize(o.newsTitleFontSize);
+      const nmfs = parseBookNewsMetaFontSize(o.newsMetaFontSize);
+      const nst = parseBookNewsSectionTitle(o.newsSectionTitle);
+      const nlc = parseBookNewsTitleLineClamp(o.newsTitleLineClamp);
+      const ncp = parseBookNewsContentPaddingPx(o.newsContentPaddingPx);
+      const nsh = parseBookNewsVisibilityFlag(o.newsShowHeader);
+      const nss = parseBookNewsVisibilityFlag(o.newsShowSource);
+      const nle = parseBookNewsVisibilityFlag(o.newsLinksEnabled);
+      out.push({
+        id: o.id,
+        type: "news",
+        x: Number(o.x) || 0,
+        y: Number(o.y) || 0,
+        width: Number(o.width) || DEFAULT_BOOK_NEWS_WIDGET_WIDTH,
+        height: Number(o.height) || DEFAULT_BOOK_NEWS_WIDGET_HEIGHT,
+        ...(country !== undefined ? { newsCountry: country } : {}),
+        ...(nCat !== undefined ? { newsCategory: nCat } : {}),
+        ...(nPage !== undefined ? { newsPageSize: nPage } : {}),
+        ...(nMode !== undefined ? { newsDisplayMode: nMode } : {}),
+        ...(nIv !== undefined ? { newsCarouselIntervalSec: nIv } : {}),
+        ...(nb !== undefined ? { newsBackground: nb } : {}),
+        ...(ntc !== undefined ? { newsTextColor: ntc } : {}),
+        ...(nmc !== undefined ? { newsMetaColor: nmc } : {}),
+        ...(ntfs !== undefined ? { newsTitleFontSize: ntfs } : {}),
+        ...(nmfs !== undefined ? { newsMetaFontSize: nmfs } : {}),
+        ...(nst !== undefined ? { newsSectionTitle: nst } : {}),
+        ...(nlc !== undefined ? { newsTitleLineClamp: nlc } : {}),
+        ...(ncp !== undefined ? { newsContentPaddingPx: ncp } : {}),
+        ...(nsh !== undefined ? { newsShowHeader: nsh } : {}),
+        ...(nss !== undefined ? { newsShowSource: nss } : {}),
+        ...(nle !== undefined ? { newsLinksEnabled: nle } : {}),
+        ...chrome,
+        ...(opacity !== undefined ? { opacity } : {}),
+        ...(rotation !== undefined ? { rotation } : {}),
+        ...(o.visible === false ? { visible: false as const } : {}),
+        ...(o.locked === true ? { locked: true as const } : {}),
+      });
     } else if (o.type === "drawing") {
       const rawPts = o.points;
       const points: number[] = [];
@@ -1092,7 +1518,10 @@ export function buildBookDrawingElement(
   stroke: string,
   strokeWidth: number,
 ): BookCanvasElement | null {
-  const absPts = simplifyDrawingAbsPoints(absPtsRaw, 1.5).slice(0, BOOK_DRAWING_POINTS_CAP);
+  const absPts = simplifyDrawingAbsPoints(absPtsRaw, 1.5).slice(
+    0,
+    BOOK_DRAWING_POINTS_CAP,
+  );
   if (absPts.length < 2) return null;
   let minX = Infinity;
   let minY = Infinity;
@@ -1118,7 +1547,9 @@ export function buildBookDrawingElement(
     points.push(p.x - minX, p.y - minY);
   }
   const strokeSafe =
-    typeof stroke === "string" && stroke.trim() ? stroke.trim().slice(0, 40) : "#1e293b";
+    typeof stroke === "string" && stroke.trim()
+      ? stroke.trim().slice(0, 40)
+      : "#1e293b";
   const sw = Math.min(24, Math.max(1, strokeWidth));
   return {
     id: crypto.randomUUID(),

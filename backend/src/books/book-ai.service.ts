@@ -25,11 +25,18 @@ const ANCHORS = new Set([
   'bottomRight',
 ]);
 
-const WIDGETS = new Set(['weather', 'digitalClock', 'text', 'image', 'video']);
+const WIDGETS = new Set([
+  'weather',
+  'digitalClock',
+  'news',
+  'text',
+  'image',
+  'video',
+]);
 
 export type BookLayoutAiAddWidgetAction = {
   type: 'add_widget';
-  widget: 'weather' | 'digitalClock' | 'text' | 'image' | 'video';
+  widget: 'weather' | 'digitalClock' | 'news' | 'text' | 'image' | 'video';
   anchor: string;
   /** 왼쪽 목록 기준 1번째 슬라이드에 배치. 생략 시 «현재 보고 있는» 슬라이드 */
   slideNumber?: number;
@@ -208,7 +215,7 @@ Each action is ONE of:
 A) Add a widget:
 {
   "type": "add_widget",
-  "widget": "weather" | "digitalClock" | "text" | "image" | "video",
+  "widget": "weather" | "digitalClock" | "news" | "text" | "image" | "video",
   "anchor": "topLeft" | "topCenter" | "topRight" | "middleLeft" | "center" | "middleRight" | "bottomLeft" | "bottomCenter" | "bottomRight",
   "cityQuery": "optional — weather only, e.g. Seoul,KR",
   "text": "optional — exact text for text widget when user gave wording",
@@ -217,7 +224,7 @@ A) Add a widget:
   "imageUrl": "optional — direct https image URL for widget image (omit imageSearchQuery)",
   "videoSearchQuery": "for widget video only, when no URL — ENGLISH Pexels video keywords. Server picks a short clip (~25s max), smallest quality for smaller file size. Example: "스위스 풍경 짧은 동영상" → "Switzerland landscape nature scenic short".",
   "videoUrl": "optional — direct https video URL for widget video (omit videoSearchQuery)",
-  "slideNumber": "optional integer 1..N — ONLY when the user EXPLICITLY names a slide by number/ordinal (e.g. "슬라이드 2에", "3번째 페이지", "1장에 넣어"). For add_widget (image, video, text, weather, clock): DEFAULT is ALWAYS the slide they are currently viewing — OMIT slideNumber if they did not specify which slide (e.g. "이미지 넣어줘", "스위스 사진", "비디오 추가" alone)."
+  "slideNumber": "optional integer 1..N — ONLY when the user EXPLICITLY names a slide by number/ordinal (e.g. "슬라이드 2에", "3번째 페이지", "1장에 넣어"). For add_widget (image, video, text, weather, clock, news): DEFAULT is ALWAYS the slide they are currently viewing — OMIT slideNumber if they did not specify which slide (e.g. "이미지 넣어줘", "스위스 사진", "비디오 추가" alone)."
 }
 
 B) Set slide background:
@@ -276,7 +283,7 @@ J) Replace the picture or clip inside ONE existing image/video widget (keeps pos
 No anchor, no slideNumber. When the user wants different media for the selected widget (Korean: 바꿔줘, 다른 걸로, 교체, 다른 동영상/사진; English: replace, swap, change to), use J) NOT add_widget — add_widget would create a second widget.
 
 Rules:
-- Map Korean requests: 날씨/날씨 위젯/○○ 날씨 → weather with cityQuery (e.g. Seoul,KR, Busan,KR, Tokyo,JP). 디지털 시계/전자시계/시계 위젯 → digitalClock (no cityQuery).
+- Map Korean requests: 날씨/날씨 위젯/○○ 날씨 → weather with cityQuery (e.g. Seoul,KR, Busan,KR, Tokyo,JP). 디지털 시계/전자시계/시계 위젯 → digitalClock (no cityQuery). 뉴스/헤드라인/속보 위젯 → news (no extra fields; server uses NewsAPI headlines).
 - TEXT widget on the CANVAS (슬라이드 안 글 상자) — NOT the slide tab name and NOT the book header title:
   - If the user gives exact wording to show on the slide, use add_widget widget "text" and set "text" to that EXACT string (Korean preserved).
   - Korean patterns meaning "put this string in a text box": 「…」/『…』 … 넣어줘; "…" 란/이라는/라는 텍스트(를) 넣어줘; … 란/이라는/라는 문구·글자; 텍스트 위젯에 『…』 넣어줘.
@@ -286,7 +293,7 @@ Rules:
 - IMAGE requests (이미지/사진/그림/포토/배경화면 사진 등 — only when they do NOT ask for video as above): ALWAYS emit add_widget with widget "image". If no https URL from user, you MUST set imageSearchQuery to rich ENGLISH keywords (never Korean in imageSearchQuery). Translate places: 스위스=Switzerland, 일본=Japan, 파리=Paris, 제주=Jeju island Korea. Combine place + scene + quality words (landscape, scenic, beautiful, nature, aerial, sunset, etc.). Default anchor "center" unless user asks for a corner.
 - VIDEO requests (동영상/비디오/영상/클립/짧은 영상/MP4 등): ALWAYS emit add_widget with widget "video". If no https URL from user, you MUST set videoSearchQuery to rich ENGLISH keywords (never Korean). Example: "스위스 풍경 비디오" → videoSearchQuery: "Switzerland landscape nature scenic mountains aerial b-roll". The server searches Pexels videos and prefers short clips and smaller MP4 files. Same anchor rules as image.
 - Anchors: 좌상단=topLeft, 상단중앙=topCenter, 우상단=topRight, 왼쪽중앙=middleLeft, 정중앙=center, 오른쪽중앙=middleRight, 좌하=bottomLeft, 하단중앙=bottomCenter, 우하=bottomRight. Default center for "넣어줘" without position.
-- add_widget slideNumber — DEFAULT: place on the CURRENTLY VIEWED slide (the UI selection). Set slideNumber ONLY when the user clearly targets another slide by index or ordinal (e.g. 슬라이드 2, 2번째 페이지, 1장에, 세 번째 슬이드, page 3). If they only ask to add/change an image or video without naming which slide, NEVER set slideNumber (even if you guess a number). Same for text/weather/clock widgets unless they name a slide.
+- add_widget slideNumber — DEFAULT: place on the CURRENTLY VIEWED slide (the UI selection). Set slideNumber ONLY when the user clearly targets another slide by index or ordinal (e.g. 슬라이드 2, 2번째 페이지, 1장에, 세 번째 슬이드, page 3). If they only ask to add/change an image or video without naming which slide, NEVER set slideNumber (even if you guess a number). Same for text/weather/clock/news widgets unless they name a slide.
 - For image: imageSearchQuery must be English only, 4–12 words typically, specific enough to match the user's intent. If user provides https URL, use imageUrl only and omit imageSearchQuery.
 - For video: videoSearchQuery must be English only. If user provides a direct https link to a video file, use videoUrl only and omit videoSearchQuery.
 - VERY IMPORTANT — book vs slide title in Korean:
@@ -299,9 +306,9 @@ Rules:
 - Use remove_current_page for 이 페이지 지워줘/현재 슬라이드 삭제/이 장 없애줘. Mention in reply that user must confirm in the dialog; if only one slide, say 삭제할 수 없음.
 - Use set_slide_dimensions for 해상도/캔버스 크기/슬라이드 크기(px)/FHD/풀HD/HD/4K/정사각형 등. Map common names to pixels (e.g. FHD 1920×1080). If user changes only width or height, emit only that field.
 - When WIDGET SELECTION is in the user message and the user wants different image/video for that selection, emit replace_widget_media (J) with the given elementId — not add_widget.
-- NEVER return "actions": [] when the user clearly asks to add a widget (image, video, text, weather, clock), replace selected image/video media, or change layout on the current slide — always emit the matching action. Empty actions are ONLY for off-topic/unsupported requests per the rule below.
+- NEVER return "actions": [] when the user clearly asks to add a widget (image, video, text, weather, clock, news), replace selected image/video media, or change layout on the current slide — always emit the matching action. Empty actions are ONLY for off-topic/unsupported requests per the rule below.
 - You may combine actions (e.g. background + several widgets). Keep at most 10 actions.
-- Off-topic or unsupported asks (general knowledge, jokes unrelated to editing, coding homework, life advice, other apps, etc.): ALWAYS use actions: []. In "reply", write ONLY Korean: politely say this assistant only helps with slide/book layout in THIS editor (widgets including images and short stock videos, background, titles, pages, undo/redo, canvas size) and that request is not supported. Add a touch of wit or playful wordplay—dry humor, one light metaphor, or a gentle pun is welcome—while staying kind, brief (1–3 short sentences), and never sarcastic or rude. Do not pretend to fulfill the off-topic request.`;
+- Off-topic or unsupported asks (general knowledge, jokes unrelated to editing, coding homework, life advice, other apps, etc.): ALWAYS use actions: []. In "reply", write ONLY Korean: politely say this assistant only helps with slide/book layout in THIS editor (widgets including images, short stock videos, weather, clock, news headlines, background, titles, pages, undo/redo, canvas size) and that request is not supported. Add a touch of wit or playful wordplay—dry humor, one light metaphor, or a gentle pun is welcome—while staying kind, brief (1–3 short sentences), and never sarcastic or rude. Do not pretend to fulfill the off-topic request.`;
 
     const user = `This book has ${pageCount} slide(s) (same as "pages"), numbered 1–${pageCount} from the first item in the left sidebar list. The user is now viewing slide ${viewingOneBased} (1-based).
 Slide canvas size: ${w}px × ${h}px.

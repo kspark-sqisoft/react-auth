@@ -10,6 +10,8 @@ import {
   createEmptyEditorPage,
   DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
   DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
+  DEFAULT_BOOK_NEWS_WIDGET_HEIGHT,
+  DEFAULT_BOOK_NEWS_WIDGET_WIDTH,
   DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
   DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
   DEFAULT_PAGE_BACKGROUND,
@@ -453,6 +455,26 @@ export function BookEditorPage() {
     [activePageIndex, updatePages],
   );
 
+  const addNewsAt = useCallback(
+    (x: number, y: number) => {
+      const id = crypto.randomUUID();
+      const el: BookCanvasElement = {
+        id,
+        type: "news",
+        x,
+        y,
+        width: DEFAULT_BOOK_NEWS_WIDGET_WIDTH,
+        height: DEFAULT_BOOK_NEWS_WIDGET_HEIGHT,
+      };
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.elements.push(el);
+      });
+      setSelectedIds([id]);
+    },
+    [activePageIndex, updatePages],
+  );
+
   const addDigitalClockAt = useCallback(
     (x: number, y: number) => {
       const id = crypto.randomUUID();
@@ -487,9 +509,13 @@ export function BookEditorPage() {
         addDigitalClockAt(point.x, point.y);
         return;
       }
+      if (kind === "news") {
+        addNewsAt(point.x, point.y);
+        return;
+      }
       toast.error("저장한 뒤 열린 북 화면에서 이미지·동영상 위젯을 넣을 수 있습니다.");
     },
-    [addDigitalClockAt, addTextAt, addWeatherAt],
+    [addDigitalClockAt, addNewsAt, addTextAt, addWeatherAt],
   );
 
   const applyAiElements = useCallback(
@@ -686,6 +712,7 @@ export function BookEditorPage() {
     if (el.type === "image") return "이미지 위젯";
     if (el.type === "video") return "동영상 위젯";
     if (el.type === "weather") return "날씨 위젯";
+    if (el.type === "news") return "뉴스 위젯";
     if (el.type === "digitalClock") return "디지털 시계 위젯";
     if (el.type === "drawing") return "그리기";
     return "위젯";

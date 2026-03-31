@@ -24,6 +24,7 @@ import {
   ChevronsUp,
   Clock,
   CloudSun,
+  Newspaper,
   Pencil,
   Eye,
   EyeOff,
@@ -83,6 +84,8 @@ function LayerTypeIcon({ el }: { el: BookCanvasElement }) {
       return <Video className={cls} aria-hidden />;
     case "weather":
       return <CloudSun className={cls} aria-hidden />;
+    case "news":
+      return <Newspaper className={cls} aria-hidden />;
     case "digitalClock":
       return <Clock className={cls} aria-hidden />;
     case "drawing":

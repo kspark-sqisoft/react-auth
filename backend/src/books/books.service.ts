@@ -133,6 +133,37 @@ export type BookCanvasElementPublic =
     }
   | {
       id: string;
+      type: 'news';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      newsCountry?: string;
+      newsCategory?: string;
+      newsPageSize?: number;
+      newsDisplayMode?: 'list' | 'carousel';
+      newsCarouselIntervalSec?: number;
+      newsBackground?: string;
+      newsTextColor?: string;
+      newsMetaColor?: string;
+      newsTitleFontSize?: number;
+      newsMetaFontSize?: number;
+      newsSectionTitle?: string;
+      newsTitleLineClamp?: number;
+      newsContentPaddingPx?: number;
+      newsShowHeader?: boolean;
+      newsShowSource?: boolean;
+      newsLinksEnabled?: boolean;
+      opacity?: number;
+      rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
+    }
+  | {
+      id: string;
       type: 'drawing';
       x: number;
       y: number;
@@ -368,6 +399,7 @@ export class BooksService {
         o.type !== 'video' &&
         o.type !== 'weather' &&
         o.type !== 'digitalClock' &&
+        o.type !== 'news' &&
         o.type !== 'drawing'
       ) {
         throw new BadRequestException('지원하지 않는 요소 타입입니다.');
@@ -586,6 +618,228 @@ export class BooksService {
               '디지털 시계 글자색에 허용되지 않는 문자가 있습니다.',
             );
           }
+        }
+      } else if (o.type === 'news') {
+        const w = o.width;
+        const h = o.height;
+        if (
+          typeof w !== 'number' ||
+          typeof h !== 'number' ||
+          w < 24 ||
+          h < 24 ||
+          w > 4000 ||
+          h > 4000
+        ) {
+          throw new BadRequestException('뉴스 위젯 크기가 올바르지 않습니다.');
+        }
+        if (o.newsCountry != null) {
+          if (typeof o.newsCountry !== 'string') {
+            throw new BadRequestException(
+              '뉴스 국가 코드 형식이 올바르지 않습니다.',
+            );
+          }
+          const c = o.newsCountry.trim().toLowerCase();
+          if (c.length === 0) {
+            delete (o as { newsCountry?: string }).newsCountry;
+          } else if (c.length !== 2 || !/^[a-z]{2}$/.test(c)) {
+            throw new BadRequestException(
+              '뉴스 국가 코드는 ISO 영문 2자입니다. 비우면 기본 kr로 불러옵니다.',
+            );
+          } else {
+            o.newsCountry = c;
+          }
+        }
+        if (o.newsCategory != null) {
+          const allowed = new Set([
+            'business',
+            'entertainment',
+            'general',
+            'health',
+            'science',
+            'sports',
+            'technology',
+          ]);
+          if (
+            typeof o.newsCategory !== 'string' ||
+            !allowed.has(o.newsCategory.toLowerCase())
+          ) {
+            throw new BadRequestException(
+              '뉴스 category 값이 올바르지 않습니다.',
+            );
+          }
+        }
+        if (o.newsPageSize != null) {
+          const ps = o.newsPageSize;
+          if (
+            typeof ps !== 'number' ||
+            ps < 1 ||
+            ps > 10 ||
+            !Number.isInteger(ps)
+          ) {
+            throw new BadRequestException(
+              'newsPageSize는 1~10 정수여야 합니다.',
+            );
+          }
+        }
+        if (o.newsDisplayMode != null) {
+          if (
+            o.newsDisplayMode !== 'list' &&
+            o.newsDisplayMode !== 'carousel'
+          ) {
+            throw new BadRequestException(
+              'newsDisplayMode는 list 또는 carousel이어야 합니다.',
+            );
+          }
+        }
+        if (o.newsCarouselIntervalSec != null) {
+          const iv = o.newsCarouselIntervalSec;
+          if (
+            typeof iv !== 'number' ||
+            iv < 3 ||
+            iv > 120 ||
+            !Number.isInteger(iv)
+          ) {
+            throw new BadRequestException(
+              'newsCarouselIntervalSec는 3~120 정수(초)여야 합니다.',
+            );
+          }
+        }
+        if (o.newsBackground != null) {
+          if (
+            typeof o.newsBackground !== 'string' ||
+            o.newsBackground.length > 80
+          ) {
+            throw new BadRequestException(
+              '뉴스 카드 배경색이 올바르지 않습니다.',
+            );
+          }
+          if (
+            /[<>]/.test(o.newsBackground) ||
+            /url\s*\(/i.test(o.newsBackground)
+          ) {
+            throw new BadRequestException(
+              '뉴스 카드 배경색에 허용되지 않는 문자가 있습니다.',
+            );
+          }
+        }
+        if (o.newsTextColor != null) {
+          if (
+            typeof o.newsTextColor !== 'string' ||
+            o.newsTextColor.length > 80
+          ) {
+            throw new BadRequestException('뉴스 글자색이 올바르지 않습니다.');
+          }
+          if (
+            /[<>]/.test(o.newsTextColor) ||
+            /url\s*\(/i.test(o.newsTextColor)
+          ) {
+            throw new BadRequestException(
+              '뉴스 글자색에 허용되지 않는 문자가 있습니다.',
+            );
+          }
+        }
+        if (o.newsMetaColor != null) {
+          if (
+            typeof o.newsMetaColor !== 'string' ||
+            o.newsMetaColor.length > 80
+          ) {
+            throw new BadRequestException(
+              '뉴스 보조 글자색이 올바르지 않습니다.',
+            );
+          }
+          if (
+            /[<>]/.test(o.newsMetaColor) ||
+            /url\s*\(/i.test(o.newsMetaColor)
+          ) {
+            throw new BadRequestException(
+              '뉴스 보조 글자색에 허용되지 않는 문자가 있습니다.',
+            );
+          }
+        }
+        if (o.newsTitleFontSize != null) {
+          const fs = o.newsTitleFontSize;
+          if (
+            typeof fs !== 'number' ||
+            !Number.isInteger(fs) ||
+            fs < 10 ||
+            fs > 32
+          ) {
+            throw new BadRequestException(
+              'newsTitleFontSize는 10~32 정수(px)여야 합니다.',
+            );
+          }
+        }
+        if (o.newsMetaFontSize != null) {
+          const fs = o.newsMetaFontSize;
+          if (
+            typeof fs !== 'number' ||
+            !Number.isInteger(fs) ||
+            fs < 8 ||
+            fs > 22
+          ) {
+            throw new BadRequestException(
+              'newsMetaFontSize는 8~22 정수(px)여야 합니다.',
+            );
+          }
+        }
+        if (o.newsSectionTitle != null) {
+          if (
+            typeof o.newsSectionTitle !== 'string' ||
+            o.newsSectionTitle.length > 40
+          ) {
+            throw new BadRequestException(
+              '뉴스 섹션 제목이 올바르지 않습니다.',
+            );
+          }
+          if (/[<>]/.test(o.newsSectionTitle)) {
+            throw new BadRequestException(
+              '뉴스 섹션 제목에 허용되지 않는 문자가 있습니다.',
+            );
+          }
+        }
+        if (o.newsTitleLineClamp != null) {
+          const lc = o.newsTitleLineClamp;
+          if (
+            typeof lc !== 'number' ||
+            !Number.isInteger(lc) ||
+            lc < 1 ||
+            lc > 6
+          ) {
+            throw new BadRequestException(
+              'newsTitleLineClamp는 1~6 정수여야 합니다.',
+            );
+          }
+        }
+        if (o.newsContentPaddingPx != null) {
+          const pad = o.newsContentPaddingPx;
+          if (
+            typeof pad !== 'number' ||
+            !Number.isInteger(pad) ||
+            pad < 4 ||
+            pad > 40
+          ) {
+            throw new BadRequestException(
+              'newsContentPaddingPx는 4~40 정수(캔버스 px)여야 합니다.',
+            );
+          }
+        }
+        if (o.newsShowHeader != null && typeof o.newsShowHeader !== 'boolean') {
+          throw new BadRequestException(
+            'newsShowHeader는 불리언이어야 합니다.',
+          );
+        }
+        if (o.newsShowSource != null && typeof o.newsShowSource !== 'boolean') {
+          throw new BadRequestException(
+            'newsShowSource는 불리언이어야 합니다.',
+          );
+        }
+        if (
+          o.newsLinksEnabled != null &&
+          typeof o.newsLinksEnabled !== 'boolean'
+        ) {
+          throw new BadRequestException(
+            'newsLinksEnabled는 불리언이어야 합니다.',
+          );
         }
       } else if (o.type === 'drawing') {
         const w = o.width;
