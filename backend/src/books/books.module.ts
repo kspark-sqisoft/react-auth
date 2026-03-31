@@ -5,6 +5,7 @@ import {
   BooksDomainSpanInterceptor,
   BooksDomainSpanMiddleware,
 } from './books-domain-span';
+import { BookAiChatMessage } from './book-ai-chat-message.entity';
 import { BookPage } from './book-page.entity';
 import { Book } from './book.entity';
 import { BooksAiController } from './book-ai.controller';
@@ -14,7 +15,10 @@ import { BooksController } from './books.controller';
 import { BooksService } from './books.service';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Book, BookPage]), AuthModule],
+  imports: [
+    TypeOrmModule.forFeature([Book, BookPage, BookAiChatMessage]),
+    AuthModule,
+  ],
   controllers: [BooksController, BooksAiController],
   providers: [
     BooksService,

@@ -5,6 +5,10 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { BookAiChatMessage } from './book-ai-chat-message.entity';
+import { BooksService } from './books.service';
 import { PexelsService } from './pexels.service';
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
@@ -127,9 +131,14 @@ export type BookLayoutAiResult = {
 export class BookAiService {
   private readonly logger = new Logger(BookAiService.name);
 
+  private static readonly CHAT_PAGE = 200;
+
   constructor(
     private readonly config: ConfigService,
     private readonly pexels: PexelsService,
+    private readonly booksService: BooksService,
+    @InjectRepository(BookAiChatMessage)
+    private readonly chatMsgRepo: Repository<BookAiChatMessage>,
   ) {}
 
   async interpretLayoutIntent(input: {
@@ -1294,5 +1303,54 @@ ${msg}`;
     }
 
     return { reply, actions: out };
+  }
+
+  /**
+   * 성공 응답 한 턴(user + assistant)만 저장. 북 작성자가 아니면 조용히 return.
+   * OpenAI 요청 본문에는 넣지 않으므로 토큰 사용량은 변하지 않습니다.
+   */
+  async tryPersistChatTurn(
+    bookId: number,
+    userId: number,
+    userMessage: string,
+    assistantReply: string,
+  ): Promise<void> {
+    try {
+      await this.booksService.assertBookOwner(bookId, userId);
+    } catch {
+      return;
+    }
+    const u = userMessage.trim().slice(0, 4000);
+    const a = assistantReply.trim().slice(0, 12000);
+    if (!u || !a) return;
+    await this.chatMsgRepo.save([
+      this.chatMsgRepo.create({ book: { id: bookId }, role: 'user', body: u }),
+      this.chatMsgRepo.create({
+        book: { id: bookId },
+        role: 'assistant',
+        body: a,
+      }),
+    ]);
+  }
+
+  async listLayoutChat(
+    bookId: number,
+    userId: number,
+  ): Promise<
+    { id: number; role: 'user' | 'assistant'; text: string; createdAt: string }[]
+  > {
+    await this.booksService.assertBookOwner(bookId, userId);
+    const rows = await this.chatMsgRepo.find({
+      where: { book: { id: bookId } },
+      order: { createdAt: 'ASC' },
+      take: BookAiService.CHAT_PAGE,
+      select: ['id', 'role', 'body', 'createdAt'],
+    });
+    return rows.map((r) => ({
+      id: r.id,
+      role: r.role,
+      text: r.body,
+      createdAt: r.createdAt.toISOString(),
+    }));
   }
 }

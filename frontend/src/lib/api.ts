@@ -752,6 +752,25 @@ export type BookLayoutAiResponse = {
   actions: BookLayoutAiActionDto[];
 };
 
+export type BookAiChatLineDto = {
+  id: number;
+  role: "user" | "assistant";
+  text: string;
+  createdAt: string;
+};
+
+/** 저장된 북 편집기에서 AI 패널을 다시 열 때 이전 대화(작성자만). */
+export async function fetchBookAiChat(bookId: number): Promise<BookAiChatLineDto[]> {
+  try {
+    const { data } = await api.get<BookAiChatLineDto[]>("/books/ai/chat", {
+      params: { bookId },
+    });
+    return Array.isArray(data) ? data : [];
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
 /** 로그인 필요. 서버에서 OpenAI로 북 편집용 자연어 → 액션 JSON을 해석합니다. */
 export async function requestBookLayoutAi(body: {
   message: string;
@@ -761,6 +780,8 @@ export async function requestBookLayoutAi(body: {
   activeSlideIndex: number;
   /** 단일 이미지·비디오 선택 시 — 채팅으로 «바꿔줘» 등 시 교체 액션으로 연결 */
   selection?: { elementId: string; kind: "image" | "video" };
+  /** 저장된 북 id — 넣으면 성공한 한 턴을 DB에 남김(작성자만). OpenAI 토큰은 증가하지 않음. */
+  bookId?: number;
 }): Promise<BookLayoutAiResponse> {
   try {
     const { data } = await api.post<BookLayoutAiResponse>("/books/ai/layout", body, {

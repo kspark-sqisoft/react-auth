@@ -1420,6 +1420,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
             />
           ) : null}
           <BookAiAssistantPanel
+            bookId={bookId}
             slideWidth={slideWidth}
             slideHeight={slideHeight}
             pageCount={localPages.length}

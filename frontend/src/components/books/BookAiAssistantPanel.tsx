@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
   Bot,
@@ -11,7 +11,7 @@ import {
   X,
 } from "lucide-react";
 import { toast } from "sonner";
-import { requestBookLayoutAi } from "@/lib/api";
+import { fetchBookAiChat, requestBookLayoutAi } from "@/lib/api";
 import { appLog } from "@/lib/app-log";
 import {
   addPagesTotalCount,
@@ -27,7 +27,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
 
-type ChatLine = { role: "user" | "assistant"; text: string };
+type ChatLine = { role: "user" | "assistant"; text: string; lineKey: string };
 
 const ASSISTANT_TIPS: { title: string; hints: string[] }[] = [
   {
@@ -125,6 +125,8 @@ type BookAiAssistantPanelProps = {
   floatingStackZIndex?: number;
   onRaiseFloatingStack?: () => void;
   className?: string;
+  /** 저장된 북이면 대화를 DB에 남기고, 패널을 다시 열 때 서버에서 불러옵니다. `/books/new` 는 생략. */
+  bookId?: number | null;
 };
 
 export function BookAiAssistantPanel({
@@ -146,6 +148,7 @@ export function BookAiAssistantPanel({
   floatingStackZIndex,
   onRaiseFloatingStack,
   className,
+  bookId = null,
 }: BookAiAssistantPanelProps) {
   const [open, setOpen] = useState(false);
   const [lines, setLines] = useState<ChatLine[]>([]);
@@ -169,11 +172,40 @@ export function BookAiAssistantPanel({
     setInput(hint);
   }, []);
 
+  useEffect(() => {
+    if (!open || bookId == null || bookId <= 0) return;
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await fetchBookAiChat(bookId);
+        if (cancelled) return;
+        setLines(
+          rows.map((r) => ({
+            role: r.role,
+            text: r.text,
+            lineKey: `srv-${r.id}`,
+          })),
+        );
+      } catch {
+        if (!cancelled) {
+          toast.error("대화 기록을 불러오지 못했습니다.");
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [open, bookId]);
+
   const send = useCallback(async () => {
     const msg = input.trim();
     if (!msg || pending) return;
     setInput("");
-    setLines((prev) => [...prev, { role: "user", text: msg }]);
+    const userKey =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `u-${Date.now()}`;
+    setLines((prev) => [...prev, { role: "user", text: msg, lineKey: userKey }]);
     setPending(true);
     try {
       const { reply, actions } = await requestBookLayoutAi({
@@ -370,11 +402,19 @@ export function BookAiAssistantPanel({
         if (dimApplied) parts.push("캔버스 해상도 반영");
         toast.success(parts.join(" · "));
       }
-      setLines((prev) => [...prev, { role: "assistant", text: reply }]);
+      const asKey =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `a-${Date.now()}`;
+      setLines((prev) => [...prev, { role: "assistant", text: reply, lineKey: asKey }]);
     } catch (e) {
       const m = e instanceof Error ? e.message : "요청에 실패했습니다.";
       toast.error(m);
-      setLines((prev) => [...prev, { role: "assistant", text: m }]);
+      const errKey =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `e-${Date.now()}`;
+      setLines((prev) => [...prev, { role: "assistant", text: m, lineKey: errKey }]);
     } finally {
       setPending(false);
       requestAnimationFrame(() => {
@@ -402,6 +442,7 @@ export function BookAiAssistantPanel({
     slideWidth,
     pageCount,
     activePageIndex,
+    bookId,
   ]);
 
   const shell = (
@@ -540,9 +581,9 @@ export function BookAiAssistantPanel({
                 문장이 채워집니다.
               </p>
             ) : null}
-            {lines.map((line, i) => (
+            {lines.map((line) => (
               <div
-                key={i}
+                key={line.lineKey}
                 className={cn(
                   "rounded-xl px-3 py-2.5 text-[13px] leading-snug",
                   line.role === "user"
@@ -605,6 +646,12 @@ export function BookAiAssistantPanel({
               로 찾을 수 있어요. 슬라이드 반영만 하고{" "}
               <strong className="font-medium text-violet-950 dark:text-violet-100">북 저장은 따로</strong> 해야
               서버(DB)에 남습니다.
+              {bookId != null && bookId > 0 ? (
+                <>
+                  {" "}
+                  성공한 AI 대화도 이 북에 저장되어, 패널을 접었다 펼쳐도 이어서 볼 수 있어요(북 작성자만).
+                </>
+              ) : null}
             </p>
           </div>
         </div>
