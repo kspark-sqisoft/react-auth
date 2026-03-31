@@ -1,8 +1,10 @@
 import { type BookCanvasElement } from "@/lib/book-canvas";
 
 /**
- * `public/cards/` 샘플 사진(프로젝트에 img1.jpg … 넣으면 로드됩니다).
- * 없으면 캔버스에서 회색 플레이스홀더로 보입니다.
+ * `public/cards/` 샘플 사진 — `BOOK_TEMPLATE_STOCK_IMAGE_PATHS` 경로와 파일명이 맞아야 합니다.
+ * Pexels(무료 API)로 채우려면: `frontend/.env.local`에 `PEXELS_API_KEY=` 후 `npm run fetch:cards`
+ * (스크립트: `scripts/fetch-template-card-images.mjs`, 출처: `public/cards/ATTRIBUTION.txt`).
+ * 파일이 없으면 캔버스에서 회색 플레이스홀더로 보입니다.
  */
 export const BOOK_TEMPLATE_STOCK_IMAGE_PATHS: readonly string[] = [
   "/cards/img1.jpg",
