@@ -19,6 +19,10 @@ import {
 } from "@/lib/book-canvas";
 import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
 import {
+  BOOK_PRESENTATION_TRANSITION_OPTIONS,
+  type BookPresentationTransitionId,
+} from "@/lib/book-presentation-transition";
+import {
   bookDockedPanelHeaderIconClass,
   bookDockedPanelHeaderRowClass,
   bookDockedPanelHeadingClass,
@@ -40,6 +44,10 @@ type BookPagePropertiesPanelProps = {
   onChangePresentationTimingElementId: (id: string | null) => void;
   presentationLoop: boolean;
   onChangePresentationLoop: (loop: boolean) => void;
+  presentationTransition: BookPresentationTransitionId;
+  onChangePresentationTransition: (v: BookPresentationTransitionId) => void;
+  presentationTransitionMs: number;
+  onChangePresentationTransitionMs: (ms: number) => void;
 };
 
 function hexForColorInput(css: string): string {
@@ -74,6 +82,10 @@ export function BookPagePropertiesPanel({
   onChangePresentationTimingElementId,
   presentationLoop,
   onChangePresentationLoop,
+  presentationTransition,
+  onChangePresentationTransition,
+  presentationTransitionMs,
+  onChangePresentationTransitionMs,
 }: BookPagePropertiesPanelProps) {
   const preview = slideDisplayLabel(name, pageIndex);
   const pickerValue = hexForColorInput(backgroundColor.trim());
@@ -172,6 +184,50 @@ export function BookPagePropertiesPanel({
                 </span>
               </span>
             </label>
+            <div className="space-y-1 border-t border-border/40 pt-2">
+              <Label className="text-[11px]">이 슬라이드로 전환될 때</Label>
+              <p className="text-[10px] leading-snug text-muted-foreground">
+                미리보기(/preview)에서 이 페이지가 나타날 때 적용됩니다. 첫 슬라이드는 애니메이션을 쓰지
+                않습니다.
+              </p>
+              <Select
+                value={presentationTransition}
+                onValueChange={(v) =>
+                  onChangePresentationTransition(v as BookPresentationTransitionId)
+                }
+              >
+                <SelectTrigger size="sm" className="h-9 w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {BOOK_PRESENTATION_TRANSITION_OPTIONS.map((o) => (
+                    <SelectItem key={o.id} value={o.id}>
+                      {o.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <div className="flex flex-wrap items-center gap-2">
+                <Label htmlFor="pres-trans-ms" className="shrink-0 text-[11px]">
+                  전환 시간(ms)
+                </Label>
+                <Input
+                  id="pres-trans-ms"
+                  type="number"
+                  min={80}
+                  max={2500}
+                  step={10}
+                  className="h-8 w-[5.5rem] font-mono text-xs"
+                  value={presentationTransitionMs}
+                  onChange={(e) => {
+                    const n = Number(e.target.value);
+                    if (!Number.isFinite(n)) return;
+                    onChangePresentationTransitionMs(n);
+                  }}
+                />
+                <span className="text-[10px] text-muted-foreground">80–2500</span>
+              </div>
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="page-bg-hex">슬라이드 배경색</Label>

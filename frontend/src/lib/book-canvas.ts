@@ -3,6 +3,12 @@
  */
 
 import type Konva from "konva";
+import {
+  clampBookPresentationTransitionMs,
+  DEFAULT_BOOK_PRESENTATION_TRANSITION_MS,
+  normalizeBookPresentationTransition,
+  type BookPresentationTransitionId,
+} from "@/lib/book-presentation-transition";
 
 export const BOOK_MEDIA_OBJECT_FIT_VALUES = [
   "cover",
@@ -778,6 +784,10 @@ export type BookEditorPageState = {
   elements: BookCanvasElement[];
   /** 미리보기 페이지 체류 시간 기준 위젯 id(같은 페이지 elements 내) */
   presentationTimingElementId?: string | null;
+  /** 슬라이드쇼에서 이 페이지로 들어올 때 전환(기본 none) */
+  presentationTransition?: BookPresentationTransitionId;
+  /** 전환 지속(ms) */
+  presentationTransitionMs?: number;
 };
 
 /**
@@ -1045,6 +1055,8 @@ export function createEmptyEditorPage(sortOrder: number): BookEditorPageState {
     name: "",
     backgroundColor: DEFAULT_PAGE_BACKGROUND,
     elements: [],
+    presentationTransition: "none",
+    presentationTransitionMs: DEFAULT_BOOK_PRESENTATION_TRANSITION_MS,
   };
 }
 
@@ -1209,6 +1221,12 @@ export function duplicateBookEditorPage(
       elements,
       mappedTimingId,
     ),
+    presentationTransition: normalizeBookPresentationTransition(
+      page.presentationTransition,
+    ),
+    presentationTransitionMs: clampBookPresentationTransitionMs(
+      page.presentationTransitionMs,
+    ),
   };
 }
 
@@ -1224,6 +1242,12 @@ export function toBookPagePayloads(pages: BookEditorPageState[]) {
     presentationTimingElementId: resolveEffectivePresentationTimingElementId(
       p.elements,
       p.presentationTimingElementId,
+    ),
+    presentationTransition: normalizeBookPresentationTransition(
+      p.presentationTransition,
+    ),
+    presentationTransitionMs: clampBookPresentationTransitionMs(
+      p.presentationTransitionMs,
     ),
   }));
 }

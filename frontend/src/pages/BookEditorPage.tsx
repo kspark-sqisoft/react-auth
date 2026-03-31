@@ -29,6 +29,11 @@ import {
   toBookPagePayloads,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
+import {
+  clampBookPresentationTransitionMs,
+  normalizeBookPresentationTransition,
+  type BookPresentationTransitionId,
+} from "@/lib/book-presentation-transition";
 import { defaultTextWidgetBoxHeight } from "@/lib/book-text-widget";
 import { warmBookCanvasImagesForNeighborPages } from "@/lib/book-image-cache";
 import type { BookEditorLeftTab } from "@/lib/book-editor-panel-events";
@@ -535,6 +540,26 @@ export function BookEditorPage() {
       updatePages((draft) => {
         const p = draft[activePageIndex];
         if (p) p.presentationTimingElementId = id;
+      });
+    },
+    [activePageIndex, updatePages],
+  );
+
+  const updatePresentationTransition = useCallback(
+    (transition: BookPresentationTransitionId) => {
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.presentationTransition = transition;
+      });
+    },
+    [activePageIndex, updatePages],
+  );
+
+  const updatePresentationTransitionMs = useCallback(
+    (ms: number) => {
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.presentationTransitionMs = ms;
       });
     },
     [activePageIndex, updatePages],
@@ -1150,6 +1175,14 @@ export function BookEditorPage() {
                     onChangePresentationTimingElementId={updatePresentationTimingElementId}
                     presentationLoop={presentationLoop}
                     onChangePresentationLoop={setPresentationLoop}
+                    presentationTransition={normalizeBookPresentationTransition(
+                      currentPage.presentationTransition,
+                    )}
+                    onChangePresentationTransition={updatePresentationTransition}
+                    presentationTransitionMs={clampBookPresentationTransitionMs(
+                      currentPage.presentationTransitionMs,
+                    )}
+                    onChangePresentationTransitionMs={updatePresentationTransitionMs}
                   />
                 )}
               </div>

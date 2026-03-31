@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import "@/book-presentation-transitions.css";
 import { fetchBook, type BookDetail } from "@/lib/api";
 import { bookKeys } from "@/lib/query-keys";
 import {
@@ -15,6 +16,11 @@ import {
   computeSlidePresentationDurationSec,
   DEFAULT_PRESENTATION_SLIDE_SEC,
 } from "@/lib/book-presentation";
+import {
+  clampBookPresentationTransitionMs,
+  normalizeBookPresentationTransition,
+  type BookPresentationTransitionId,
+} from "@/lib/book-presentation-transition";
 import { BookSlideCanvas } from "@/components/books/BookSlideCanvas";
 import {
   BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS,
@@ -34,6 +40,9 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
   }, [data]);
 
   const [slideIndex, setSlideIndex] = useState(0);
+  /** 슬라이드 인덱스가 바뀐 횟수(첫 화면 제외) — 전환 애니메이션 트리거용 */
+  const [slideNavEpoch, setSlideNavEpoch] = useState(0);
+  const skipNextSlideEnterAnimationRef = useRef(true);
   /** 수동 이전/다음 시 자동 재생 타이머 리셋(첫 슬라이드·메타 로드 직후 레이스 완화) */
   const [manualNavEpoch, setManualNavEpoch] = useState(0);
   const [videoDurationByElementId, setVideoDurationByElementId] = useState<
@@ -47,6 +56,34 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
   const maxIdx = Math.max(0, sortedPages.length - 1);
   const safeIdx = Math.min(slideIndex, maxIdx);
   const page = sortedPages[safeIdx];
+
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduceMotion(mq.matches);
+    const onChange = () => setReduceMotion(mq.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+
+  useEffect(() => {
+    if (skipNextSlideEnterAnimationRef.current) {
+      skipNextSlideEnterAnimationRef.current = false;
+      return;
+    }
+    setSlideNavEpoch((n) => n + 1);
+  }, [safeIdx]);
+
+  const incomingTransition: BookPresentationTransitionId = page
+    ? normalizeBookPresentationTransition(page.presentationTransition)
+    : "none";
+  const transitionMs = page
+    ? clampBookPresentationTransitionMs(page.presentationTransitionMs)
+    : 450;
+  const runSlideEnterAnimation =
+    slideNavEpoch > 0 &&
+    incomingTransition !== "none" &&
+    !reduceMotion;
 
   const { displayScale, zoomPercent, zoomIn, zoomOut, zoomReset, handleWheel } =
     useBookCanvasDisplayScale(canvasWrapRef, {
@@ -334,22 +371,35 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
           onWheel={handleWheel}
         >
           {page ? (
-            <BookSlideCanvas
-              pageWidth={slideW}
-              pageHeight={slideH}
-              pageBackgroundColor={
-                typeof page.backgroundColor === "string" && page.backgroundColor.trim()
-                  ? page.backgroundColor.trim()
-                  : DEFAULT_PAGE_BACKGROUND
+            <div
+              className={cn(
+                "flex max-h-full max-w-full items-center justify-center",
+                runSlideEnterAnimation &&
+                  `book-pres-enter book-pres-enter--${incomingTransition}`,
+              )}
+              style={
+                runSlideEnterAnimation
+                  ? { animationDuration: `${transitionMs}ms` }
+                  : undefined
               }
-              scale={displayScale}
-              elements={page.elements}
-              mode="view"
-              selectedIds={[]}
-              onSelect={() => undefined}
-              onElementChange={() => undefined}
-              onVideoDurationKnown={onVideoDurationKnown}
-            />
+            >
+              <BookSlideCanvas
+                pageWidth={slideW}
+                pageHeight={slideH}
+                pageBackgroundColor={
+                  typeof page.backgroundColor === "string" && page.backgroundColor.trim()
+                    ? page.backgroundColor.trim()
+                    : DEFAULT_PAGE_BACKGROUND
+                }
+                scale={displayScale}
+                elements={page.elements}
+                mode="view"
+                selectedIds={[]}
+                onSelect={() => undefined}
+                onElementChange={() => undefined}
+                onVideoDurationKnown={onVideoDurationKnown}
+              />
+            </div>
           ) : null}
         </div>
       </div>

@@ -26,6 +26,32 @@ const DEFAULT_PAGE_W = 960;
 const DEFAULT_PAGE_H = 540;
 const PAGE_NAME_MAX = 120;
 
+/** 슬라이드쇼 전환 — 프론트 `book-presentation-transition.ts`와 동일 키 유지 */
+const BOOK_PAGE_PRESENTATION_TRANSITIONS = new Set([
+  'none',
+  'fade',
+  'slideLeft',
+  'slideRight',
+  'slideUp',
+  'slideDown',
+  'zoomIn',
+  'blurIn',
+]);
+const DEFAULT_PRESENTATION_TRANSITION = 'none';
+const DEFAULT_PRESENTATION_TRANSITION_MS = 450;
+
+function normalizeBookPagePresentationTransition(raw: unknown): string {
+  const s = typeof raw === 'string' ? raw.trim() : '';
+  if (BOOK_PAGE_PRESENTATION_TRANSITIONS.has(s)) return s;
+  return DEFAULT_PRESENTATION_TRANSITION;
+}
+
+function normalizeBookPagePresentationTransitionMs(raw: unknown): number {
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return DEFAULT_PRESENTATION_TRANSITION_MS;
+  return Math.min(2500, Math.max(80, Math.round(n)));
+}
+
 export type BookAuthorPublic = {
   id: number;
   name: string;
@@ -221,6 +247,10 @@ export type BookPagePublic = {
   elements: BookCanvasElementPublic[];
   /** 미리보기 페이지 체류 시간 기준이 되는 요소 id */
   presentationTimingElementId: string | null;
+  /** 이 슬라이드로 들어올 때 전환 효과 */
+  presentationTransition: string;
+  /** 전환 지속(ms) */
+  presentationTransitionMs: number;
 };
 
 /** 목록 카드 배경용 첫 슬라이드 미리보기 */
@@ -1246,6 +1276,8 @@ export class BooksService {
     backgroundColor: string;
     elements: unknown[];
     presentationTimingElementId: string | null;
+    presentationTransition: string;
+    presentationTransitionMs: number;
   }> {
     if (pages == null || pages.length === 0) {
       return [
@@ -1255,6 +1287,8 @@ export class BooksService {
           backgroundColor: '#ffffff',
           elements: [],
           presentationTimingElementId: null,
+          presentationTransition: DEFAULT_PRESENTATION_TRANSITION,
+          presentationTransitionMs: DEFAULT_PRESENTATION_TRANSITION_MS,
         },
       ];
     }
@@ -1294,6 +1328,12 @@ export class BooksService {
         backgroundColor: this.normalizePageBackgroundColor(p.backgroundColor),
         elements,
         presentationTimingElementId,
+        presentationTransition: normalizeBookPagePresentationTransition(
+          p.presentationTransition,
+        ),
+        presentationTransitionMs: normalizeBookPagePresentationTransitionMs(
+          p.presentationTransitionMs,
+        ),
       };
     });
   }
@@ -1412,6 +1452,12 @@ export class BooksService {
         backgroundColor: p.backgroundColor?.trim() || '#ffffff',
         elements: this.parseElementsJson(p.elementsJson || '[]'),
         presentationTimingElementId: p.presentationTimingElementId ?? null,
+        presentationTransition: normalizeBookPagePresentationTransition(
+          p.presentationTransition,
+        ),
+        presentationTransitionMs: normalizeBookPagePresentationTransitionMs(
+          p.presentationTransitionMs,
+        ),
       })),
     };
   }
@@ -1450,6 +1496,8 @@ export class BooksService {
           backgroundColor: p.backgroundColor,
           elementsJson: JSON.stringify(elements),
           presentationTimingElementId: p.presentationTimingElementId,
+          presentationTransition: p.presentationTransition,
+          presentationTransitionMs: p.presentationTransitionMs,
         }),
       );
     }
@@ -1515,6 +1563,8 @@ export class BooksService {
             backgroundColor: p.backgroundColor,
             elementsJson: JSON.stringify(elements),
             presentationTimingElementId: p.presentationTimingElementId,
+            presentationTransition: p.presentationTransition,
+            presentationTransitionMs: p.presentationTransitionMs,
           }),
         );
       }

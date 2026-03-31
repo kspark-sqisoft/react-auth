@@ -27,4 +27,15 @@ export class BookPage {
   /** 미리보기 시 이 페이지 체류 시간을 결정하는 요소 UUID(같은 페이지 elementsJson 내 id) */
   @Column({ type: 'varchar', length: 80, nullable: true })
   presentationTimingElementId: string | null;
+
+  /**
+   * 슬라이드쇼에서 이 페이지로 들어올 때 전환 효과(none·fade·slide…).
+   * 기본 none — 즉시 전환.
+   */
+  @Column({ type: 'varchar', length: 24, default: 'none' })
+  presentationTransition: string;
+
+  /** 전환 지속 시간(ms). 80~2500 권장 */
+  @Column({ type: 'int', default: 450 })
+  presentationTransitionMs: number;
 }

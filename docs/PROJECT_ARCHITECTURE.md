@@ -167,7 +167,7 @@ erDiagram
 | `PostLike` | `post_like` | post + user 유니크 |
 | `PostComment` | `post_comment` | post, author, parent(트리) |
 | `Book` | `book` | title, slideWidth/Height, author → User |
-| `BookPage` | `book_page` | book, sortOrder, slideName, **elementsJson**, backgroundColor |
+| `BookPage` | `book_page` | book, sortOrder, slideName, **elementsJson**, backgroundColor, presentationTimingElementId, **presentationTransition**, presentationTransitionMs |
 | `BookAiChatMessage` | `book_ai_chat_message` | book → CASCADE, role(user\|assistant), body |
 | `ChatRoom` | `chat_room` | roomId(유니크), ownerId |
 | `ChatMessage` | `chat_message` | roomId, authorId, body, 인덱스(roomId, createdAt) |
@@ -299,7 +299,7 @@ flowchart TB
 | `/books` | `BookListPage` | 무한 스크롤 UI이나 API는 **`skip`/`take`/`total`** (6.3절) |
 | `/books/new` | `BookEditorPage` | 로그인 필요, 저장 후 상세로 이동 가능 |
 | `/books/:id` | `BookDetailPage` | 공개 URL; 작성자면 편집 UI, 비작성자는 보기·레이어 패널·**미리보기(슬라이드쇼)** |
-| `/books/:id/preview` | `BookPresentationPage` | 공개; 전체 화면 슬라이드쇼(작성자 여부 무관). 맞춤·줌은 `BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS`(`symmetricVerticalPad`로 상·하 동일 여백 반영, 확대 허용) — 편집 스테이지는 `BOOK_CANVAS_STAGE_DISPLAY_OPTS`(maxFit 1) |
+| `/books/:id/preview` | `BookPresentationPage` | 공개; 전체 화면 슬라이드쇼(작성자 여부 무관). 페이지별 **전환 효과**(none·fade·slide·zoom·blur 등)는 `BookPage`에 저장, `book-presentation-transitions.css`로 재생. 맞춤·줌은 `BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS` — 편집 스테이지는 `BOOK_CANVAS_STAGE_DISPLAY_OPTS`(maxFit 1) |
 | `/books/:id/edit` | → `/books/:id` 리다이렉트 | 레거시 |
 | `/me` | `MyInfoPage` | |
 | `/cats`, `/cats/:id` | Cats 데모 | |
@@ -431,6 +431,7 @@ mindmap
 | AI 패널 | `components/books/BookAiAssistantPanel.tsx` |
 | 캔버스 타입·도구 | `lib/book-canvas.ts`, `lib/book-text-widget.ts` |
 | 슬라이드 템플릿(사이니지) | `lib/book-slide-templates.ts` — 카테고리: 메뉴·공지·**실생활**·뉴스·비주얼 |
+| 슬라이드쇼 전환 | `lib/book-presentation-transition.ts`, `book-presentation-transitions.css` |
 | AI 배치 해석 | `lib/book-ai-placement.ts` |
 
 ---

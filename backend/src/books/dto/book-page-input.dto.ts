@@ -25,4 +25,17 @@ export class BookPageInputDto {
     nullable: true,
   })
   presentationTimingElementId?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      '이 슬라이드로 전환될 때 효과: none, fade, slideLeft, slideRight, slideUp, slideDown, zoomIn, blurIn',
+    example: 'fade',
+  })
+  presentationTransition?: string;
+
+  @ApiPropertyOptional({
+    description: '전환 지속 시간(ms). 80~2500, 생략 시 450',
+    example: 450,
+  })
+  presentationTransitionMs?: number;
 }

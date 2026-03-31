@@ -645,6 +645,10 @@ export type BookPageDto = {
   elements: BookCanvasElement[];
   /** 미리보기: 이 페이지 체류 시간을 정하는 기준 위젯 id(없으면 기본 초) */
   presentationTimingElementId?: string | null;
+  /** 슬라이드쇼: 이 슬라이드로 전환될 때 효과(none·fade·…) */
+  presentationTransition?: string;
+  /** 전환 지속(ms) */
+  presentationTransitionMs?: number;
 };
 
 /** 북 목록 카드 — 첫 슬라이드 썸네일 합성용 */
@@ -685,6 +689,8 @@ export type BookPageInput = {
   backgroundColor?: string;
   elements: BookCanvasElement[];
   presentationTimingElementId?: string | null;
+  presentationTransition?: string;
+  presentationTransitionMs?: number;
 };
 
 const BOOK_PAGE_DEFAULT = 12;

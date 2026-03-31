@@ -47,6 +47,11 @@ import {
   type BookEditorPageState,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
+import {
+  clampBookPresentationTransitionMs,
+  normalizeBookPresentationTransition,
+  type BookPresentationTransitionId,
+} from "@/lib/book-presentation-transition";
 import { appendBookMediaLibraryItem } from "@/lib/book-media-library";
 import {
   readFloatingMediaLibraryVisible,
@@ -131,6 +136,12 @@ function mapServerPagesToLocal(pages: BookPageDto[]): BookEditorPageState[] {
         typeof p.presentationTimingElementId === "string"
           ? p.presentationTimingElementId
           : null,
+      ),
+      presentationTransition: normalizeBookPresentationTransition(
+        p.presentationTransition,
+      ),
+      presentationTransitionMs: clampBookPresentationTransitionMs(
+        p.presentationTransitionMs,
       ),
     })),
   );
@@ -727,6 +738,26 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       updatePages((draft) => {
         const p = draft[activePageIndex];
         if (p) p.backgroundColor = backgroundColor;
+      });
+    },
+    [activePageIndex, updatePages],
+  );
+
+  const updatePresentationTransition = useCallback(
+    (transition: BookPresentationTransitionId) => {
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.presentationTransition = transition;
+      });
+    },
+    [activePageIndex, updatePages],
+  );
+
+  const updatePresentationTransitionMs = useCallback(
+    (ms: number) => {
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.presentationTransitionMs = ms;
       });
     },
     [activePageIndex, updatePages],
@@ -1911,6 +1942,14 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 onChangePresentationTimingElementId={updatePresentationTimingElementId}
                 presentationLoop={presentationLoop}
                 onChangePresentationLoop={setPresentationLoop}
+                presentationTransition={normalizeBookPresentationTransition(
+                  activePage.presentationTransition,
+                )}
+                onChangePresentationTransition={updatePresentationTransition}
+                presentationTransitionMs={clampBookPresentationTransitionMs(
+                  activePage.presentationTransitionMs,
+                )}
+                onChangePresentationTransitionMs={updatePresentationTransitionMs}
               />
             )}
           </div>
