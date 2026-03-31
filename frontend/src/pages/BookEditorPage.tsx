@@ -12,6 +12,8 @@ import {
   DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
   DEFAULT_BOOK_NEWS_WIDGET_HEIGHT,
   DEFAULT_BOOK_NEWS_WIDGET_WIDTH,
+  DEFAULT_BOOK_MEDIA_PLAYLIST_HEIGHT,
+  DEFAULT_BOOK_MEDIA_PLAYLIST_WIDTH,
   DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
   DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
   DEFAULT_PAGE_BACKGROUND,
@@ -60,6 +62,10 @@ import { BookSlideTemplatesPanel } from "@/components/books/BookSlideTemplatesPa
 import { BookAiAssistantPanel } from "@/components/books/BookAiAssistantPanel";
 import { BookWidgetPalette } from "@/components/books/BookWidgetPalette";
 import { BookWorkspaceShell } from "@/components/books/BookWorkspaceShell";
+import type {
+  BookMediaPlaylistPlaybackUiSnapshot,
+  BookMediaPlaylistRemoteCommand,
+} from "@/components/books/BookMediaPlaylistWidgetOverlay";
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -101,6 +107,15 @@ export function BookEditorPage() {
     DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
   );
   const [dragGridPx, setDragGridPx] = useState(BOOK_CANVAS_DRAG_GRID_PX);
+  const [mediaPlaylistPlaybackByElementId, setMediaPlaylistPlaybackByElementId] = useState<
+    Record<string, number>
+  >({});
+  const [mediaPlaylistPlaybackUiByElementId, setMediaPlaylistPlaybackUiByElementId] = useState<
+    Record<string, BookMediaPlaylistPlaybackUiSnapshot>
+  >({});
+  const playlistRemoteSeqRef = useRef(0);
+  const [playlistRemoteCmd, setPlaylistRemoteCmd] =
+    useState<BookMediaPlaylistRemoteCommand | null>(null);
   const [leftDockTab, setLeftDockTab] = useState<BookEditorLeftTab>("page");
   const [drawingStrokeColor, setDrawingStrokeColor] = useState("#0f172a");
   const [drawingStrokeWidth, setDrawingStrokeWidth] = useState(4);
@@ -165,6 +180,58 @@ export function BookEditorPage() {
   useEffect(() => {
     warmBookCanvasImagesForNeighborPages(pages, activePageIndex);
   }, [pages, activePageIndex]);
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setMediaPlaylistPlaybackByElementId({});
+      setMediaPlaylistPlaybackUiByElementId({});
+    });
+  }, [activePageIndex]);
+
+  const playlistInspectorSelectionKey = useMemo(
+    () => (canvasSelectedIds.length === 1 ? (canvasSelectedIds[0] ?? "") : ""),
+    [canvasSelectedIds],
+  );
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setPlaylistRemoteCmd(null);
+    });
+  }, [playlistInspectorSelectionKey]);
+
+  const handleMediaPlaylistPlaybackIndex = useCallback(
+    (elementId: string, index: number) => {
+      setMediaPlaylistPlaybackByElementId((prev) => {
+        if (prev[elementId] === index) return prev;
+        return { ...prev, [elementId]: index };
+      });
+    },
+    [],
+  );
+
+  const handleMediaPlaylistPlaybackUiReport = useCallback(
+    (elementId: string, payload: BookMediaPlaylistPlaybackUiSnapshot) => {
+      setMediaPlaylistPlaybackUiByElementId((prev) => ({
+        ...prev,
+        [elementId]: payload,
+      }));
+    },
+    [],
+  );
+
+  const clearPlaylistRemoteCmd = useCallback(() => setPlaylistRemoteCmd(null), []);
+
+  const handleMediaPlaylistRemoteControl = useCallback(
+    (elementId: string, kind: "prev" | "next" | "togglePause") => {
+      playlistRemoteSeqRef.current += 1;
+      setPlaylistRemoteCmd({
+        targetId: elementId,
+        kind,
+        seq: playlistRemoteSeqRef.current,
+      });
+    },
+    [],
+  );
 
   const {
     displayScale,
@@ -475,6 +542,27 @@ export function BookEditorPage() {
     [activePageIndex, updatePages],
   );
 
+  const addMediaPlaylistAt = useCallback(
+    (x: number, y: number) => {
+      const id = crypto.randomUUID();
+      const el: BookCanvasElement = {
+        id,
+        type: "mediaPlaylist",
+        x,
+        y,
+        width: DEFAULT_BOOK_MEDIA_PLAYLIST_WIDTH,
+        height: DEFAULT_BOOK_MEDIA_PLAYLIST_HEIGHT,
+        mediaPlaylistItems: [],
+      };
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.elements.push(el);
+      });
+      setSelectedIds([id]);
+    },
+    [activePageIndex, updatePages],
+  );
+
   const addDigitalClockAt = useCallback(
     (x: number, y: number) => {
       const id = crypto.randomUUID();
@@ -513,9 +601,19 @@ export function BookEditorPage() {
         addNewsAt(point.x, point.y);
         return;
       }
+      if (kind === "mediaPlaylist") {
+        addMediaPlaylistAt(point.x, point.y);
+        return;
+      }
       toast.error("저장한 뒤 열린 북 화면에서 이미지·동영상 위젯을 넣을 수 있습니다.");
     },
-    [addDigitalClockAt, addNewsAt, addTextAt, addWeatherAt],
+    [
+      addDigitalClockAt,
+      addMediaPlaylistAt,
+      addNewsAt,
+      addTextAt,
+      addWeatherAt,
+    ],
   );
 
   const applyAiElements = useCallback(
@@ -713,6 +811,7 @@ export function BookEditorPage() {
     if (el.type === "video") return "동영상 위젯";
     if (el.type === "weather") return "날씨 위젯";
     if (el.type === "news") return "뉴스 위젯";
+    if (el.type === "mediaPlaylist") return "미디어 위젯";
     if (el.type === "digitalClock") return "디지털 시계 위젯";
     if (el.type === "drawing") return "그리기";
     return "위젯";
@@ -888,6 +987,10 @@ export function BookEditorPage() {
                     drawingStrokeColor={drawingStrokeColor}
                     drawingStrokeWidth={drawingStrokeWidth}
                     onAppendElement={onAppendDrawingElement}
+                    onMediaPlaylistPlaybackIndexChange={handleMediaPlaylistPlaybackIndex}
+                    onMediaPlaylistPlaybackUiReport={handleMediaPlaylistPlaybackUiReport}
+                    mediaPlaylistRemoteCommand={playlistRemoteCmd}
+                    onMediaPlaylistRemoteCommandConsumed={clearPlaylistRemoteCmd}
                   />
                 ) : null}
               </div>
@@ -953,6 +1056,9 @@ export function BookEditorPage() {
                     onChange={onElementChange}
                     onDelete={removeSelected}
                     mediaHint={mediaHint}
+                    mediaPlaylistPlaybackByElementId={mediaPlaylistPlaybackByElementId}
+                    mediaPlaylistPlaybackUiByElementId={mediaPlaylistPlaybackUiByElementId}
+                    onMediaPlaylistRemoteControl={handleMediaPlaylistRemoteControl}
                   />
                 ) : (
                   <BookPagePropertiesPanel

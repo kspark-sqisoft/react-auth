@@ -28,7 +28,7 @@ export function BookMediaLibraryPickDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
   bookId: number;
-  acceptKind: "image" | "video";
+  acceptKind: "image" | "video" | "both";
   title?: string;
   onPick: (item: BookMediaLibraryItem) => void;
 }) {
@@ -37,7 +37,9 @@ export function BookMediaLibraryPickDialog({
   const items = useMemo(() => {
     if (!open) return [];
     void libraryEpoch;
-    return loadBookMediaLibrary(bookId).filter((x) => x.kind === acceptKind);
+    const all = loadBookMediaLibrary(bookId);
+    if (acceptKind === "both") return all;
+    return all.filter((x) => x.kind === acceptKind);
   }, [open, bookId, acceptKind, libraryEpoch]);
 
   useEffect(() => {
@@ -61,7 +63,9 @@ export function BookMediaLibraryPickDialog({
           <DialogDescription className="text-xs">
             {acceptKind === "image"
               ? "이 북에 올려 둔 이미지 중 하나로 위젯의 사진을 바꿉니다."
-              : "이 북에 올려 둔 동영상 중 하나로 위젯을 바꿉니다."}
+              : acceptKind === "video"
+                ? "이 북에 올려 둔 동영상 중 하나로 위젯을 바꿉니다."
+                : "이 북에 올려 둔 이미지·동영상 중에서 선택합니다."}
           </DialogDescription>
         </DialogHeader>
         <div className="max-h-[min(360px,55vh)] overflow-y-auto overscroll-contain px-3 py-3">
@@ -69,7 +73,9 @@ export function BookMediaLibraryPickDialog({
             <p className="py-8 text-center text-sm text-muted-foreground">
               {acceptKind === "image"
                 ? "라이브러리에 이미지가 없습니다. 미디어 탭에서 업로드하세요."
-                : "라이브러리에 동영상이 없습니다. 미디어 탭에서 업로드하세요."}
+                : acceptKind === "video"
+                  ? "라이브러리에 동영상이 없습니다. 미디어 탭에서 업로드하세요."
+                  : "라이브러리에 미디어가 없습니다. 미디어 탭에서 업로드하세요."}
             </p>
           ) : (
             <ul className="grid grid-cols-3 gap-2 sm:grid-cols-4">

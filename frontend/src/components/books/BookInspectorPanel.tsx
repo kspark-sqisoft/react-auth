@@ -1,10 +1,29 @@
-import { useState } from "react";
-import { Expand, FolderOpen, Library, SlidersHorizontal, Trash2 } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
+import {
+  ChevronDown,
+  ChevronUp,
+  Expand,
+  Film,
+  FolderOpen,
+  ImageIcon,
+  Library,
+  Pause,
+  Play,
+  SkipBack,
+  SkipForward,
+  SlidersHorizontal,
+  Trash2,
+} from "lucide-react";
+import { publicAssetUrl } from "@/lib/api";
 import {
   BOOK_MEDIA_OBJECT_FIT_VALUES,
   BOOK_NEWS_CATEGORIES,
   BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS,
+  DEFAULT_MEDIA_PLAYLIST_IMAGE_DURATION_SEC,
+  MEDIA_PLAYLIST_MAX_ITEMS,
   type BookCanvasElement,
+  type BookMediaPlaylistItem,
   type BookDigitalClockDisplay,
   type BookDigitalClockDisplayResolved,
   type BookMediaObjectFit,
@@ -20,6 +39,9 @@ import {
   resolveBookElementRotation,
   resolveBookMediaObjectFit,
   resolveBookWeatherDisplay,
+  resolveMediaPlaylistLoop,
+  resolveMediaPlaylistShowControls,
+  formatBookMediaClock,
   isBookElementLocked,
 } from "@/lib/book-canvas";
 import {
@@ -27,6 +49,7 @@ import {
   getTextWidgetDisplayHtml,
 } from "@/lib/book-text-widget";
 import { BookTextRichEditor } from "@/components/books/BookTextRichEditor";
+import type { BookMediaPlaylistPlaybackUiSnapshot } from "@/components/books/BookMediaPlaylistWidgetOverlay";
 import { BOOK_HEX_COLOR_PRESETS } from "@/lib/book-color-presets";
 import {
   bookDockedPanelHeaderIconClass,
@@ -65,8 +88,23 @@ type BookInspectorPanelProps = {
   onReplaceMediaFromFile?: () => void;
   /** 이미지·동영상: 미디어 라이브러리 선택 다이얼로그 */
   onPickMediaFromLibrary?: () => void;
+  /** 미디어 플레이리스트: 파일 선택 후 목록 끝에 추가 */
+  onRequestAppendPlaylistMediaFromFile?: (elementId: string) => void;
+  /** 미디어 플레이리스트: 라이브러리에서 선택해 목록 끝에 추가 */
+  onRequestAppendPlaylistMediaFromLibrary?: (elementId: string) => void;
   /** `false`면 라이브러리 버튼 숨김 */
   mediaLibraryReplaceEnabled?: boolean;
+  /** 캔버스 플레이리스트 위젯 id → 재생 중인 항목 인덱스(목록 하이라이트) */
+  mediaPlaylistPlaybackByElementId?: Record<string, number>;
+  /** 선택된 위젯 재생 UI(캔버스 오버레이와 동기) */
+  mediaPlaylistPlaybackUiByElementId?: Record<string, BookMediaPlaylistPlaybackUiSnapshot>;
+  /** 인스펙터 미니 컨트롤 → 캔버스 플레이리스트 */
+  onMediaPlaylistRemoteControl?: (
+    elementId: string,
+    kind: "prev" | "next" | "togglePause",
+  ) => void;
+  /** 동영상 위젯 id → 재생 길이(초), 캔버스에서 메타 로드 후 채움 */
+  videoDurationSecByElementId?: Record<string, number>;
 };
 
 /** 캐러셀 간격: 입력 중 1→10처럼 잠깐 범위 밖이 되므로 blur까지 draft만 두고 커밋 */
@@ -516,7 +554,10 @@ function ElementShapeChromeFields({
   const colorPick = outlineInspectorHex(ocResolved);
 
   const typeHint =
-    el.type === "weather" || el.type === "digitalClock" || el.type === "news"
+    el.type === "weather" ||
+    el.type === "digitalClock" ||
+    el.type === "news" ||
+    el.type === "mediaPlaylist"
       ? `저장하지 않으면 기본 ${BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS}px(둥근 카드)입니다.`
       : "텍스트·이미지·동영상은 기본 0(각진 모서리)입니다.";
 
@@ -647,6 +688,442 @@ function MediaObjectFitFields({
   );
 }
 
+function MediaPlaylistInspectorItemThumb({ item }: { item: BookMediaPlaylistItem }) {
+  const [broken, setBroken] = useState(false);
+
+  const frameClass =
+    "flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-md border border-border/60 bg-muted/40";
+
+  if (item.kind === "image") {
+    const raw = item.src?.trim() ?? "";
+    const src = raw ? (publicAssetUrl(raw) ?? raw) : "";
+    if (!src || broken) {
+      return (
+        <div className={frameClass} aria-hidden>
+          <ImageIcon className="size-6 text-muted-foreground" />
+        </div>
+      );
+    }
+    return (
+      <img
+        alt=""
+        src={src}
+        className="size-14 shrink-0 rounded-md border border-border/60 object-cover"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+
+  const posterRaw = item.posterSrc?.trim() ?? "";
+  const poster = posterRaw ? (publicAssetUrl(posterRaw) ?? posterRaw) : "";
+  if (poster && !broken) {
+    return (
+      <img
+        alt=""
+        src={poster}
+        className="size-14 shrink-0 rounded-md border border-border/60 object-cover"
+        onError={() => setBroken(true)}
+      />
+    );
+  }
+
+  return (
+    <div className={frameClass} aria-hidden>
+      <Film className="size-6 text-muted-foreground" />
+    </div>
+  );
+}
+
+/** 캔버스 미디어 위젯 하단 컨트롤과 동일 동작(미니) — 캔버스 선택 시 동기 */
+function MediaPlaylistInspectorMiniBar({
+  el,
+  items,
+  playbackUi,
+  highlightIndex,
+  onRemote,
+}: {
+  el: Extract<BookCanvasElement, { type: "mediaPlaylist" }>;
+  items: BookMediaPlaylistItem[];
+  playbackUi?: BookMediaPlaylistPlaybackUiSnapshot;
+  highlightIndex?: number;
+  onRemote?: (kind: "prev" | "next" | "togglePause") => void;
+}) {
+  const loop = resolveMediaPlaylistLoop(el);
+  const n = items.length;
+  const safeHighlight =
+    highlightIndex != null && highlightIndex >= 0 && highlightIndex < n ? highlightIndex : 0;
+  const idx =
+    playbackUi != null && playbackUi.index >= 0 && playbackUi.index < n
+      ? playbackUi.index
+      : safeHighlight;
+  const progress = playbackUi?.progress ?? 0;
+  const cur = playbackUi?.currentSec ?? 0;
+  const tot = playbackUi?.totalSec ?? 0;
+  const paused = playbackUi?.paused ?? false;
+  const atFirst = n === 0 || (!loop && idx <= 0);
+  const atLast = n === 0 || (!loop && idx >= n - 1);
+  const disabled = n === 0 || !onRemote;
+
+  return (
+    <div
+      className="my-3 flex min-h-10 items-center gap-1 rounded-lg border border-border bg-muted/45 px-2.5 py-2 shadow-sm backdrop-blur-sm dark:bg-muted/35"
+      onMouseDown={(e) => e.stopPropagation()}
+      onPointerDown={(e) => e.stopPropagation()}
+    >
+      <button
+        type="button"
+        className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-35"
+        aria-label="이전"
+        disabled={disabled || atFirst}
+        onClick={() => onRemote?.("prev")}
+      >
+        <SkipBack className="size-3.5" aria-hidden />
+      </button>
+      <button
+        type="button"
+        className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-background/80 disabled:opacity-35 dark:hover:bg-background/25"
+        aria-label={paused ? "재생" : "일시정지"}
+        disabled={disabled}
+        onClick={() => onRemote?.("togglePause")}
+      >
+        {paused ? (
+          <Play className="size-3.5 pl-0.5" aria-hidden />
+        ) : (
+          <Pause className="size-3.5" aria-hidden />
+        )}
+      </button>
+      <button
+        type="button"
+        className="flex size-8 shrink-0 items-center justify-center rounded-md text-foreground hover:bg-accent hover:text-accent-foreground disabled:opacity-35"
+        aria-label="다음"
+        disabled={disabled || atLast}
+        onClick={() => onRemote?.("next")}
+      >
+        <SkipForward className="size-3.5" aria-hidden />
+      </button>
+      <div className="relative h-1.5 min-w-0 flex-1 rounded-full bg-foreground/10 dark:bg-foreground/15">
+        <div
+          className="absolute inset-y-0 left-0 rounded-full bg-primary"
+          style={{ width: `${Math.round(progress * 100)}%` }}
+        />
+      </div>
+      <span className="w-9 shrink-0 text-center font-mono text-[10px] tabular-nums text-muted-foreground">
+        {n > 0 ? `${idx + 1}/${n}` : "0/0"}
+      </span>
+      <span className="w-[4.25rem] shrink-0 text-right font-mono text-[10px] tabular-nums leading-none text-muted-foreground">
+        {tot > 0
+          ? `${formatBookMediaClock(cur)} / ${formatBookMediaClock(tot)}`
+          : "— / —"}
+      </span>
+    </div>
+  );
+}
+
+function MediaPlaylistInspectorBody({
+  el,
+  onChange,
+  onRequestAppendPlaylistMediaFromFile,
+  onRequestAppendPlaylistMediaFromLibrary,
+  onRequestDeletePlaylistItem,
+  mediaLibraryReplaceEnabled,
+  activePlaybackItemIndex,
+  playbackUi,
+  onMediaPlaylistRemoteControl,
+}: {
+  el: Extract<BookCanvasElement, { type: "mediaPlaylist" }>;
+  onChange: BookInspectorPanelProps["onChange"];
+  onRequestAppendPlaylistMediaFromFile?: BookInspectorPanelProps["onRequestAppendPlaylistMediaFromFile"];
+  onRequestAppendPlaylistMediaFromLibrary?: BookInspectorPanelProps["onRequestAppendPlaylistMediaFromLibrary"];
+  onRequestDeletePlaylistItem?: (index: number) => void;
+  mediaLibraryReplaceEnabled?: boolean;
+  activePlaybackItemIndex?: number;
+  playbackUi?: BookMediaPlaylistPlaybackUiSnapshot;
+  onMediaPlaylistRemoteControl?: BookInspectorPanelProps["onMediaPlaylistRemoteControl"];
+}) {
+  const items = el.mediaPlaylistItems ?? [];
+  const setItems = (next: BookMediaPlaylistItem[]) =>
+    onChange(el.id, { mediaPlaylistItems: next });
+
+  const move = (i: number, dir: -1 | 1) => {
+    const j = i + dir;
+    if (j < 0 || j >= items.length) return;
+    const copy = [...items];
+    const a = copy[i];
+    const b = copy[j];
+    if (!a || !b) return;
+    copy[i] = b;
+    copy[j] = a;
+    setItems(copy);
+  };
+
+  const updateItem = (i: number, patch: Partial<BookMediaPlaylistItem>) => {
+    const copy = [...items];
+    const cur = copy[i];
+    if (!cur) return;
+    copy[i] = { ...cur, ...patch } as BookMediaPlaylistItem;
+    setItems(copy);
+  };
+
+  const playlistItemIdsKey = items.map((p) => p.id).join(",");
+
+  const listScrollRef = useRef<HTMLDivElement>(null);
+  const itemRowRefs = useRef<Map<number, HTMLDivElement>>(new Map());
+  const prevActivePlaybackIndexRef = useRef<number | undefined>(undefined);
+
+  useEffect(() => {
+    prevActivePlaybackIndexRef.current = undefined;
+  }, [el.id]);
+
+  useEffect(() => {
+    const idx = activePlaybackItemIndex;
+    if (idx === prevActivePlaybackIndexRef.current) return;
+
+    if (idx === undefined || idx < 0 || idx >= items.length) {
+      prevActivePlaybackIndexRef.current = idx;
+      return;
+    }
+
+    const listEl = listScrollRef.current;
+    const rowEl = itemRowRefs.current.get(idx);
+    if (!listEl || !rowEl) return;
+
+    prevActivePlaybackIndexRef.current = idx;
+
+    const raf = requestAnimationFrame(() => {
+      const listRect = listEl.getBoundingClientRect();
+      const rowRect = rowEl.getBoundingClientRect();
+      const nextTop = listEl.scrollTop + (rowRect.top - listRect.top);
+      listEl.scrollTo({ top: Math.max(0, nextTop), behavior: "smooth" });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [activePlaybackItemIndex, items.length, playlistItemIdsKey]);
+
+  return (
+    <>
+      {/* 잠긴 위젯은 상위에 pointer-events-none이 있어, 미디어 목록은 여기서 다시 받도록 함 */}
+      <div className="pointer-events-auto">
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        순서대로 재생됩니다. 이미지는 기본 {DEFAULT_MEDIA_PLAYLIST_IMAGE_DURATION_SEC}초이며 항목마다 바꿀 수
+        있습니다. 동영상은 파일 길이만큼 재생됩니다.
+      </p>
+      <div className="flex flex-col gap-2">
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <Checkbox
+            checked={resolveMediaPlaylistLoop(el)}
+            onCheckedChange={(c) =>
+              onChange(el.id, {
+                mediaPlaylistLoop: c === false ? false : undefined,
+              })
+            }
+          />
+          <span>반복 재생</span>
+        </label>
+        <label className="flex cursor-pointer items-center gap-2 text-sm">
+          <Checkbox
+            checked={resolveMediaPlaylistShowControls(el)}
+            onCheckedChange={(c) =>
+              onChange(el.id, {
+                mediaPlaylistShowControls: c === false ? false : undefined,
+              })
+            }
+          />
+          <span>진행 바·이전/다음·일시정지 표시</span>
+        </label>
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {onRequestAppendPlaylistMediaFromFile ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={items.length >= MEDIA_PLAYLIST_MAX_ITEMS}
+            onClick={() => onRequestAppendPlaylistMediaFromFile(el.id)}
+          >
+            파일에서 미디어 추가
+          </Button>
+        ) : null}
+        {mediaLibraryReplaceEnabled && onRequestAppendPlaylistMediaFromLibrary ? (
+          <Button
+            type="button"
+            size="sm"
+            variant="secondary"
+            disabled={items.length >= MEDIA_PLAYLIST_MAX_ITEMS}
+            onClick={() => onRequestAppendPlaylistMediaFromLibrary(el.id)}
+          >
+            라이브러리에서 미디어 추가
+          </Button>
+        ) : null}
+      </div>
+      <MediaPlaylistInspectorMiniBar
+        el={el}
+        items={items}
+        playbackUi={playbackUi}
+        highlightIndex={activePlaybackItemIndex}
+        onRemote={
+          onMediaPlaylistRemoteControl
+            ? (kind) => onMediaPlaylistRemoteControl(el.id, kind)
+            : undefined
+        }
+      />
+      <div
+        ref={listScrollRef}
+        className="max-h-96 space-y-2 overflow-y-auto overflow-x-hidden pr-3 scroll-smooth"
+      >
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">항목이 없습니다.</p>
+        ) : (
+          items.map((it, i) => (
+            <div
+              key={it.id}
+              ref={(node) => {
+                if (node) itemRowRefs.current.set(i, node);
+                else itemRowRefs.current.delete(i);
+              }}
+              className={cn(
+                "rounded-md border p-2 transition-colors",
+                activePlaybackItemIndex === i
+                  ? "border-primary bg-primary/[0.07] ring-2 ring-primary/35"
+                  : "border-border/80 bg-muted/20",
+              )}
+            >
+              <div className="flex gap-2">
+                <MediaPlaylistInspectorItemThumb
+                  key={`${it.id}:${it.src}:${it.kind === "video" ? (it.posterSrc ?? "") : ""}`}
+                  item={it}
+                />
+                <div className="min-w-0 flex-1 space-y-2">
+                  {/* 목록에 overflow-x-hidden 이므로 가로 넘치면 오른쪽이 잘림 — 라벨 truncate로 넘침 방지 */}
+                  <div className="flex min-w-0 items-center justify-between gap-1">
+                    <span className="min-w-0 flex-1 truncate text-xs font-medium text-muted-foreground">
+                      {i + 1}. {it.kind === "image" ? "이미지" : "동영상"}
+                      {activePlaybackItemIndex === i ? (
+                        <span className="ml-1.5 rounded bg-primary/15 px-1 py-px text-[10px] font-semibold text-primary">
+                          재생 중
+                        </span>
+                      ) : null}
+                    </span>
+                    {/* 오른쪽 끝은 overflow-x-hidden 에 잘리기 쉬움 → 삭제를 맨 앞(더 안쪽)에 둠 */}
+                    <div className="relative z-10 isolate flex shrink-0 items-center gap-1 pr-2.5">
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        className="text-destructive"
+                        aria-label="삭제"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          onRequestDeletePlaylistItem?.(i);
+                        }}
+                      >
+                        <Trash2 className="size-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        aria-label="위로"
+                        disabled={i === 0}
+                        onClick={() => move(i, -1)}
+                      >
+                        <ChevronUp className="size-3.5" />
+                      </Button>
+                      <Button
+                        type="button"
+                        size="icon-xs"
+                        variant="ghost"
+                        aria-label="아래로"
+                        disabled={i === items.length - 1}
+                        onClick={() => move(i, 1)}
+                      >
+                        <ChevronDown className="size-3.5" />
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-[11px]">미디어 URL</Label>
+                    <Input
+                      className="font-mono text-xs"
+                      placeholder={
+                        it.kind === "image"
+                          ? "/uploads/… 또는 https://…"
+                          : "/uploads/… 비디오"
+                      }
+                      value={it.src}
+                      onChange={(e) => updateItem(i, { src: e.target.value })}
+                    />
+                  </div>
+                  {it.kind === "image" ? (
+                    <div className="space-y-1">
+                      <Label className="text-[11px]">표시 시간(초)</Label>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={600}
+                        placeholder={`기본 ${DEFAULT_MEDIA_PLAYLIST_IMAGE_DURATION_SEC}`}
+                        value={
+                          typeof it.durationSec === "number" && it.durationSec >= 1
+                            ? it.durationSec
+                            : ""
+                        }
+                        onChange={(e) => {
+                          const t = e.target.value.trim();
+                          if (t === "") {
+                            updateItem(i, { durationSec: undefined });
+                            return;
+                          }
+                          const n = Number(t);
+                          if (Number.isInteger(n) && n >= 1 && n <= 600) {
+                            updateItem(i, { durationSec: n });
+                          }
+                        }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="space-y-1">
+                      <Label className="text-[11px]">포스터 URL (선택)</Label>
+                      <Input
+                        className="font-mono text-xs"
+                        placeholder="비우면 없음"
+                        value={it.posterSrc ?? ""}
+                        onChange={(e) => {
+                          const v = e.target.value.trim();
+                          updateItem(i, { posterSrc: v === "" ? null : v });
+                        }}
+                      />
+                    </div>
+                  )}
+                  <div className="space-y-1">
+                    <Label className="text-[11px]">프레임 맞춤</Label>
+                    <Select
+                      value={resolveBookMediaObjectFit(it.objectFit)}
+                      onValueChange={(next) =>
+                        updateItem(i, { objectFit: next as BookMediaObjectFit })
+                      }
+                    >
+                      <SelectTrigger size="sm" className="h-8 w-full">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {BOOK_MEDIA_OBJECT_FIT_VALUES.map((fit) => (
+                          <SelectItem key={fit} value={fit}>
+                            {MEDIA_FIT_LABELS[fit]}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+      </div>
+    </>
+  );
+}
+
 export function BookInspectorPanel({
   selected,
   multiSelectionCount = 0,
@@ -658,10 +1135,104 @@ export function BookInspectorPanel({
   embedded = false,
   onReplaceMediaFromFile,
   onPickMediaFromLibrary,
+  onRequestAppendPlaylistMediaFromFile,
+  onRequestAppendPlaylistMediaFromLibrary,
   mediaLibraryReplaceEnabled = false,
+  mediaPlaylistPlaybackByElementId,
+  mediaPlaylistPlaybackUiByElementId,
+  onMediaPlaylistRemoteControl,
+  videoDurationSecByElementId,
 }: BookInspectorPanelProps) {
   const Root = embedded ? "div" : "aside";
+  const [playlistItemDelete, setPlaylistItemDelete] = useState<{
+    elementId: string;
+    index: number;
+  } | null>(null);
+
+  useEffect(() => {
+    if (!playlistItemDelete) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setPlaylistItemDelete(null);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [playlistItemDelete]);
+
+  const showPlaylistDeleteModal =
+    playlistItemDelete != null &&
+    selected?.type === "mediaPlaylist" &&
+    selected.id === playlistItemDelete.elementId;
+
+  const playlistDeleteItems =
+    showPlaylistDeleteModal && selected.type === "mediaPlaylist"
+      ? (selected.mediaPlaylistItems ?? [])
+      : [];
+  const playlistDeleteIdx = playlistItemDelete?.index ?? -1;
+  const playlistDeleteTargetItem =
+    playlistDeleteIdx >= 0 && playlistDeleteIdx < playlistDeleteItems.length
+      ? playlistDeleteItems[playlistDeleteIdx]
+      : undefined;
+
+  const playlistDeleteConfirmLayer =
+    showPlaylistDeleteModal ? (
+      <div
+        role="presentation"
+        className="fixed inset-0 z-[30000] flex items-center justify-center bg-black/50 p-4"
+        onClick={() => setPlaylistItemDelete(null)}
+      >
+        <div
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="playlist-item-delete-title"
+          className="w-full max-w-sm rounded-xl border border-border bg-popover p-4 text-popover-foreground shadow-lg"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h2
+            id="playlist-item-delete-title"
+            className="text-base font-semibold tracking-tight"
+          >
+            미디어 항목을 삭제할까요?
+          </h2>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {playlistDeleteTargetItem != null && playlistDeleteIdx >= 0
+              ? `목록 ${playlistDeleteIdx + 1}번 ${
+                  playlistDeleteTargetItem.kind === "image" ? "이미지" : "동영상"
+                } 항목을 삭제합니다. 이 작업은 되돌릴 수 없습니다.`
+              : "이 항목을 삭제합니다. 이 작업은 되돌릴 수 없습니다."}
+          </p>
+          <div className="mt-4 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+            <Button type="button" variant="outline" onClick={() => setPlaylistItemDelete(null)}>
+              취소
+            </Button>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={() => {
+                const t = playlistItemDelete;
+                if (!t) return;
+                const cur =
+                  selected?.type === "mediaPlaylist" && selected.id === t.elementId
+                    ? (selected.mediaPlaylistItems ?? [])
+                    : [];
+                if (t.index < 0 || t.index >= cur.length) {
+                  setPlaylistItemDelete(null);
+                  return;
+                }
+                onChange(t.elementId, {
+                  mediaPlaylistItems: cur.filter((_, i) => i !== t.index),
+                });
+                setPlaylistItemDelete(null);
+              }}
+            >
+              삭제
+            </Button>
+          </div>
+        </div>
+      </div>
+    ) : null;
+
   return (
+    <>
     <Root
       className={cn(
         bookDockedPanelRootClass("max-h-full"),
@@ -701,7 +1272,9 @@ export function BookInspectorPanel({
               <div
                 className={cn(
                   "space-y-4",
-                  isBookElementLocked(selected) && "pointer-events-none opacity-[0.68]",
+                  isBookElementLocked(selected) &&
+                    selected.type !== "mediaPlaylist" &&
+                    "pointer-events-none opacity-[0.68]",
                 )}
               >
                 {selected.type === "text" ? (
@@ -1349,6 +1922,20 @@ export function BookInspectorPanel({
                     <Separator className="my-1 bg-border/80" />
                     <div className="space-y-3">
                       <p className="text-[10px] font-medium text-muted-foreground">표시</p>
+                      <div className="space-y-1">
+                        <Label className="text-[11px]">재생 길이</Label>
+                        <div className="rounded-md border border-border/70 bg-muted/25 px-2 py-1.5 font-mono text-xs text-muted-foreground">
+                          {(() => {
+                            const dur = videoDurationSecByElementId?.[selected.id];
+                            return dur != null && dur > 0
+                              ? formatBookMediaClock(dur)
+                              : "메타데이터를 불러오는 중…";
+                          })()}
+                        </div>
+                        <p className="text-[10px] text-muted-foreground">
+                          파일에서 읽은 길이이며 수정할 수 없습니다.
+                        </p>
+                      </div>
                       <MediaObjectFitFields
                         elementId={selected.id}
                         value={selected.objectFit}
@@ -1362,6 +1949,36 @@ export function BookInspectorPanel({
                       <ElementShapeChromeFields el={selected} onChange={onChange} />
                       <PositionSizeFields el={selected} onChange={onChange} />
                     </div>
+                  </>
+                ) : selected.type === "mediaPlaylist" ? (
+                  <>
+                    <MediaPlaylistInspectorBody
+                      el={selected}
+                      onChange={onChange}
+                      onRequestAppendPlaylistMediaFromFile={
+                        onRequestAppendPlaylistMediaFromFile
+                      }
+                      onRequestAppendPlaylistMediaFromLibrary={
+                        onRequestAppendPlaylistMediaFromLibrary
+                      }
+                      onRequestDeletePlaylistItem={(index) =>
+                        setPlaylistItemDelete({ elementId: selected.id, index })
+                      }
+                      mediaLibraryReplaceEnabled={mediaLibraryReplaceEnabled}
+                      activePlaybackItemIndex={
+                        mediaPlaylistPlaybackByElementId?.[selected.id]
+                      }
+                      playbackUi={mediaPlaylistPlaybackUiByElementId?.[selected.id]}
+                      onMediaPlaylistRemoteControl={onMediaPlaylistRemoteControl}
+                    />
+                    <Separator className="my-1 bg-border/80" />
+                    <ElementOpacitySlider
+                      elementId={selected.id}
+                      opacity={selected.opacity}
+                      onChange={onChange}
+                    />
+                    <ElementShapeChromeFields el={selected} onChange={onChange} />
+                    <PositionSizeFields el={selected} onChange={onChange} />
                   </>
                 ) : null}
 
@@ -1406,6 +2023,10 @@ export function BookInspectorPanel({
         </div>
       </div>
     </Root>
+    {playlistDeleteConfirmLayer && typeof document !== "undefined"
+      ? createPortal(playlistDeleteConfirmLayer, document.body)
+      : null}
+    </>
   );
 }
 

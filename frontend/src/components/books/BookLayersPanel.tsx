@@ -31,6 +31,7 @@ import {
   GripVertical,
   Image as ImageIcon,
   Layers,
+  ListVideo,
   Lock,
   Trash2,
   Type,
@@ -66,6 +67,10 @@ function bookElementLayerLabel(el: BookCanvasElement): string {
       return "날씨";
     case "digitalClock":
       return "디지털 시계";
+    case "news":
+      return "뉴스";
+    case "mediaPlaylist":
+      return "미디어";
     case "drawing":
       return "그리기";
     default:
@@ -88,6 +93,8 @@ function LayerTypeIcon({ el }: { el: BookCanvasElement }) {
       return <Newspaper className={cls} aria-hidden />;
     case "digitalClock":
       return <Clock className={cls} aria-hidden />;
+    case "mediaPlaylist":
+      return <ListVideo className={cls} aria-hidden />;
     case "drawing":
       return <Pencil className={cls} aria-hidden />;
     default:

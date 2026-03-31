@@ -573,6 +573,130 @@ export async function captureBookSlideToDataURL(
             opacity: elOp,
           }),
         );
+      } else if (el.type === "mediaPlaylist") {
+        const mw = sx(el.width);
+        const mh = sx(el.height);
+        const mp = bookElementPivotKonva({
+          x: sx(el.x),
+          y: sx(el.y),
+          width: mw,
+          height: mh,
+          rotation: el.rotation,
+        });
+        const mCorner = sx(resolveBookElementBorderRadius(el));
+        const mUserOw = resolveBookElementOutlineWidth(el);
+        const mUserOc = resolveBookElementOutlineColor(el);
+        const plist = el.mediaPlaylistItems ?? [];
+        const first = plist[0];
+        let thumb: HTMLImageElement | null = null;
+        let L: ReturnType<typeof computeKonvaFittedImageLayout> | null = null;
+        if (first?.kind === "image" && first.src.trim()) {
+          const im = await loadImageForSnapshot(first.src);
+          if (im) {
+            thumb = im;
+            L = computeKonvaFittedImageLayout(
+              first.objectFit,
+              el.width,
+              el.height,
+              im.naturalWidth,
+              im.naturalHeight,
+            );
+          }
+        } else if (first?.kind === "video" && first.src.trim()) {
+          const vm = await resolveVideoThumbnailImage({
+            src: first.src,
+            posterSrc: first.posterSrc,
+          });
+          if (vm) {
+            thumb = vm;
+            L = computeKonvaFittedImageLayout(
+              first.objectFit,
+              el.width,
+              el.height,
+              vm.naturalWidth,
+              vm.naturalHeight,
+            );
+          }
+        }
+        if (thumb && L) {
+          const g = new Konva.Group({
+            x: mp.cx,
+            y: mp.cy,
+            offsetX: mp.offsetX,
+            offsetY: mp.offsetY,
+            rotation: mp.rotation,
+            opacity: elOp,
+            clipFunc: (ctx) => {
+              canvasRoundRectPath(ctx as never, 0, 0, mw, mh, mCorner);
+            },
+          });
+          const ki = new Konva.Image({
+            x: sx(L.x),
+            y: sx(L.y),
+            width: sx(L.width),
+            height: sx(L.height),
+            image: thumb,
+          });
+          if (L.crop) ki.crop(L.crop);
+          g.add(ki);
+          if (mUserOw > 0) {
+            g.add(
+              new Konva.Rect({
+                x: 0,
+                y: 0,
+                width: mw,
+                height: mh,
+                cornerRadius: mCorner,
+                fillEnabled: false,
+                stroke: mUserOc,
+                strokeWidth: Math.max(0.5, sx(mUserOw)),
+              }),
+            );
+          }
+          layer.add(g);
+        } else {
+          const mf = "#27272a";
+          const mStrokeA = bookWidgetBackdropAlphaFromCss(mf);
+          const mStrokeW = mStrokeA < 0.02 ? 0 : Math.max(0.5, scale);
+          const mStroke =
+            mStrokeW === 0 ? "transparent" : `rgba(56,189,248,${mStrokeA * 0.75})`;
+          const mStrokeUse = mUserOw > 0 ? mUserOc : mStroke;
+          const mStrokeWUse = mUserOw > 0 ? Math.max(0.5, sx(mUserOw)) : mStrokeW;
+          layer.add(
+            new Konva.Rect({
+              x: mp.cx,
+              y: mp.cy,
+              offsetX: mp.offsetX,
+              offsetY: mp.offsetY,
+              width: mw,
+              height: mh,
+              rotation: mp.rotation,
+              fill: mf,
+              stroke: mStrokeUse,
+              strokeWidth: mStrokeWUse,
+              cornerRadius: Math.max(0, mCorner),
+              opacity: elOp,
+            }),
+          );
+          layer.add(
+            new Konva.Text({
+              x: mp.cx,
+              y: mp.cy,
+              offsetX: mp.offsetX,
+              offsetY: mp.offsetY,
+              width: mw,
+              height: mh,
+              rotation: mp.rotation,
+              text: plist.length > 1 ? `미디어 (${plist.length})` : "미디어",
+              fontSize: Math.max(7, 11 * scale),
+              fontFamily: "Geist Variable, ui-sans-serif, system-ui, sans-serif",
+              fill: "#e2e8f0",
+              align: "center",
+              verticalAlign: "middle",
+              opacity: elOp,
+            }),
+          );
+        }
       } else if (el.type === "digitalClock") {
         const cw = sx(el.width);
         const ch = sx(el.height);

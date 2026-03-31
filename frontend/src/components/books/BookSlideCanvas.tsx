@@ -35,6 +35,7 @@ import {
   buildBookDrawingElement,
   isBookElementLocked,
   isBookElementVisible,
+  resolveMediaPlaylistShowControls,
   type BookCanvasElement,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
@@ -50,6 +51,11 @@ import {
 } from "@/components/books/BookTextWidgetOverlay";
 import { BookDigitalClockWidgetOverlay } from "@/components/books/BookDigitalClockWidgetOverlay";
 import { BookNewsWidgetOverlay } from "@/components/books/BookNewsWidgetOverlay";
+import {
+  BookMediaPlaylistWidgetOverlay,
+  type BookMediaPlaylistPlaybackUiSnapshot,
+  type BookMediaPlaylistRemoteCommand,
+} from "@/components/books/BookMediaPlaylistWidgetOverlay";
 import { BookWeatherWidgetOverlay } from "@/components/books/BookWeatherWidgetOverlay";
 import { computeKonvaFittedImageLayout } from "@/lib/book-media-layout";
 import {
@@ -138,7 +144,8 @@ export type BookDropWidgetKind =
   | "video"
   | "weather"
   | "digitalClock"
-  | "news";
+  | "news"
+  | "mediaPlaylist";
 
 /** `id: null` = 선택 해제. `shiftKey` = 기존 선택에 토글 추가 */
 export type BookCanvasSelectDetail = { id: string | null; shiftKey?: boolean };
@@ -180,8 +187,23 @@ type BookSlideCanvasProps = {
   onRequestReplaceMediaFromFile?: (req: BookReplaceMediaFromFileRequest) => void;
   /** 이미지·동영상: 우클릭 → 미디어 라이브러리에서 선택해 교체 */
   onRequestPickLibraryMediaForReplace?: (req: { elementId: string }) => void;
+  /** 미디어 플레이리스트: 우클릭 → 파일 선택 후 목록 끝에 추가 */
+  onRequestPlaylistAppendFromFile?: (elementId: string) => void;
+  /** 미디어 플레이리스트: 우클릭 → 라이브러리에서 선택해 목록 끝에 추가 */
+  onRequestPlaylistAppendFromLibrary?: (elementId: string) => void;
   /** `false`면 라이브러리 교체 메뉴 숨김(예: `/books/new`) */
   mediaLibraryReplaceEnabled?: boolean;
+  /** 미디어 플레이리스트 재생 중 항목 인덱스(속성 패널 하이라이트) */
+  onMediaPlaylistPlaybackIndexChange?: (elementId: string, index: number) => void;
+  /** 선택된 플레이리스트 위젯 재생 UI(속성 패널 미니 컨트롤) */
+  onMediaPlaylistPlaybackUiReport?: (
+    elementId: string,
+    payload: BookMediaPlaylistPlaybackUiSnapshot,
+  ) => void;
+  mediaPlaylistRemoteCommand?: BookMediaPlaylistRemoteCommand | null;
+  onMediaPlaylistRemoteCommandConsumed?: () => void;
+  /** 동영상 위젯 메타데이터 로드 후 재생 길이(초) — 속성 패널 표시용 */
+  onVideoDurationKnown?: (elementId: string, durationSec: number) => void;
 };
 
 function BookFreehandDrawLayer({
@@ -432,6 +454,7 @@ function BookSlideVideoOverlay({
   onBarPointerEnter,
   onBarPointerLeave,
   onHtmlVideoRef,
+  onDurationKnown,
 }: {
   el: Extract<BookCanvasElement, { type: "video" }>;
   scale: number;
@@ -440,6 +463,7 @@ function BookSlideVideoOverlay({
   onBarPointerEnter: () => void;
   onBarPointerLeave: () => void;
   onHtmlVideoRef?: (elementId: string, node: HTMLVideoElement | null) => void;
+  onDurationKnown?: (elementId: string, durationSec: number) => void;
 }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const [playing, setPlaying] = useState(false);
@@ -488,6 +512,12 @@ function BookSlideVideoOverlay({
       v.removeEventListener("ended", onEnded);
     };
   }, [src, syncFromVideo]);
+
+  useEffect(() => {
+    if (duration > 0 && Number.isFinite(duration)) {
+      onDurationKnown?.(el.id, duration);
+    }
+  }, [el.id, duration, onDurationKnown]);
 
   /** 포스터가 없을 때: 메타만 로드하면 캔버스에 그릴 디코딩 프레임이 없어 하얗게 보이는 경우가 있어, 짧게 seek 해 첫 화면을 받도록 함 */
   useEffect(() => {
@@ -653,7 +683,14 @@ export function BookSlideCanvas({
   onAppendElement,
   onRequestReplaceMediaFromFile,
   onRequestPickLibraryMediaForReplace,
+  onRequestPlaylistAppendFromFile,
+  onRequestPlaylistAppendFromLibrary,
   mediaLibraryReplaceEnabled = false,
+  onMediaPlaylistPlaybackIndexChange,
+  onMediaPlaylistPlaybackUiReport,
+  mediaPlaylistRemoteCommand,
+  onMediaPlaylistRemoteCommandConsumed,
+  onVideoDurationKnown,
 }: BookSlideCanvasProps) {
   const trRef = useRef<Konva.Transformer>(null);
   const konvaNodeByIdRef = useRef<Map<string, Konva.Node>>(new Map());
@@ -1132,7 +1169,8 @@ export function BookSlideCanvas({
       raw === "video" ||
       raw === "weather" ||
       raw === "digitalClock" ||
-      raw === "news"
+      raw === "news" ||
+      raw === "mediaPlaylist"
     )
       return raw;
     return null;
@@ -1232,6 +1270,7 @@ export function BookSlideCanvas({
             onBarPointerEnter={() => showVideoBar(el.id)}
             onBarPointerLeave={() => scheduleHideVideoBar(el.id)}
             onHtmlVideoRef={onHtmlVideoRef}
+            onDurationKnown={onVideoDurationKnown}
           />
         ))}
       <div className="relative z-[1]">
@@ -1298,6 +1337,29 @@ export function BookSlideCanvas({
                     onElementChange={onElementChange}
                     zMenuEnabled={elementContextMenuEnabled && !locked}
                     onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                  />
+                );
+              }
+              if (el.type === "mediaPlaylist") {
+                const mplBarOnHover = resolveMediaPlaylistShowControls(el);
+                return (
+                  <BookMediaPlaylistHitShape
+                    key={el.id}
+                    el={el}
+                    locked={locked}
+                    liveSync={shapeLiveSync}
+                    registerKonvaNode={registerKonvaNode}
+                    mode={mode}
+                    onSelect={onSelect}
+                    onElementChange={onElementChange}
+                    zMenuEnabled={elementContextMenuEnabled && !locked}
+                    onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                    onMediaHoverEnter={
+                      mplBarOnHover ? () => showVideoBar(el.id) : undefined
+                    }
+                    onMediaHoverLeave={
+                      mplBarOnHover ? () => scheduleHideVideoBar(el.id) : undefined
+                    }
                   />
                 );
               }
@@ -1422,12 +1484,13 @@ export function BookSlideCanvas({
               e,
             ): e is Extract<
               BookCanvasElement,
-              { type: "text" | "weather" | "digitalClock" | "news" }
+              { type: "text" | "weather" | "digitalClock" | "news" | "mediaPlaylist" }
             > =>
               e.type === "text" ||
               e.type === "weather" ||
               e.type === "digitalClock" ||
-              e.type === "news",
+              e.type === "news" ||
+              e.type === "mediaPlaylist",
           )
           .map((el) => {
             if (el.type === "text") {
@@ -1489,6 +1552,40 @@ export function BookSlideCanvas({
                   mode={mode}
                   isSelected={selectedIdSet.has(el.id)}
                   liveFrame={frameLive}
+                />
+              );
+            }
+            if (el.type === "mediaPlaylist") {
+              const mplItems = el.mediaPlaylistItems ?? [];
+              const mplSig = `${mplItems.length}:${mplItems.map((x) => x.id).join(",")}`;
+              const mplBarOnHover = resolveMediaPlaylistShowControls(el);
+              return (
+                <BookMediaPlaylistWidgetOverlay
+                  key={`${el.id}:${mplSig}`}
+                  el={el}
+                  scale={scale}
+                  mode={mode}
+                  isSelected={selectedIdSet.has(el.id)}
+                  liveFrame={frameLive}
+                  barVisible={
+                    mplBarOnHover ? Boolean(videoBarVisible[el.id]) : false
+                  }
+                  onBarPointerEnter={
+                    mplBarOnHover ? () => showVideoBar(el.id) : undefined
+                  }
+                  onBarPointerLeave={
+                    mplBarOnHover ? () => scheduleHideVideoBar(el.id) : undefined
+                  }
+                  onPlaybackIndexChange={onMediaPlaylistPlaybackIndexChange}
+                  onPlaybackUiReport={
+                    selectedIdSet.has(el.id) && onMediaPlaylistPlaybackUiReport
+                      ? (payload) => onMediaPlaylistPlaybackUiReport(el.id, payload)
+                      : undefined
+                  }
+                  mediaPlaylistRemoteCommand={mediaPlaylistRemoteCommand}
+                  onPlaylistRemoteCommandConsumed={
+                    onMediaPlaylistRemoteCommandConsumed
+                  }
                 />
               );
             }
@@ -1557,7 +1654,7 @@ export function BookSlideCanvas({
               ),
               top: Math.min(
                 zMenu.y,
-                typeof window !== "undefined" ? Math.max(8, window.innerHeight - 320) : zMenu.y,
+                typeof window !== "undefined" ? Math.max(8, window.innerHeight - 400) : zMenu.y,
               ),
             }}
           >
@@ -1611,6 +1708,47 @@ export function BookSlideCanvas({
                       >
                         <Library className="opacity-70" aria-hidden />
                         미디어 라이브러리에서 바꾸기…
+                      </ContextMenuFloatingItem>
+                    ) : null}
+                  </div>
+                </>
+              );
+            })()}
+            {(() => {
+              const zPl = elements.find((e) => e.id === zMenu.elementId);
+              if (zPl?.type !== "mediaPlaylist") return null;
+              const showFile = onRequestPlaylistAppendFromFile;
+              const showLib =
+                mediaLibraryReplaceEnabled && onRequestPlaylistAppendFromLibrary;
+              if (!showFile && !showLib) return null;
+              return (
+                <>
+                  <div
+                    className="-mx-1 my-0.5 h-px shrink-0 bg-border"
+                    role="separator"
+                    aria-hidden="true"
+                  />
+                  <div className="flex flex-col gap-0.5" role="group" aria-label="미디어 목록">
+                    {showFile ? (
+                      <ContextMenuFloatingItem
+                        onClick={() => {
+                          onRequestPlaylistAppendFromFile?.(zMenu.elementId);
+                          setZMenu(null);
+                        }}
+                      >
+                        <FolderOpen className="opacity-70" aria-hidden />
+                        파일에서 미디어 추가…
+                      </ContextMenuFloatingItem>
+                    ) : null}
+                    {showLib ? (
+                      <ContextMenuFloatingItem
+                        onClick={() => {
+                          onRequestPlaylistAppendFromLibrary?.(zMenu.elementId);
+                          setZMenu(null);
+                        }}
+                      >
+                        <Library className="opacity-70" aria-hidden />
+                        라이브러리에서 미디어 추가…
                       </ContextMenuFloatingItem>
                     ) : null}
                   </div>
@@ -1931,6 +2069,8 @@ const WEATHER_WIDGET_MIN_W = 160;
 const WEATHER_WIDGET_MIN_H = 100;
 const NEWS_WIDGET_MIN_W = 200;
 const NEWS_WIDGET_MIN_H = 96;
+const MEDIA_PLAYLIST_MIN_W = 160;
+const MEDIA_PLAYLIST_MIN_H = 100;
 
 const DIGITAL_CLOCK_MIN_W = 120;
 const DIGITAL_CLOCK_MIN_H = 52;
@@ -2291,6 +2431,138 @@ function BookNewsHitShape({
               el.id,
               NEWS_WIDGET_MIN_W,
               NEWS_WIDGET_MIN_H,
+              liveSync,
+              onElementChange,
+            );
+          }
+      }
+    >
+      <Rect
+        name={KONVA_BOOK_WIDGET_HIT_RECT_NAME}
+        x={-fw / 2}
+        y={-fh / 2}
+        width={fw}
+        height={fh}
+        rotation={0}
+        fill="transparent"
+        cornerRadius={wBr}
+        stroke={wOw > 0 ? wOc : "transparent"}
+        strokeWidth={wOw > 0 ? wOw : 0}
+      />
+    </Group>
+  );
+}
+
+function BookMediaPlaylistHitShape({
+  el,
+  locked,
+  liveSync,
+  registerKonvaNode,
+  mode,
+  onSelect,
+  onElementChange,
+  zMenuEnabled,
+  onZMenu,
+  onMediaHoverEnter,
+  onMediaHoverLeave,
+}: {
+  el: Extract<BookCanvasElement, { type: "mediaPlaylist" }>;
+  locked: boolean;
+  liveSync: BookShapeLiveSync;
+  registerKonvaNode: (elementId: string, node: Konva.Node | null) => void;
+  mode: "edit" | "view";
+  onSelect: (detail: BookCanvasSelectDetail) => void;
+  onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
+  zMenuEnabled: boolean;
+  onZMenu: (clientX: number, clientY: number) => void;
+  onMediaHoverEnter?: () => void;
+  onMediaHoverLeave?: () => void;
+}) {
+  const w = el.width;
+  const h = el.height;
+  const tOpacity = resolveBookElementOpacity(el.opacity);
+  const basePivot = bookElementPivotKonva({ x: el.x, y: el.y, width: w, height: h, rotation: el.rotation });
+  const tf = liveSync.transformLive?.id === el.id ? liveSync.transformLive : null;
+  const dg = liveSync.dragLive?.id === el.id ? liveSync.dragLive : null;
+  let fw = w;
+  let fh = h;
+  let gcx = basePivot.cx;
+  let gcy = basePivot.cy;
+  let grot = basePivot.rotation;
+  if (tf) {
+    fw = tf.width;
+    fh = tf.height;
+    gcx = tf.cx;
+    gcy = tf.cy;
+    grot = tf.rotation;
+  } else if (dg) {
+    gcx = dg.cx;
+    gcy = dg.cy;
+  }
+  const wBr = resolveBookElementBorderRadius(el);
+  const wOw = resolveBookElementOutlineWidth(el);
+  const wOc = resolveBookElementOutlineColor(el);
+  return (
+    <Group
+      ref={(node) => {
+        registerKonvaNode(el.id, node);
+      }}
+      x={gcx}
+      y={gcy}
+      rotation={grot}
+      scaleX={tf ? 1 : undefined}
+      scaleY={tf ? 1 : undefined}
+      opacity={tOpacity}
+      draggable={mode === "edit" && !locked}
+      onMouseEnter={onMediaHoverEnter}
+      onMouseLeave={onMediaHoverLeave}
+      onMouseDown={(e) => {
+        if (mode !== "edit") return;
+        e.cancelBubble = true;
+        onSelect({ id: el.id, shiftKey: e.evt.shiftKey });
+      }}
+      onContextMenu={
+        zMenuEnabled
+          ? (e) => {
+            e.cancelBubble = true;
+            e.evt.preventDefault();
+            onZMenu(e.evt.clientX, e.evt.clientY);
+          }
+          : undefined
+      }
+      onDragStart={
+        locked ? undefined : (e) => liveSync.onDragLiveStart(el.id, e.target)
+      }
+      onDragMove={
+        locked ? undefined : (e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)
+      }
+      onDragEnd={
+        locked
+          ? undefined
+          : (e) => {
+            liveSync.commitDragEndPosition(el.id, e.target, fw, fh);
+          }
+      }
+      onTransformStart={
+        locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
+      }
+      onTransform={
+        locked
+          ? undefined
+          : (e) => {
+            bakeKonvaBookWidgetGroupDuringTransform(e.target as Konva.Group);
+            liveSync.onTransformLiveMove(el.id, e.target);
+          }
+      }
+      onTransformEnd={
+        locked
+          ? undefined
+          : (e) => {
+            commitBookWidgetHitShellTransformEnd(
+              e,
+              el.id,
+              MEDIA_PLAYLIST_MIN_W,
+              MEDIA_PLAYLIST_MIN_H,
               liveSync,
               onElementChange,
             );

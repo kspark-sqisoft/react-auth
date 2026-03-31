@@ -164,6 +164,39 @@ export type BookCanvasElementPublic =
     }
   | {
       id: string;
+      type: 'mediaPlaylist';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      mediaPlaylistItems?: Array<
+        | {
+            id: string;
+            kind: 'image';
+            src: string;
+            durationSec?: number;
+            objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
+          }
+        | {
+            id: string;
+            kind: 'video';
+            src: string;
+            posterSrc: string | null;
+            objectFit?: 'cover' | 'contain' | 'fill' | 'none' | 'scale-down';
+          }
+      >;
+      mediaPlaylistLoop?: boolean;
+      mediaPlaylistShowControls?: boolean;
+      opacity?: number;
+      rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
+    }
+  | {
+      id: string;
       type: 'drawing';
       x: number;
       y: number;
@@ -400,6 +433,7 @@ export class BooksService {
         o.type !== 'weather' &&
         o.type !== 'digitalClock' &&
         o.type !== 'news' &&
+        o.type !== 'mediaPlaylist' &&
         o.type !== 'drawing'
       ) {
         throw new BadRequestException('지원하지 않는 요소 타입입니다.');
@@ -839,6 +873,143 @@ export class BooksService {
         ) {
           throw new BadRequestException(
             'newsLinksEnabled는 불리언이어야 합니다.',
+          );
+        }
+      } else if (o.type === 'mediaPlaylist') {
+        const w = o.width;
+        const h = o.height;
+        if (
+          typeof w !== 'number' ||
+          typeof h !== 'number' ||
+          w < 48 ||
+          h < 48 ||
+          w > 4000 ||
+          h > 4000
+        ) {
+          throw new BadRequestException(
+            '미디어 플레이리스트 위젯 크기가 올바르지 않습니다.',
+          );
+        }
+        const rawItems = o.mediaPlaylistItems;
+        if (rawItems !== undefined && !Array.isArray(rawItems)) {
+          throw new BadRequestException(
+            'mediaPlaylistItems는 배열이어야 합니다.',
+          );
+        }
+        const items = Array.isArray(rawItems) ? rawItems : [];
+        if (items.length > 40) {
+          throw new BadRequestException(
+            '미디어 플레이리스트는 최대 40개까지 넣을 수 있습니다.',
+          );
+        }
+        const fitAllowed = new Set([
+          'cover',
+          'contain',
+          'fill',
+          'none',
+          'scale-down',
+        ]);
+        const nextItems: unknown[] = [];
+        for (const row of items) {
+          if (!row || typeof row !== 'object' || Array.isArray(row)) {
+            throw new BadRequestException(
+              '미디어 플레이리스트 항목 형식이 올바르지 않습니다.',
+            );
+          }
+          const it = row as Record<string, unknown>;
+          if (typeof it.id !== 'string' || it.id.length > 80) {
+            throw new BadRequestException(
+              '미디어 플레이리스트 항목 id가 올바르지 않습니다.',
+            );
+          }
+          if (it.kind === 'image') {
+            const normSrc = this.normalizeBookMediaElementSrc(it.src);
+            if (normSrc == null) {
+              throw new BadRequestException(
+                '미디어 플레이리스트 이미지 src가 올바르지 않습니다.',
+              );
+            }
+            if (it.durationSec != null) {
+              const ds = it.durationSec;
+              if (
+                typeof ds !== 'number' ||
+                !Number.isInteger(ds) ||
+                ds < 1 ||
+                ds > 600
+              ) {
+                throw new BadRequestException(
+                  '이미지 표시 시간(durationSec)은 1~600 정수(초)여야 합니다.',
+                );
+              }
+            }
+            if (it.objectFit != null) {
+              if (
+                typeof it.objectFit !== 'string' ||
+                !fitAllowed.has(it.objectFit)
+              ) {
+                throw new BadRequestException(
+                  '미디어 플레이리스트 objectFit 값이 올바르지 않습니다.',
+                );
+              }
+            }
+            nextItems.push({
+              ...it,
+              src: normSrc,
+            });
+          } else if (it.kind === 'video') {
+            const normSrc = this.normalizeBookMediaElementSrc(it.src);
+            if (normSrc == null) {
+              throw new BadRequestException(
+                '미디어 플레이리스트 동영상 src가 올바르지 않습니다.',
+              );
+            }
+            let posterSrc: string | null = null;
+            const ps = it.posterSrc;
+            if (ps != null && ps !== '') {
+              const normPs = this.normalizeBookVideoPosterSrc(ps);
+              if (normPs == null) {
+                throw new BadRequestException(
+                  '미디어 플레이리스트 posterSrc가 올바르지 않습니다.',
+                );
+              }
+              posterSrc = normPs;
+            }
+            if (it.objectFit != null) {
+              if (
+                typeof it.objectFit !== 'string' ||
+                !fitAllowed.has(it.objectFit)
+              ) {
+                throw new BadRequestException(
+                  '미디어 플레이리스트 objectFit 값이 올바르지 않습니다.',
+                );
+              }
+            }
+            nextItems.push({
+              ...it,
+              src: normSrc,
+              posterSrc,
+            });
+          } else {
+            throw new BadRequestException(
+              '미디어 플레이리스트 항목 kind는 image 또는 video여야 합니다.',
+            );
+          }
+        }
+        o.mediaPlaylistItems = nextItems as typeof items;
+        if (
+          o.mediaPlaylistLoop != null &&
+          typeof o.mediaPlaylistLoop !== 'boolean'
+        ) {
+          throw new BadRequestException(
+            'mediaPlaylistLoop은 true 또는 false여야 합니다.',
+          );
+        }
+        if (
+          o.mediaPlaylistShowControls != null &&
+          typeof o.mediaPlaylistShowControls !== 'boolean'
+        ) {
+          throw new BadRequestException(
+            'mediaPlaylistShowControls은 true 또는 false여야 합니다.',
           );
         }
       } else if (o.type === 'drawing') {

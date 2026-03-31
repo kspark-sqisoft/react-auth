@@ -239,6 +239,50 @@ export function snapKonvaBookNodePositionToGrid(
 /** 뉴스 위젯 나열 방식 */
 export type BookNewsDisplayMode = "list" | "carousel";
 
+/** 미디어 위젯: 이미지 한 장. `durationSec` 생략 시 5초. */
+export type BookMediaPlaylistImageItem = {
+  id: string;
+  kind: "image";
+  src: string;
+  /** 표시 시간(초) 1~600, 생략 시 기본 5 */
+  durationSec?: number;
+  objectFit?: BookMediaObjectFit;
+};
+
+/** 미디어 위젯: 동영상. 길이는 메타데이터 기준. */
+export type BookMediaPlaylistVideoItem = {
+  id: string;
+  kind: "video";
+  src: string;
+  posterSrc: string | null;
+  objectFit?: BookMediaObjectFit;
+};
+
+export type BookMediaPlaylistItem =
+  | BookMediaPlaylistImageItem
+  | BookMediaPlaylistVideoItem;
+
+/** 미디어 위젯 기본 프레임 — 16:9에 가깝게 */
+export const DEFAULT_BOOK_MEDIA_PLAYLIST_WIDTH = 480;
+export const DEFAULT_BOOK_MEDIA_PLAYLIST_HEIGHT = 270;
+export const DEFAULT_MEDIA_PLAYLIST_IMAGE_DURATION_SEC = 5;
+export const MEDIA_PLAYLIST_MAX_ITEMS = 40;
+
+export function resolveMediaPlaylistImageDurationSec(
+  item: BookMediaPlaylistImageItem,
+): number {
+  const n = item.durationSec;
+  if (
+    typeof n === "number" &&
+    Number.isInteger(n) &&
+    n >= 1 &&
+    n <= 600
+  ) {
+    return n;
+  }
+  return DEFAULT_MEDIA_PLAYLIST_IMAGE_DURATION_SEC;
+}
+
 export type BookCanvasElement =
   | {
       id: string;
@@ -402,6 +446,27 @@ export type BookCanvasElement =
     }
   | {
       id: string;
+      type: "mediaPlaylist";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      /** 이미지·동영상 슬라이드(앞에서부터 순서대로 재생). */
+      mediaPlaylistItems?: BookMediaPlaylistItem[];
+      /** true(기본): 끝나면 처음부터 반복. false: 한 번만 재생 후 마지막에 정지. */
+      mediaPlaylistLoop?: boolean;
+      /** false면 진행 바·다음 버튼 숨김(기본 표시). */
+      mediaPlaylistShowControls?: boolean;
+      opacity?: number;
+      rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
+    }
+  | {
+      id: string;
       type: "drawing";
       /** 바운딩 박스 중심(다른 위젯과 동일 피벗) */
       x: number;
@@ -417,6 +482,26 @@ export type BookCanvasElement =
       visible?: boolean;
       locked?: boolean;
     };
+
+export function resolveMediaPlaylistLoop(
+  el: Extract<BookCanvasElement, { type: "mediaPlaylist" }>,
+): boolean {
+  return el.mediaPlaylistLoop !== false;
+}
+
+export function resolveMediaPlaylistShowControls(
+  el: Extract<BookCanvasElement, { type: "mediaPlaylist" }>,
+): boolean {
+  return el.mediaPlaylistShowControls !== false;
+}
+
+/** 미디어 재생 시간 표시용 `m:ss` (속성 패널·오버레이 공통) */
+export function formatBookMediaClock(seconds: number): string {
+  if (!Number.isFinite(seconds) || seconds < 0) return "0:00";
+  const m = Math.floor(seconds / 60);
+  const s = Math.floor(seconds % 60);
+  return `${m}:${s.toString().padStart(2, "0")}`;
+}
 
 /** 날씨 위젯 표시 플래그(저장용). `false` = 숨김. */
 export type BookWeatherDisplay = Partial<{
@@ -601,7 +686,8 @@ export function resolveBookElementBorderRadius(el: BookCanvasElement): number {
   if (
     el.type === "weather" ||
     el.type === "digitalClock" ||
-    el.type === "news"
+    el.type === "news" ||
+    el.type === "mediaPlaylist"
   ) {
     return BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS;
   }
@@ -820,6 +906,54 @@ function normalizeBookElementsForSave(
       );
       return finalizeElementForApi({ ...el, ...xy, ...wh });
     }
+    if (el.type === "mediaPlaylist") {
+      const wh = finiteWH(
+        el.width,
+        el.height,
+        DEFAULT_BOOK_MEDIA_PLAYLIST_WIDTH,
+        DEFAULT_BOOK_MEDIA_PLAYLIST_HEIGHT,
+      );
+      const rawItems = Array.isArray(el.mediaPlaylistItems)
+        ? el.mediaPlaylistItems
+        : [];
+      const mediaPlaylistItems: BookMediaPlaylistItem[] = [];
+      for (const it of rawItems) {
+        const srcTrim = typeof it.src === "string" ? it.src.trim() : "";
+        if (!srcTrim) continue;
+        if (it.kind === "image") {
+          mediaPlaylistItems.push({
+            id: it.id,
+            kind: "image",
+            src: bookMediaSrcForApi(srcTrim),
+            ...(typeof it.durationSec === "number" &&
+            Number.isInteger(it.durationSec) &&
+            it.durationSec >= 1 &&
+            it.durationSec <= 600
+              ? { durationSec: it.durationSec }
+              : {}),
+            ...(it.objectFit ? { objectFit: it.objectFit } : {}),
+          });
+          continue;
+        }
+        const ps = it.posterSrc;
+        mediaPlaylistItems.push({
+          id: it.id,
+          kind: "video",
+          src: bookMediaSrcForApi(srcTrim),
+          posterSrc:
+            ps != null && String(ps).trim() !== ""
+              ? bookMediaSrcForApi(String(ps))
+              : null,
+          ...(it.objectFit ? { objectFit: it.objectFit } : {}),
+        });
+      }
+      return finalizeElementForApi({
+        ...el,
+        ...xy,
+        ...wh,
+        mediaPlaylistItems,
+      });
+    }
     if (el.type === "drawing") {
       const wh = finiteWH(el.width, el.height, 16, 16);
       const ptsIn = Array.isArray(el.points) ? el.points : [];
@@ -1003,6 +1137,25 @@ export function duplicateBookEditorPage(
         ...(typeof el.newsLinksEnabled === "boolean"
           ? { newsLinksEnabled: el.newsLinksEnabled }
           : {}),
+        ...(el.borderRadius !== undefined
+          ? { borderRadius: el.borderRadius }
+          : {}),
+        ...(el.outlineWidth !== undefined
+          ? { outlineWidth: el.outlineWidth }
+          : {}),
+        ...(el.outlineColor !== undefined
+          ? { outlineColor: el.outlineColor }
+          : {}),
+      };
+    }
+    if (el.type === "mediaPlaylist") {
+      return {
+        ...el,
+        id,
+        mediaPlaylistItems: (el.mediaPlaylistItems ?? []).map((it) => ({
+          ...it,
+          id: crypto.randomUUID(),
+        })),
         ...(el.borderRadius !== undefined
           ? { borderRadius: el.borderRadius }
           : {}),
@@ -1287,6 +1440,46 @@ function parseBookNewsVisibilityFlag(raw: unknown): boolean | undefined {
   return undefined;
 }
 
+function parseMediaPlaylistItems(raw: unknown): BookMediaPlaylistItem[] {
+  if (!Array.isArray(raw)) return [];
+  const out: BookMediaPlaylistItem[] = [];
+  for (const row of raw) {
+    if (!row || typeof row !== "object") continue;
+    const r = row as Record<string, unknown>;
+    if (typeof r.id !== "string" || r.id.length > 80) continue;
+    if (r.kind === "image") {
+      if (typeof r.src !== "string") continue;
+      const objectFit = parseBookMediaObjectFit(r.objectFit);
+      const ds = Number(r.durationSec);
+      const durationSec =
+        Number.isInteger(ds) && ds >= 1 && ds <= 600 ? ds : undefined;
+      out.push({
+        id: r.id,
+        kind: "image",
+        src: r.src,
+        ...(durationSec !== undefined ? { durationSec } : {}),
+        ...(objectFit ? { objectFit } : {}),
+      });
+    } else if (r.kind === "video") {
+      if (typeof r.src !== "string") continue;
+      const posterSrc =
+        typeof r.posterSrc === "string" && r.posterSrc.length > 0
+          ? r.posterSrc
+          : null;
+      const objectFit = parseBookMediaObjectFit(r.objectFit);
+      out.push({
+        id: r.id,
+        kind: "video",
+        src: r.src,
+        posterSrc,
+        ...(objectFit ? { objectFit } : {}),
+      });
+    }
+    if (out.length >= MEDIA_PLAYLIST_MAX_ITEMS) break;
+  }
+  return out;
+}
+
 export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
   const out: BookCanvasElement[] = [];
   for (const el of raw) {
@@ -1447,6 +1640,28 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(nsh !== undefined ? { newsShowHeader: nsh } : {}),
         ...(nss !== undefined ? { newsShowSource: nss } : {}),
         ...(nle !== undefined ? { newsLinksEnabled: nle } : {}),
+        ...chrome,
+        ...(opacity !== undefined ? { opacity } : {}),
+        ...(rotation !== undefined ? { rotation } : {}),
+        ...(o.visible === false ? { visible: false as const } : {}),
+        ...(o.locked === true ? { locked: true as const } : {}),
+      });
+    } else if (o.type === "mediaPlaylist") {
+      const items = parseMediaPlaylistItems(o.mediaPlaylistItems);
+      const loop = o.mediaPlaylistLoop === false ? false : undefined;
+      const showCtl = o.mediaPlaylistShowControls === false ? false : undefined;
+      out.push({
+        id: o.id,
+        type: "mediaPlaylist",
+        x: Number(o.x) || 0,
+        y: Number(o.y) || 0,
+        width: Number(o.width) || DEFAULT_BOOK_MEDIA_PLAYLIST_WIDTH,
+        height: Number(o.height) || DEFAULT_BOOK_MEDIA_PLAYLIST_HEIGHT,
+        mediaPlaylistItems: items,
+        ...(loop === false ? { mediaPlaylistLoop: false as const } : {}),
+        ...(showCtl === false
+          ? { mediaPlaylistShowControls: false as const }
+          : {}),
         ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),

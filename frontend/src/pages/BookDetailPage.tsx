@@ -28,8 +28,11 @@ import {
   DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
   DEFAULT_BOOK_NEWS_WIDGET_HEIGHT,
   DEFAULT_BOOK_NEWS_WIDGET_WIDTH,
+  DEFAULT_BOOK_MEDIA_PLAYLIST_HEIGHT,
+  DEFAULT_BOOK_MEDIA_PLAYLIST_WIDTH,
   DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT,
   DEFAULT_BOOK_WEATHER_WIDGET_WIDTH,
+  MEDIA_PLAYLIST_MAX_ITEMS,
   DEFAULT_PAGE_BACKGROUND,
   DEFAULT_SLIDE_HEIGHT,
   DEFAULT_SLIDE_WIDTH,
@@ -76,6 +79,10 @@ import { BookMediaLibraryPanel } from "@/components/books/BookMediaLibraryPanel"
 import { BookSlideDrawingPanel } from "@/components/books/BookSlideDrawingPanel";
 import { BookSlideTemplatesPanel } from "@/components/books/BookSlideTemplatesPanel";
 import { BookMediaLibraryPickDialog } from "@/components/books/BookMediaLibraryPickDialog";
+import type {
+  BookMediaPlaylistPlaybackUiSnapshot,
+  BookMediaPlaylistRemoteCommand,
+} from "@/components/books/BookMediaPlaylistWidgetOverlay";
 import {
   BookSlideCanvas,
   DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX,
@@ -139,10 +146,16 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   } = useBookDocumentHistory(mapServerPagesToLocal(serverBook.pages));
   const imageInputRef = useRef<HTMLInputElement>(null);
   const videoInputRef = useRef<HTMLInputElement>(null);
+  const playlistMediaInputRef = useRef<HTMLInputElement>(null);
+  const playlistAppendElementIdRef = useRef<string | null>(null);
   const pendingMediaKindRef = useRef<"image" | "video" | null>(null);
   const pendingPlacementRef = useRef<{ x: number; y: number } | null>(null);
   const replaceMediaElementIdRef = useRef<string | null>(null);
-  const [libraryPickElementId, setLibraryPickElementId] = useState<string | null>(null);
+  const [libraryPick, setLibraryPick] = useState<
+    | { mode: "replace"; elementId: string; kind: "image" | "video" }
+    | { mode: "playlistAppend"; elementId: string }
+    | null
+  >(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
   const [widgetDeleteOpen, setWidgetDeleteOpen] = useState(false);
@@ -181,6 +194,19 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     media: 289,
     ai: 288,
   }));
+  /** 캔버스 플레이리스트별 재생 중 항목 인덱스 → 속성 목록 하이라이트 */
+  const [mediaPlaylistPlaybackByElementId, setMediaPlaylistPlaybackByElementId] = useState<
+    Record<string, number>
+  >({});
+  const [videoDurationByElementId, setVideoDurationByElementId] = useState<
+    Record<string, number>
+  >({});
+  const [mediaPlaylistPlaybackUiByElementId, setMediaPlaylistPlaybackUiByElementId] = useState<
+    Record<string, BookMediaPlaylistPlaybackUiSnapshot>
+  >({});
+  const playlistRemoteSeqRef = useRef(0);
+  const [playlistRemoteCmd, setPlaylistRemoteCmd] =
+    useState<BookMediaPlaylistRemoteCommand | null>(null);
   const raiseFloatingWidgetStack = useCallback(() => {
     setFloatingPanelZ((prev) => {
       const top = Math.max(prev.widget, prev.media, prev.ai) + 1;
@@ -203,11 +229,74 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   const maxPageIdx = Math.max(0, localPages.length - 1);
   const activePageIndex = Math.min(pageIndex, maxPageIdx);
   const activePage = localPages[activePageIndex];
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setMediaPlaylistPlaybackByElementId({});
+      setMediaPlaylistPlaybackUiByElementId({});
+    });
+  }, [activePageIndex]);
+
+  const handleMediaPlaylistPlaybackIndex = useCallback(
+    (elementId: string, index: number) => {
+      setMediaPlaylistPlaybackByElementId((prev) => {
+        if (prev[elementId] === index) return prev;
+        return { ...prev, [elementId]: index };
+      });
+    },
+    [],
+  );
+
+  const handleVideoDurationKnown = useCallback(
+    (elementId: string, durationSec: number) => {
+      setVideoDurationByElementId((prev) => {
+        if (prev[elementId] === durationSec) return prev;
+        return { ...prev, [elementId]: durationSec };
+      });
+    },
+    [],
+  );
+
+  const handleMediaPlaylistPlaybackUiReport = useCallback(
+    (elementId: string, payload: BookMediaPlaylistPlaybackUiSnapshot) => {
+      setMediaPlaylistPlaybackUiByElementId((prev) => ({
+        ...prev,
+        [elementId]: payload,
+      }));
+    },
+    [],
+  );
+
+  const clearPlaylistRemoteCmd = useCallback(() => setPlaylistRemoteCmd(null), []);
+
+  const handleMediaPlaylistRemoteControl = useCallback(
+    (elementId: string, kind: "prev" | "next" | "togglePause") => {
+      playlistRemoteSeqRef.current += 1;
+      setPlaylistRemoteCmd({
+        targetId: elementId,
+        kind,
+        seq: playlistRemoteSeqRef.current,
+      });
+    },
+    [],
+  );
+
   const canvasSelectedIds = useMemo(() => {
     if (!activePage) return [];
     const onPage = new Set(activePage.elements.map((e) => e.id));
     return selectedIds.filter((id) => onPage.has(id));
   }, [selectedIds, activePage]);
+
+  const playlistInspectorSelectionKey = useMemo(
+    () => (canvasSelectedIds.length === 1 ? (canvasSelectedIds[0] ?? "") : ""),
+    [canvasSelectedIds],
+  );
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      setPlaylistRemoteCmd(null);
+    });
+  }, [playlistInspectorSelectionKey]);
 
   const handleCanvasSelect = useCallback((d: BookCanvasSelectDetail) => {
     if (d.id === null) {
@@ -238,19 +327,28 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     });
   }, []);
 
-  const libraryPickKind = useMemo((): "image" | "video" | null => {
-    if (!libraryPickElementId || !activePage) return null;
-    const el = activePage.elements.find((e) => e.id === libraryPickElementId);
-    if (el?.type === "image") return "image";
-    if (el?.type === "video") return "video";
-    return null;
-  }, [libraryPickElementId, activePage]);
+  const libraryPickAcceptKind =
+    libraryPick == null
+      ? null
+      : libraryPick.mode === "replace"
+        ? libraryPick.kind
+        : ("both" as const);
 
   useEffect(() => {
-    if (libraryPickElementId && !libraryPickKind) {
-      setLibraryPickElementId(null);
+    if (!libraryPick || !activePage) return;
+    const el = activePage.elements.find((e) => e.id === libraryPick.elementId);
+    if (!el) {
+      setLibraryPick(null);
+      return;
     }
-  }, [libraryPickElementId, libraryPickKind]);
+    if (libraryPick.mode === "replace" && el.type !== libraryPick.kind) {
+      setLibraryPick(null);
+      return;
+    }
+    if (libraryPick.mode === "playlistAppend" && el.type !== "mediaPlaylist") {
+      setLibraryPick(null);
+    }
+  }, [libraryPick, activePage]);
 
   useEffect(() => {
     if (!activePage) return;
@@ -619,6 +717,27 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     [activePageIndex, updatePages],
   );
 
+  const addMediaPlaylistAt = useCallback(
+    (x: number, y: number) => {
+      const id = crypto.randomUUID();
+      const el: BookCanvasElement = {
+        id,
+        type: "mediaPlaylist",
+        x,
+        y,
+        width: DEFAULT_BOOK_MEDIA_PLAYLIST_WIDTH,
+        height: DEFAULT_BOOK_MEDIA_PLAYLIST_HEIGHT,
+        mediaPlaylistItems: [],
+      };
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.elements.push(el);
+      });
+      setSelectedIds([id]);
+    },
+    [activePageIndex, updatePages],
+  );
+
   const addDigitalClockAt = useCallback(
     (x: number, y: number) => {
       const id = crypto.randomUUID();
@@ -728,23 +847,117 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     }
   }, []);
 
-  const onRequestPickLibraryMediaForReplace = useCallback((req: { elementId: string }) => {
-    setLibraryPickElementId(req.elementId);
-    raiseFloatingMediaStack();
-  }, [raiseFloatingMediaStack]);
+  const onRequestPickLibraryMediaForReplace = useCallback(
+    (req: { elementId: string }) => {
+      const el = activePage?.elements.find((e) => e.id === req.elementId);
+      if (!el || (el.type !== "image" && el.type !== "video")) return;
+      setLibraryPick({
+        mode: "replace",
+        elementId: req.elementId,
+        kind: el.type,
+      });
+      raiseFloatingMediaStack();
+    },
+    [activePage, raiseFloatingMediaStack],
+  );
+
+  const handlePlaylistMediaFile = useCallback(
+    async (file: File) => {
+      setUploadError(null);
+      const elementId = playlistAppendElementIdRef.current;
+      playlistAppendElementIdRef.current = null;
+      if (!elementId) return;
+      const idx = activePageIndex;
+      try {
+        const res = await uploadBookMedia(bookId, file, null);
+        let blockedFull = false;
+        let applied = false;
+        updatePages((draft) => {
+          const p = draft[idx];
+          if (!p) return;
+          const el = p.elements.find((e) => e.id === elementId);
+          if (!el || el.type !== "mediaPlaylist") return;
+          const cur = el.mediaPlaylistItems ?? [];
+          if (cur.length >= MEDIA_PLAYLIST_MAX_ITEMS) {
+            blockedFull = true;
+            return;
+          }
+          if (res.kind === "image") {
+            el.mediaPlaylistItems = [
+              ...cur,
+              { id: crypto.randomUUID(), kind: "image", src: res.url },
+            ];
+          } else {
+            el.mediaPlaylistItems = [
+              ...cur,
+              {
+                id: crypto.randomUUID(),
+                kind: "video",
+                src: res.url,
+                posterSrc: res.posterUrl ?? null,
+              },
+            ];
+          }
+          applied = true;
+        });
+        if (blockedFull) {
+          toast.error(`미디어 목록은 최대 ${MEDIA_PLAYLIST_MAX_ITEMS}개입니다.`);
+          return;
+        }
+        if (!applied) return;
+        appendBookMediaLibraryItem(bookId, {
+          kind: res.kind,
+          src: res.url,
+          posterUrl: res.posterUrl,
+        });
+        toast.success("목록 끝에 미디어를 추가했습니다.");
+      } catch (e) {
+        setUploadError((e as Error).message);
+      }
+    },
+    [activePageIndex, bookId, updatePages],
+  );
+
+  const onRequestPlaylistAppendFromFile = useCallback(
+    (elementId: string) => {
+      const el = activePage?.elements.find((e) => e.id === elementId);
+      if (!el || el.type !== "mediaPlaylist") return;
+      if ((el.mediaPlaylistItems ?? []).length >= MEDIA_PLAYLIST_MAX_ITEMS) {
+        toast.error(`미디어 목록은 최대 ${MEDIA_PLAYLIST_MAX_ITEMS}개입니다.`);
+        return;
+      }
+      playlistAppendElementIdRef.current = elementId;
+      playlistMediaInputRef.current?.click();
+    },
+    [activePage],
+  );
+
+  const onRequestPlaylistAppendFromLibrary = useCallback(
+    (elementId: string) => {
+      setLibraryPick({ mode: "playlistAppend", elementId });
+      raiseFloatingMediaStack();
+    },
+    [raiseFloatingMediaStack],
+  );
 
   useEffect(() => {
-    const onCancel = () => {
+    const onImgVidCancel = () => {
       replaceMediaElementIdRef.current = null;
       pendingMediaKindRef.current = null;
     };
+    const onPlaylistCancel = () => {
+      playlistAppendElementIdRef.current = null;
+    };
     const img = imageInputRef.current;
     const vid = videoInputRef.current;
-    img?.addEventListener("cancel", onCancel);
-    vid?.addEventListener("cancel", onCancel);
+    const pl = playlistMediaInputRef.current;
+    img?.addEventListener("cancel", onImgVidCancel);
+    vid?.addEventListener("cancel", onImgVidCancel);
+    pl?.addEventListener("cancel", onPlaylistCancel);
     return () => {
-      img?.removeEventListener("cancel", onCancel);
-      vid?.removeEventListener("cancel", onCancel);
+      img?.removeEventListener("cancel", onImgVidCancel);
+      vid?.removeEventListener("cancel", onImgVidCancel);
+      pl?.removeEventListener("cancel", onPlaylistCancel);
     };
   }, []);
 
@@ -762,6 +975,10 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         addNewsAt(point.x, point.y);
         return;
       }
+      if (kind === "mediaPlaylist") {
+        addMediaPlaylistAt(point.x, point.y);
+        return;
+      }
       if (kind === "digitalClock") {
         addDigitalClockAt(point.x, point.y);
         return;
@@ -774,7 +991,13 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         videoInputRef.current?.click();
       }
     },
-    [addDigitalClockAt, addNewsAt, addTextAt, addWeatherAt],
+    [
+      addDigitalClockAt,
+      addMediaPlaylistAt,
+      addNewsAt,
+      addTextAt,
+      addWeatherAt,
+    ],
   );
 
   const applyAiElements = useCallback(
@@ -1023,6 +1246,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     if (el.type === "video") return "동영상 위젯";
     if (el.type === "weather") return "날씨 위젯";
     if (el.type === "news") return "뉴스 위젯";
+    if (el.type === "mediaPlaylist") return "미디어 위젯";
     if (el.type === "digitalClock") return "디지털 시계 위젯";
     if (el.type === "drawing") return "그리기";
     return "위젯";
@@ -1425,7 +1649,14 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 onAppendElement={onAppendDrawingElement}
                 onRequestReplaceMediaFromFile={onRequestReplaceMediaFromFile}
                 onRequestPickLibraryMediaForReplace={onRequestPickLibraryMediaForReplace}
+                onRequestPlaylistAppendFromFile={onRequestPlaylistAppendFromFile}
+                onRequestPlaylistAppendFromLibrary={onRequestPlaylistAppendFromLibrary}
                 mediaLibraryReplaceEnabled
+                onMediaPlaylistPlaybackIndexChange={handleMediaPlaylistPlaybackIndex}
+                onMediaPlaylistPlaybackUiReport={handleMediaPlaylistPlaybackUiReport}
+                mediaPlaylistRemoteCommand={playlistRemoteCmd}
+                onMediaPlaylistRemoteCommandConsumed={clearPlaylistRemoteCmd}
+                onVideoDurationKnown={handleVideoDurationKnown}
               />
             </div>
           </div>
@@ -1500,6 +1731,21 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
               void handleMediaFile(f, "video");
             }}
           />
+          <input
+            ref={playlistMediaInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/gif,image/webp,video/mp4,video/webm,video/quicktime"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              e.target.value = "";
+              if (!f) {
+                playlistAppendElementIdRef.current = null;
+                return;
+              }
+              void handlePlaylistMediaFile(f);
+            }}
+          />
         </>
       }
       right={
@@ -1537,7 +1783,13 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 mediaHint={mediaHint}
                 onReplaceMediaFromFile={onInspectorReplaceMediaFromFile}
                 onPickMediaFromLibrary={onInspectorPickMediaFromLibrary}
+                onRequestAppendPlaylistMediaFromFile={onRequestPlaylistAppendFromFile}
+                onRequestAppendPlaylistMediaFromLibrary={onRequestPlaylistAppendFromLibrary}
                 mediaLibraryReplaceEnabled
+                mediaPlaylistPlaybackByElementId={mediaPlaylistPlaybackByElementId}
+                mediaPlaylistPlaybackUiByElementId={mediaPlaylistPlaybackUiByElementId}
+                onMediaPlaylistRemoteControl={handleMediaPlaylistRemoteControl}
+                videoDurationSecByElementId={videoDurationByElementId}
               />
             ) : (
               <BookPagePropertiesPanel
@@ -1559,26 +1811,70 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     {deleteBookDialog}
     {widgetDeleteDialog}
     {pageDeleteDialog}
-    {libraryPickKind ? (
+    {libraryPickAcceptKind ? (
       <BookMediaLibraryPickDialog
-        open={libraryPickElementId != null}
+        open={libraryPick != null}
         onOpenChange={(o) => {
-          if (!o) setLibraryPickElementId(null);
+          if (!o) setLibraryPick(null);
         }}
         bookId={bookId}
-        acceptKind={libraryPickKind}
+        acceptKind={libraryPickAcceptKind}
+        title={
+          libraryPick?.mode === "playlistAppend"
+            ? "라이브러리에서 미디어 선택"
+            : undefined
+        }
         onPick={(item) => {
-          if (!libraryPickElementId) return;
-          if (item.kind === "image") {
-            onElementChange(libraryPickElementId, { src: item.src });
+          if (!libraryPick) return;
+          if (libraryPick.mode === "replace") {
+            if (item.kind === "image") {
+              onElementChange(libraryPick.elementId, { src: item.src });
+            } else {
+              onElementChange(libraryPick.elementId, {
+                src: item.src,
+                posterSrc: item.posterSrc,
+              });
+            }
+            toast.success("미디어를 바꿨습니다.");
           } else {
-            onElementChange(libraryPickElementId, {
-              src: item.src,
-              posterSrc: item.posterSrc,
-            });
+            const pageEl = activePage?.elements.find((e) => e.id === libraryPick.elementId);
+            if (!pageEl || pageEl.type !== "mediaPlaylist") {
+              setLibraryPick(null);
+              return;
+            }
+            const cur = pageEl.mediaPlaylistItems ?? [];
+            if (cur.length >= MEDIA_PLAYLIST_MAX_ITEMS) {
+              setLibraryPick(null);
+              toast.error(`미디어 목록은 최대 ${MEDIA_PLAYLIST_MAX_ITEMS}개입니다.`);
+              return;
+            }
+            if (item.kind === "image") {
+              onElementChange(libraryPick.elementId, {
+                mediaPlaylistItems: [
+                  ...cur,
+                  {
+                    id: crypto.randomUUID(),
+                    kind: "image",
+                    src: item.src,
+                  },
+                ],
+              });
+            } else {
+              onElementChange(libraryPick.elementId, {
+                mediaPlaylistItems: [
+                  ...cur,
+                  {
+                    id: crypto.randomUUID(),
+                    kind: "video",
+                    src: item.src,
+                    posterSrc: item.posterSrc ?? null,
+                  },
+                ],
+              });
+            }
+            toast.success("목록에 미디어를 추가했습니다.");
           }
-          setLibraryPickElementId(null);
-          toast.success("미디어를 바꿨습니다.");
+          setLibraryPick(null);
         }}
       />
     ) : null}

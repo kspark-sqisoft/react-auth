@@ -15,6 +15,7 @@ import {
   CloudSun,
   GripVertical,
   ImagePlus,
+  ListVideo,
   Newspaper,
   PictureInPicture2,
   Type,
@@ -39,6 +40,7 @@ const ITEMS: { kind: BookDropWidgetKind; label: string; icon: LucideIcon }[] = [
   { kind: "video", label: "동영상", icon: Video },
   { kind: "weather", label: "날씨", icon: CloudSun },
   { kind: "news", label: "뉴스", icon: Newspaper },
+  { kind: "mediaPlaylist", label: "미디어", icon: ListVideo },
   { kind: "digitalClock", label: "디지털 시계", icon: Clock },
 ];
 
