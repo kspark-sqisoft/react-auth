@@ -150,9 +150,9 @@ export function konvaBookTopLeftFromCommitNode(
   logicalH: number,
 ): { x: number; y: number } {
   if (node.getClassName() === "Group") {
-    const inner = node.findOne(`.${KONVA_BOOK_WIDGET_HIT_RECT_NAME}`) as
-      | Konva.Node
-      | undefined;
+    const inner = (node as Konva.Container).findOne(
+      `.${KONVA_BOOK_WIDGET_HIT_RECT_NAME}`,
+    ) as Konva.Node | undefined;
     if (inner) {
       return bookElementTopLeftFromCenterRotation(
         node.x(),
@@ -217,7 +217,7 @@ export function snapKonvaBookNodePositionToGrid(
 ): void {
   if (
     node.getClassName() === "Group" &&
-    node.findOne(`.${KONVA_BOOK_WIDGET_HIT_RECT_NAME}`)
+    (node as Konva.Container).findOne(`.${KONVA_BOOK_WIDGET_HIT_RECT_NAME}`)
   ) {
     snapKonvaBookCenterPivotGroupToGrid(node, logical, gridPx);
     return;
@@ -796,9 +796,9 @@ export function resolveEffectivePresentationTimingElementId(
 export const DEFAULT_SLIDE_WIDTH = 960;
 export const DEFAULT_SLIDE_HEIGHT = 540;
 
-/** 날씨 위젯 기본 프레임(px) — 380×320보다 작게, 360×228보다는 여유 있게 */
+/** 날씨 위젯 기본 프레임(px) — 2열 기본 배치가 위·아래 여백 맞게 들어가도록 높이를 다소 타이트하게 */
 export const DEFAULT_BOOK_WEATHER_WIDGET_WIDTH = 364;
-export const DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT = 256;
+export const DEFAULT_BOOK_WEATHER_WIDGET_HEIGHT = 220;
 /** 뉴스 위젯 기본 프레임(px) — 캐러셀 1줄·목록 여러 줄 */
 export const DEFAULT_BOOK_NEWS_WIDGET_WIDTH = 420;
 export const DEFAULT_BOOK_NEWS_WIDGET_HEIGHT = 200;

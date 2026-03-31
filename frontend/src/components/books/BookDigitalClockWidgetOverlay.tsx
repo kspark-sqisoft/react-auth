@@ -72,9 +72,8 @@ export function BookDigitalClockWidgetOverlay({ el, scale, mode, isSelected, liv
   const fh = liveFrame?.height ?? h;
   const fRot = liveFrame != null ? liveFrame.rotation : rot;
 
-  const boxH = fh * scale;
-  const timeSize = Math.max(22, Math.min(56, boxH * 0.42));
-  const dateSize = Math.max(10, Math.min(16, boxH * 0.14));
+  const timeSize = Math.max(14 * scale, fh * 0.42 * scale);
+  const dateSize = Math.max(9 * scale, fh * 0.14 * scale);
 
   const customBg = parseBookClockBackground(el.clockBackground);
   const customText = parseBookWidgetTextColor(el.clockTextColor);
@@ -122,10 +121,17 @@ export function BookDigitalClockWidgetOverlay({ el, scale, mode, isSelected, liv
     >
       <div
         className={cn(
-          "flex h-full min-h-0 flex-col items-center justify-center gap-0.5 px-2 py-1 text-center",
+          "flex h-full min-h-0 flex-col items-center justify-center text-center",
           !customText && "text-white",
         )}
-        style={customText ? { color: customText } : undefined}
+        style={{
+          gap: Math.max(2 * scale, 4),
+          paddingLeft: Math.max(6 * scale, 8),
+          paddingRight: Math.max(6 * scale, 8),
+          paddingTop: Math.max(3 * scale, 4),
+          paddingBottom: Math.max(3 * scale, 4),
+          ...(customText ? { color: customText } : {}),
+        }}
       >
         <div
           className={cn(

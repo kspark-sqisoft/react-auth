@@ -66,7 +66,10 @@ import {
   bookLeftDockContentColumnClass,
 } from "@/lib/book-workspace-ui";
 import { bookKeys } from "@/lib/query-keys";
-import { useBookCanvasDisplayScale } from "@/lib/use-book-canvas-display-scale";
+import {
+  BOOK_CANVAS_STAGE_DISPLAY_OPTS,
+  useBookCanvasDisplayScale,
+} from "@/lib/use-book-canvas-display-scale";
 import { useBookDocumentHistory } from "@/lib/use-book-document-history";
 import { useBookPageThumbnails } from "@/lib/use-book-page-thumbnails";
 import { useAuth } from "@/stores/auth-store";
@@ -424,7 +427,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
   } = useBookCanvasDisplayScale(canvasWrapRef, {
     slideWidth,
     slideHeight,
-    bottomPad: 120,
+    ...BOOK_CANVAS_STAGE_DISPLAY_OPTS,
   });
 
   useEffect(() => {
@@ -2059,6 +2062,16 @@ function BookDetailGuestBookView({
           <p className="truncate text-xs text-muted-foreground">
             {data.author.name} · {sortedPagesView.length}페이지 · {safeIndex + 1}번째 보는 중
           </p>
+        </div>
+      }
+      actions={
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <Button type="button" size="sm" variant="outline" asChild>
+            <Link to={`/books/${data.id}/preview`} target="_blank" rel="noreferrer">
+              <MonitorPlay className="mr-2 size-4" />
+              미리보기
+            </Link>
+          </Button>
         </div>
       }
       left={

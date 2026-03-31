@@ -125,7 +125,11 @@ function NewsCarouselViewport({
             className={cn("flex items-center gap-1.5", useDefaultLightText && "text-white/90")}
             style={{ fontSize: metaFontPx, ...metaStyle }}
           >
-            <Newspaper className="size-3.5 shrink-0" aria-hidden />
+            <Newspaper
+              className="shrink-0"
+              style={{ width: metaFontPx * 1.2, height: metaFontPx * 1.2 }}
+              aria-hidden
+            />
             <span className="font-semibold uppercase tracking-wider">{sectionTitle}</span>
           </div>
           {articles.length > 1 ? (
@@ -262,17 +266,16 @@ export function BookNewsWidgetOverlay({ el, scale, mode, isSelected, liveFrame }
    * 헤더/상단 패딩이 커져 "위도 같이 커지는" 것처럼 보입니다. 드래그 중에는 저장된 크기로만 메트릭을 잡습니다.
    */
   const metricsH = liveFrame != null ? h : fh;
-  const boxH = metricsH * scale;
-  const defaultTitlePx = Math.max(11, Math.min(15, boxH * 0.072));
-  const defaultMetaPx = Math.max(9, Math.min(12, boxH * 0.055))
+  const defaultTitleLogical = metricsH * 0.072;
+  const defaultMetaLogical = metricsH * 0.055;
   const titleFontPx =
     typeof el.newsTitleFontSize === "number" && Number.isInteger(el.newsTitleFontSize)
-      ? el.newsTitleFontSize
-      : defaultTitlePx;
+      ? el.newsTitleFontSize * scale
+      : Math.max(10 * scale, defaultTitleLogical * scale);
   const metaFontPx =
     typeof el.newsMetaFontSize === "number" && Number.isInteger(el.newsMetaFontSize)
-      ? el.newsMetaFontSize
-      : defaultMetaPx;
+      ? el.newsMetaFontSize * scale
+      : Math.max(8 * scale, defaultMetaLogical * scale);
   const titleLineClamp = resolveNewsTitleLineClamp(el, displayMode);
   const titleClampClass =
     TITLE_LINE_CLAMP_CLASS[titleLineClamp] ?? TITLE_LINE_CLAMP_CLASS[3]!;
@@ -360,16 +363,30 @@ export function BookNewsWidgetOverlay({ el, scale, mode, isSelected, liveFrame }
           )}
           style={{ fontSize: metaFontPx, ...metaStyle }}
         >
-          <Loader2 className="size-5 shrink-0 animate-spin" aria-hidden />
+          <Loader2
+            className="shrink-0 animate-spin"
+            style={{ width: metaFontPx * 1.35, height: metaFontPx * 1.35 }}
+            aria-hidden
+          />
           <span>뉴스 불러오는 중…</span>
         </div>
       ) : isError ? (
-        <div className="flex h-full min-h-0 flex-col items-center justify-center gap-1.5 px-3 text-center text-amber-50">
-          <Newspaper className="size-7 shrink-0 opacity-90" aria-hidden />
+        <div
+          className="flex h-full min-h-0 flex-col items-center justify-center gap-1.5 px-3 text-center text-amber-50"
+          style={{ fontSize: metaFontPx }}
+        >
+          <Newspaper
+            className="shrink-0 opacity-90"
+            style={{ width: titleFontPx * 1.6, height: titleFontPx * 1.6 }}
+            aria-hidden
+          />
           <span className="max-w-[95%] text-[0.8em] font-medium leading-snug">{errMsg}</span>
         </div>
       ) : articles.length === 0 ? (
-        <div className="flex h-full min-h-0 flex-col items-center justify-center gap-1.5 px-3 text-center text-sm text-white/75">
+        <div
+          className="flex h-full min-h-0 flex-col items-center justify-center gap-1.5 px-3 text-center text-white/75"
+          style={{ fontSize: metaFontPx }}
+        >
           <span>표시할 기사가 없습니다.</span>
           <span className="max-w-[95%] text-[0.72em] leading-snug opacity-90">
             개발 시 프론트(Vite)가 <code className="rounded bg-black/25 px-1">/news</code>를 백엔드로
@@ -393,7 +410,11 @@ export function BookNewsWidgetOverlay({ el, scale, mode, isSelected, liveFrame }
               )}
               style={{ fontSize: metaFontPx, ...metaStyle }}
             >
-              <Newspaper className="size-3.5 shrink-0 opacity-95" aria-hidden />
+              <Newspaper
+                className="shrink-0 opacity-95"
+                style={{ width: metaFontPx * 1.2, height: metaFontPx * 1.2 }}
+                aria-hidden
+              />
               <span className="font-semibold uppercase tracking-wider">{sectionTitle}</span>
             </div>
           ) : null}

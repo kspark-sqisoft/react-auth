@@ -1,6 +1,7 @@
 import {
   useCallback,
   useLayoutEffect,
+  useReducer,
   useState,
   type RefObject,
   type WheelEvent,
@@ -10,6 +11,28 @@ const MIN_USER_ZOOM = 0.25;
 const MAX_USER_ZOOM = 4;
 
 /**
+ * 북 편집 스테이지(`BookDetailPage`·`BookEditorPage`)와 슬라이드쇰 미리보기에서 같은 맞춤 규칙을 쓰면
+ * `BookSlideCanvas` 논리 좌표·텍스트 HTML 오버레이가 동일 배율로 그려진다.
+ */
+export const BOOK_CANVAS_STAGE_DISPLAY_OPTS = {
+  bottomPad: 120,
+  horizontalPad: 48,
+  maxFitScale: 1,
+} as const;
+
+/**
+ * 슬라이드쇰 미리보기 전용: 뷰 한가운데 슬라이드를 가능한 크게(논리 1:1 상한 없음).
+ * 에디터 스테이지와 달리 `maxFitScale`을 크게 두어 「맞춤」이 화면을 채우도록 함.
+ */
+export const BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS = {
+  /** 대칭 세로 여백용 — `bottomPad` 대신 `height - 2 * symmetricVerticalPad`로 맞춤 */
+  bottomPad: 0,
+  symmetricVerticalPad: 32,
+  horizontalPad: 24,
+  maxFitScale: 24,
+} as const;
+
+/**
  * ResizeObserver로 맞춤 비율(fit)을 구하고, 사용자 배율(zoom)을 곱해 캔버스에 넘길 display scale을 만듭니다.
  */
 export function useBookCanvasDisplayScale(
@@ -17,7 +40,13 @@ export function useBookCanvasDisplayScale(
   opts: {
     slideWidth: number;
     slideHeight: number;
+    /**
+     * 세로 맞춤에서만 아래쪽으로 빼는 값(에디터 스테이지).
+     * `symmetricVerticalPad`가 있으면 세로는 `height - 2 * symmetricVerticalPad`만 사용.
+     */
     bottomPad: number;
+    /** 상·하 동일 여백(px)을 맞춤 계산에 반영(미리보기 등) */
+    symmetricVerticalPad?: number;
     /** 좌우 여백 합에 가깝게 빼는 값(기본 48). 미리보기 등에서 작게 줄여 슬라이드를 크게 맞춤 */
     horizontalPad?: number;
     /**
@@ -30,27 +59,46 @@ export function useBookCanvasDisplayScale(
     slideWidth,
     slideHeight,
     bottomPad,
+    symmetricVerticalPad,
     horizontalPad = 48,
     maxFitScale = 1,
   } = opts;
   const [fitScale, setFitScale] = useState(0.55);
   const [zoomMul, setZoomMul] = useState(1);
+  const [, bumpFitLayout] = useReducer((n: number) => n + 1, 0);
+
+  const measureFitScale = useCallback(() => {
+    const el = wrapRef.current;
+    if (!el) return;
+    const cr = el.getBoundingClientRect();
+    const verticalDeduction =
+      symmetricVerticalPad != null
+        ? 2 * symmetricVerticalPad
+        : bottomPad;
+    const s = Math.min(
+      (cr.width - horizontalPad) / slideWidth,
+      (cr.height - verticalDeduction) / slideHeight,
+      maxFitScale,
+    );
+    setFitScale(Math.max(0.22, Math.min(s, maxFitScale)));
+  }, [
+    wrapRef,
+    slideWidth,
+    slideHeight,
+    bottomPad,
+    symmetricVerticalPad,
+    horizontalPad,
+    maxFitScale,
+  ]);
 
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    const ro = new ResizeObserver(() => {
-      const cr = el.getBoundingClientRect();
-      const s = Math.min(
-        (cr.width - horizontalPad) / slideWidth,
-        (cr.height - bottomPad) / slideHeight,
-        maxFitScale,
-      );
-      setFitScale(Math.max(0.22, Math.min(s, maxFitScale)));
-    });
+    measureFitScale();
+    const ro = new ResizeObserver(() => measureFitScale());
     ro.observe(el);
     return () => ro.disconnect();
-  }, [wrapRef, slideWidth, slideHeight, bottomPad, horizontalPad, maxFitScale]);
+  }, [measureFitScale]);
 
   const displayScale = fitScale * zoomMul;
 
@@ -64,7 +112,14 @@ export function useBookCanvasDisplayScale(
       setZoomMul((z) => Math.max(MIN_USER_ZOOM, Math.round((z / 1.15) * 1000) / 1000)),
     [],
   );
-  const zoomReset = useCallback(() => setZoomMul(1), []);
+  /** 100% 배율 + 맞춤 비율 재계산. 동일 수치여도 리렌더해 미리보기 등에서 버튼이 무반응처럼 보이지 않게 함 */
+  const zoomReset = useCallback(() => {
+    setZoomMul(1);
+    queueMicrotask(() => {
+      measureFitScale();
+      bumpFitLayout();
+    });
+  }, [measureFitScale]);
 
   const zoomPercent = Math.round(zoomMul * 100);
 

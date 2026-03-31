@@ -45,7 +45,10 @@ import {
   bookLeftDockContentColumnClass,
 } from "@/lib/book-workspace-ui";
 import { bookKeys } from "@/lib/query-keys";
-import { useBookCanvasDisplayScale } from "@/lib/use-book-canvas-display-scale";
+import {
+  BOOK_CANVAS_STAGE_DISPLAY_OPTS,
+  useBookCanvasDisplayScale,
+} from "@/lib/use-book-canvas-display-scale";
 import { useBookDocumentHistory } from "@/lib/use-book-document-history";
 import { useBookPageThumbnails } from "@/lib/use-book-page-thumbnails";
 import { BookCanvasToolbar } from "@/components/books/BookCanvasToolbar";
@@ -287,7 +290,7 @@ export function BookEditorPage() {
   } = useBookCanvasDisplayScale(canvasWrapRef, {
     slideWidth,
     slideHeight,
-    bottomPad: 120,
+    ...BOOK_CANVAS_STAGE_DISPLAY_OPTS,
   });
 
   useEffect(() => {

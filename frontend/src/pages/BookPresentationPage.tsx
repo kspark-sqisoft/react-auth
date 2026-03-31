@@ -16,7 +16,11 @@ import {
   DEFAULT_PRESENTATION_SLIDE_SEC,
 } from "@/lib/book-presentation";
 import { BookSlideCanvas } from "@/components/books/BookSlideCanvas";
-import { useBookCanvasDisplayScale } from "@/lib/use-book-canvas-display-scale";
+import {
+  BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS,
+  useBookCanvasDisplayScale,
+} from "@/lib/use-book-canvas-display-scale";
+import { bookCanvasStageMatClass } from "@/lib/book-workspace-ui";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
@@ -48,9 +52,7 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
     useBookCanvasDisplayScale(canvasWrapRef, {
       slideWidth: slideW,
       slideHeight: slideH,
-      bottomPad: 0,
-      horizontalPad: 0,
-      maxFitScale: 4,
+      ...BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS,
     });
 
   const slideDurationSec = useMemo(() => {
@@ -139,6 +141,34 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
   const prevDisabled = !loop && safeIdx <= 0;
   const nextDisabled = !loop && safeIdx >= maxIdx;
 
+  useEffect(() => {
+    if (sortedPages.length === 0) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+      const t = e.target;
+      if (t instanceof HTMLElement) {
+        if (t.closest("input, textarea, select, [contenteditable='true']")) return;
+      }
+      if (e.key === "ArrowLeft") {
+        if (prevDisabled) return;
+        e.preventDefault();
+        goPrevSlide();
+        return;
+      }
+      if (nextDisabled) return;
+      e.preventDefault();
+      goNextSlide();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    goNextSlide,
+    goPrevSlide,
+    nextDisabled,
+    prevDisabled,
+    sortedPages.length,
+  ]);
+
   if (sortedPages.length === 0) {
     return (
       <div className="flex min-h-[50vh] flex-col items-center justify-center gap-3 p-6">
@@ -224,12 +254,19 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
             <span className="hidden shrink-0 text-[8px] text-zinc-600 lg:inline">
               {loop ? "반복" : "1회"}
             </span>
-            <div className="flex shrink-0 items-center gap-px rounded border border-zinc-700/60 bg-zinc-950/50 p-px">
+            <div
+              className="flex shrink-0 items-center gap-px rounded border border-zinc-700/60 bg-zinc-950/50 p-px"
+              onPointerDown={(e) => e.stopPropagation()}
+            >
               <Button
                 type="button"
                 variant="ghost"
                 className="h-5 w-5 shrink-0 p-0 text-[10px] text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-                onClick={zoomOut}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  zoomOut();
+                }}
                 aria-label="축소"
               >
                 −
@@ -241,7 +278,11 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
                 type="button"
                 variant="ghost"
                 className="h-5 w-5 shrink-0 p-0 text-[10px] text-zinc-300 hover:bg-zinc-800 hover:text-zinc-100"
-                onClick={zoomIn}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  zoomIn();
+                }}
                 aria-label="확대"
               >
                 +
@@ -250,7 +291,11 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
                 type="button"
                 variant="ghost"
                 className="h-5 px-1 text-[8px] text-zinc-400 hover:bg-zinc-800 hover:text-zinc-200"
-                onClick={zoomReset}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  zoomReset();
+                }}
               >
                 맞춤
               </Button>
@@ -280,10 +325,12 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
         </nav>
         <div className="min-w-0 justify-self-end" aria-hidden />
       </header>
-      <div className="relative z-0 box-border min-h-0 flex-1 px-5 py-5 sm:px-8 sm:py-6 md:px-12 md:py-8 lg:px-14 lg:py-10">
+      <div className="dark relative z-0 box-border min-h-0 min-w-0 flex-1">
         <div
           ref={canvasWrapRef}
-          className="relative flex h-full min-h-0 w-full items-center justify-center overflow-hidden"
+          className={bookCanvasStageMatClass(
+            "relative flex h-full min-h-0 w-full items-center justify-center overflow-hidden px-4 py-5 sm:px-5 sm:py-6",
+          )}
           onWheel={handleWheel}
         >
           {page ? (

@@ -298,7 +298,8 @@ flowchart TB
 | `/posts/new`, `/posts/:id/edit` | `PostEditorPage` | 로그인 필요 |
 | `/books` | `BookListPage` | 무한 스크롤 UI이나 API는 **`skip`/`take`/`total`** (6.3절) |
 | `/books/new` | `BookEditorPage` | 로그인 필요, 저장 후 상세로 이동 가능 |
-| `/books/:id` | `BookDetailPage` | 공개 URL; 작성자면 편집 UI |
+| `/books/:id` | `BookDetailPage` | 공개 URL; 작성자면 편집 UI, 비작성자는 보기·레이어 패널·**미리보기(슬라이드쇼)** |
+| `/books/:id/preview` | `BookPresentationPage` | 공개; 전체 화면 슬라이드쇼(작성자 여부 무관). 맞춤·줌은 `BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS`(`symmetricVerticalPad`로 상·하 동일 여백 반영, 확대 허용) — 편집 스테이지는 `BOOK_CANVAS_STAGE_DISPLAY_OPTS`(maxFit 1) |
 | `/books/:id/edit` | → `/books/:id` 리다이렉트 | 레거시 |
 | `/me` | `MyInfoPage` | |
 | `/cats`, `/cats/:id` | Cats 데모 | |

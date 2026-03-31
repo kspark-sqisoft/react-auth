@@ -1,4 +1,10 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   CloudFog,
@@ -366,10 +372,14 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   const fh = liveFrame?.height ?? h;
   const fRot = liveFrame != null ? liveFrame.rotation : rot;
 
-  const boxH = fh * scale;
-  const boxW = fw * scale;
-  /** 작은 위젯에서 글자·아이콘을 한 단계 줄여 잘림 완화 */
-  const fitScale = Math.min(1, Math.max(0.68, Math.min(boxH / 200, boxW / 260)));
+  const lh = fh;
+  const lw = fw;
+  const boxH = lh * scale;
+  const boxW = lw * scale;
+  /**
+   * 논리 크기가 작은 위젯만 글자·아이콘을 줄임. 캔버스 배율만 키운 경우(boxH 큼)에는 그대로 비율 확대.
+   */
+  const fitShrink = Math.min(1, Math.max(0.68, Math.min(boxH / 200, boxW / 260)));
 
   const errMsg = error instanceof Error ? error.message : "불러오지 못했습니다.";
 
@@ -377,14 +387,55 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   const LineIcon = WEATHER_LINE_ICONS[kind];
   const variant = data ? pickLayoutVariant(disp) : "standard";
 
-  const condSize = Math.round(Math.max(14, Math.min(26, boxH * 0.14)) * fitScale);
-  const tempSize = Math.round(Math.max(26, Math.min(52, boxH * 0.36)) * fitScale);
-  const tempSizeMinimal = Math.round(Math.max(34, Math.min(64, boxH * 0.48)) * fitScale);
-  const clockSize = Math.round(Math.max(16, Math.min(30, boxH * 0.2)) * fitScale);
-  const bodySize = Math.round(Math.max(9, Math.min(13, boxH * 0.085)) * fitScale);
+  /**
+   * 논리 비율로 키우되, 실제 박스(boxH/boxW) 안에 레이아웃이 들어가도록 화면 픽셀 상한을 둔다.
+   * (기본 364×256 등에서 잘림·스크롤 없이 전체가 보이게)
+   */
+  const condSize = Math.round(
+    Math.max(9 * scale, Math.min(lh * 0.14 * scale * fitShrink, boxH * 0.078)),
+  );
+  const tempSize = Math.round(
+    Math.max(13 * scale, Math.min(lh * 0.36 * scale * fitShrink, boxH * 0.19)),
+  );
+  const tempSizeMinimal = Math.round(
+    Math.max(14 * scale, Math.min(lh * 0.48 * scale * fitShrink, boxH * 0.24)),
+  );
+  const clockSize = Math.round(
+    Math.max(10 * scale, Math.min(lh * 0.2 * scale * fitShrink, boxH * 0.092)),
+  );
+  const bodySize = Math.round(
+    Math.max(7 * scale, Math.min(lh * 0.085 * scale * fitShrink, boxH * 0.042)),
+  );
   /** 대기(PM·AQI) 전용 — 본문보다 한 단계 크게 */
-  const airTextSize = Math.max(10, Math.min(16, bodySize * 1.22));
-  const aqiHuge = Math.round(Math.max(34, Math.min(58, boxH * 0.42)) * fitScale);
+  const airTextSize = Math.max(8 * scale, Math.min(bodySize * 1.18, boxH * 0.048));
+  const aqiHuge = Math.round(
+    Math.max(16 * scale, Math.min(lh * 0.42 * scale * fitShrink, boxH * 0.26)),
+  );
+  const chromePad = Math.max(
+    4 * scale,
+    Math.min(Math.max(6 * scale, bodySize * 0.88), boxH * 0.036),
+  );
+  const iconShellPad = Math.max(3 * scale, Math.min(8 * scale, boxH * 0.028));
+  const pillPadX = Math.max(6 * scale, Math.min(12 * scale, boxW * 0.028));
+  const pillPadY = Math.max(3 * scale, Math.min(7 * scale, boxH * 0.024));
+  const pillPadStyle: CSSProperties = {
+    paddingLeft: pillPadX,
+    paddingRight: pillPadX,
+    paddingTop: pillPadY,
+    paddingBottom: pillPadY,
+  };
+  const layoutGapSm = Math.min(12 * scale, boxH * 0.032);
+  const layoutGapMd = Math.min(18 * scale, boxH * 0.044);
+  /**
+   * 표준 2열: 왼쪽 아이콘↔기온, 오른쪽 시계·날짜↔지역·체감 등
+   */
+  const iconToTempGap = Math.min(12 * scale, boxH * 0.028);
+  const gridGapX = Math.min(11 * scale, boxW * 0.026);
+  const gridGapY = Math.min(13 * scale, boxH * 0.034);
+  /** 표준 2열: 위·아래 동일 픽셀 패딩(퍼센트 불일치·하단 공백 완화) */
+  const weatherContentPadX = Math.min(16 * scale, boxW * 0.048);
+  /** 위·아래만 타이트하게(내부 글자·아이콘 배율은 그대로) */
+  const weatherContentPadY = Math.min(6 * scale, boxH * 0.026);
   const customTextColor = parseBookWidgetTextColor(el.weatherTextColor);
   const useCustomText = Boolean(customTextColor);
   const snowLike = !useCustomText && kind === "snow" && variant !== "air-only";
@@ -444,17 +495,23 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
   );
 
   const renderAirBlock = (payload: SeoulWeatherPayload, opts: { compact?: boolean }) => (
-    <div className={cn("flex w-full min-w-0 flex-col", opts.compact ? "gap-1.5" : "gap-2")}>
+    <div
+      className="flex w-full min-w-0 flex-col"
+      style={{ gap: opts.compact ? layoutGapSm : layoutGapMd }}
+    >
       {disp.pm10 || disp.pm25 ? (
-        <div className="flex flex-wrap gap-2" style={{ fontSize: airTextSize * 0.98 }}>
+        <div
+          className="flex flex-wrap"
+          style={{ gap: layoutGapSm, fontSize: airTextSize * 0.98 }}
+        >
           {disp.pm10 ? (
-            <span className={cn(pillClass, "px-3.5 py-2 font-semibold")}>
+            <span className={cn(pillClass, "font-semibold")} style={pillPadStyle}>
               <span className={cn(textFaint, "opacity-85")}>PM10</span>
               <span className={cn("ms-1.5 tabular-nums", textMuted)}>{formatPmShort(payload.pm10)}</span>
             </span>
           ) : null}
           {disp.pm25 ? (
-            <span className={cn(pillClass, "px-3.5 py-2 font-semibold")}>
+            <span className={cn(pillClass, "font-semibold")} style={pillPadStyle}>
               <span className={cn(textFaint, "opacity-85")}>PM2.5</span>
               <span className={cn("ms-1.5 tabular-nums", textMuted)}>{formatPmShort(payload.pm25)}</span>
             </span>
@@ -507,9 +564,15 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
     }
     if (chips.length === 0) return null;
     return (
-      <div className="flex flex-wrap gap-2" style={{ fontSize: Math.max(airTextSize * 0.92, bodySize * 0.95) }}>
+      <div
+        className="flex flex-wrap"
+        style={{
+          gap: layoutGapSm,
+          fontSize: Math.max(airTextSize * 0.92, bodySize * 0.95),
+        }}
+      >
         {chips.map(({ key, node }) => (
-          <span key={key} className={pillClass}>
+          <span key={key} className={pillClass} style={pillPadStyle}>
             {node}
           </span>
         ))}
@@ -546,15 +609,17 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
       {isPending ? (
         <div
           className={cn(
-            "flex h-full min-h-0 items-center justify-center gap-2.5 px-3 text-white/95",
+            "flex h-full min-h-0 items-center justify-center text-white/95",
             !customBg && "bg-linear-to-br from-slate-600 via-slate-800 to-slate-950",
             customBg && "bg-transparent",
           )}
+          style={{ gap: chromePad * 0.85, paddingLeft: chromePad, paddingRight: chromePad }}
         >
           <div
             className={cn(
-              "flex shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 p-3 backdrop-blur-sm",
+              "flex shrink-0 items-center justify-center rounded-2xl border border-white/15 bg-white/10 backdrop-blur-sm",
             )}
+            style={{ padding: chromePad }}
           >
             <Loader2
               className="animate-spin opacity-95"
@@ -574,9 +639,21 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
               "bg-linear-to-br from-amber-950/98 via-orange-950/95 to-slate-950 text-amber-50",
             customBg && "bg-transparent text-amber-100",
           )}
+          style={{ fontSize: bodySize }}
         >
-          <div className="flex min-h-14 min-w-14 shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-black/20 p-3 backdrop-blur-sm">
-            <CloudOff className="size-6 opacity-95" aria-hidden />
+          <div
+            className="flex shrink-0 items-center justify-center rounded-2xl border border-white/20 bg-black/20 backdrop-blur-sm"
+            style={{
+              padding: chromePad,
+              minWidth: Math.max(36 * scale, condSize * 2.2),
+              minHeight: Math.max(36 * scale, condSize * 2.2),
+            }}
+          >
+            <CloudOff
+              className="opacity-95"
+              style={{ width: condSize * 1.35, height: condSize * 1.35 }}
+              aria-hidden
+            />
           </div>
           <span className="max-w-[95%] text-[0.8em] font-medium leading-snug opacity-95">{errMsg}</span>
         </div>
@@ -621,14 +698,21 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                   대기질
                 </div>
               </div>
-              <div className="relative flex min-h-0 flex-1 flex-col justify-center gap-1.5 overflow-hidden">
+              <div
+                className="relative flex min-h-0 flex-1 flex-col justify-center overflow-hidden"
+                style={{ gap: layoutGapSm }}
+              >
                 {disp.aqi ? (
                   <>
                     <div
                       className={cn(
-                        "pointer-events-none absolute left-1/2 top-[42%] size-[min(92%,8rem)] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-30 blur-2xl",
+                        "pointer-events-none absolute left-1/2 top-[42%] -translate-x-1/2 -translate-y-1/2 rounded-full opacity-30 blur-2xl",
                         useCustomText ? "bg-current" : "bg-emerald-300",
                       )}
+                      style={{
+                        width: Math.min(boxW * 0.9, boxH * 0.38),
+                        height: Math.min(boxW * 0.9, boxH * 0.38),
+                      }}
                       aria-hidden
                     />
                     <div
@@ -659,9 +743,10 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
           ) : variant === "time-only" ? (
             <div
               className={cn(
-                "relative z-1 flex h-full min-h-0 flex-col items-center justify-center gap-2 overflow-hidden px-[6%] py-[7%] text-center",
+                "relative z-1 flex h-full min-h-0 flex-col items-center justify-center overflow-hidden px-[6%] py-[6%] text-center",
                 textMain,
               )}
+              style={{ gap: layoutGapMd }}
             >
               {disp.clock ? (
                 <div
@@ -692,20 +777,22 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
           ) : variant === "minimal" ? (
             <div
               className={cn(
-                "relative z-1 flex h-full min-h-0 flex-col items-center justify-center gap-1.5 overflow-hidden px-[6%] py-[6%]",
+                "relative z-1 flex h-full min-h-0 flex-col items-center justify-center overflow-hidden px-[6%] py-[6%]",
                 textMain,
               )}
+              style={{ gap: layoutGapMd }}
             >
               {disp.icon ? (
                 <div
                   className={cn(
-                    "flex shrink-0 items-center justify-center rounded-2xl border p-3 backdrop-blur-md",
+                    "flex shrink-0 items-center justify-center rounded-2xl border backdrop-blur-md",
                     useCustomText
                       ? "border-current/20 bg-current/8"
                       : snowLike
                         ? "border-slate-700/20 bg-white/55"
                         : "border-white/25 bg-white/15",
                   )}
+                  style={{ padding: chromePad }}
                 >
                   <LineIcon
                     className={cn("shrink-0 stroke-[2.1]", iconTone)}
@@ -756,11 +843,15 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
           ) : variant === "standard" && showTimeCol && !leftHasPrimary ? (
             <div
               className={cn(
-                "relative z-1 flex h-full min-h-0 min-w-0 flex-col gap-3 overflow-hidden px-[5%] py-[6%]",
+                "relative z-1 flex h-full min-h-0 min-w-0 overflow-hidden px-[5%] py-[5%]",
                 textMain,
               )}
+              style={{ gap: layoutGapMd }}
             >
-              <div className="flex shrink-0 flex-col items-center gap-1 sm:items-start">
+              <div
+                className="flex shrink-0 flex-col items-center sm:items-start"
+                style={{ gap: layoutGapSm }}
+              >
                 {disp.clock ? (
                   <div
                     className={cn(
@@ -781,7 +872,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                   </div>
                 ) : null}
               </div>
-              <div className="min-w-0 space-y-2">
+              <div className="flex min-h-0 min-w-0 flex-col" style={{ gap: layoutGapMd }}>
                 <div
                   className={cn("font-semibold uppercase tracking-[0.12em]", textMain)}
                   style={{ fontSize: bodySize }}
@@ -795,24 +886,44 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
           ) : (
             <div
               className={cn(
-                "relative z-1 grid h-full min-h-0 min-w-0 gap-x-3 px-[5%] py-[6%]",
-                useWeatherTimeColumns ? "grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)]" : "grid-cols-1",
+                "relative z-1 flex h-full min-h-0 w-full items-center justify-center overflow-hidden",
                 textMain,
               )}
+              style={{
+                paddingLeft: weatherContentPadX,
+                paddingRight: weatherContentPadX,
+                paddingTop: weatherContentPadY,
+                paddingBottom: weatherContentPadY,
+              }}
             >
-              <div className="flex min-h-0 min-w-0 flex-col justify-between gap-1">
+              <div
+                className={cn(
+                  "grid max-h-full min-h-0 w-full min-w-0",
+                  useWeatherTimeColumns ? "grid-cols-[minmax(0,1.12fr)_minmax(0,0.98fr)]" : "grid-cols-1",
+                )}
+                style={{
+                  columnGap: gridGapX,
+                  rowGap: gridGapY,
+                  alignItems: "start",
+                }}
+              >
+              <div
+                className="flex min-h-0 min-w-0 flex-col justify-start"
+                style={{ gap: iconToTempGap }}
+              >
                 {disp.description || disp.icon ? (
-                  <div className="flex min-w-0 items-center gap-2">
+                  <div className="flex min-w-0 items-center" style={{ gap: layoutGapSm }}>
                     {disp.icon ? (
                       <div
                         className={cn(
-                          "flex shrink-0 items-center justify-center rounded-xl border p-2.5 backdrop-blur-md",
+                          "flex shrink-0 items-center justify-center rounded-xl border backdrop-blur-md",
                           useCustomText
                             ? "border-current/20 bg-current/8"
                             : snowLike
                               ? "border-slate-600/25 bg-white/50"
                               : "border-white/25 bg-white/12",
                         )}
+                        style={{ padding: iconShellPad }}
                       >
                         <LineIcon
                           className={cn("shrink-0 stroke-[2.1]", iconTone)}
@@ -836,7 +947,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                     ) : null}
                   </div>
                 ) : null}
-                <div className="mt-auto space-y-1">
+                <div className="flex min-h-0 flex-col" style={{ gap: layoutGapSm }}>
                   {disp.temp ? (
                     <div className="flex items-end gap-0.5">
                       <span
@@ -861,7 +972,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                     </div>
                   ) : null}
                   {variant === "split-air" && hasAir ? (
-                    <div className="pt-1">{renderAirBlock(data, { compact: true })}</div>
+                    <div className="min-h-0">{renderAirBlock(data, { compact: true })}</div>
                   ) : null}
                 </div>
               </div>
@@ -869,11 +980,18 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
               {useWeatherTimeColumns ? (
                 <div
                   className={cn(
-                    "flex min-h-0 min-w-0 flex-col items-end justify-between overflow-hidden border-l ps-3 text-end",
+                    "flex min-h-0 min-w-0 flex-col items-end justify-start overflow-hidden border-l text-end",
                     useCustomText ? "border-current/18" : snowLike ? "border-slate-600/30" : "border-white/22",
                   )}
+                  style={{
+                    paddingLeft: Math.min(11 * scale, boxW * 0.028),
+                    gap: iconToTempGap,
+                  }}
                 >
-                    <div>
+                    <div
+                      className="flex min-h-0 shrink-0 flex-col"
+                      style={{ gap: Math.max(3 * scale, layoutGapSm * 0.65) }}
+                    >
                       {disp.clock ? (
                         <div
                           className={cn(
@@ -888,14 +1006,17 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                       ) : null}
                       {disp.date ? (
                         <div
-                          className={cn("mt-1 font-medium leading-snug opacity-90", textFaint)}
+                          className={cn("font-medium leading-snug opacity-90", textFaint)}
                           style={{ fontSize: bodySize * 0.88 }}
                         >
                           {dateStr}
                         </div>
                       ) : null}
                     </div>
-                    <div className="w-full min-w-0 space-y-1">
+                    <div
+                      className="flex min-h-0 w-full min-w-0 flex-col"
+                      style={{ gap: layoutGapSm }}
+                    >
                       <div
                         className={cn(
                           "text-[0.72em] font-semibold uppercase tracking-[0.14em] opacity-90",
@@ -912,9 +1033,13 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
               ) : (
                 <div
                   className={cn(
-                    "col-span-full flex min-h-0 flex-col gap-1.5 border-t pt-2.5",
+                    "col-span-full flex min-h-0 flex-col border-t",
                     useCustomText ? "border-current/20" : "border-white/18",
                   )}
+                  style={{
+                    gap: layoutGapSm,
+                    paddingTop: Math.min(14 * scale, boxH * 0.036),
+                  }}
                 >
                   <div
                     className={cn("text-[0.72em] font-semibold uppercase tracking-[0.12em]", textMain)}
@@ -926,6 +1051,7 @@ export function BookWeatherWidgetOverlay({ el, scale, mode, isSelected, liveFram
                   {renderSecondaryWeather(data)}
                 </div>
               )}
+              </div>
             </div>
           )}
         </div>
