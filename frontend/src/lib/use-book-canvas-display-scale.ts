@@ -24,14 +24,12 @@ export const BOOK_CANVAS_STAGE_DISPLAY_OPTS = {
 } as const;
 
 /**
- * 슬라이드쇰 미리보기 전용: 뷰 한가운데 슬라이드를 가능한 크게(논리 1:1 상한 없음).
- * 에디터 스테이지와 달리 `maxFitScale`을 크게 두어 「맞춤」이 화면을 채우도록 함.
+ * 슬라이드쇰 미리보기 전용: 헤더 아래 북 영역을 가장자리까지 쓰도록 패딩 0, 논리 1:1 상한 없음(`maxFitScale` 큼).
  */
 export const BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS = {
-  /** 대칭 세로 여백용 — `bottomPad` 대신 `height - 2 * symmetricVerticalPad`로 맞춤 */
   bottomPad: 0,
-  symmetricVerticalPad: 32,
-  horizontalPad: 24,
+  symmetricVerticalPad: 0,
+  horizontalPad: 0,
   maxFitScale: 24,
 } as const;
 

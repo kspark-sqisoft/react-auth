@@ -36,16 +36,8 @@ import {
 } from "@/lib/use-book-canvas-display-scale";
 import { bookCanvasStageMatClass } from "@/lib/book-workspace-ui";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
+import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group";
 import { cn } from "@/lib/utils";
 
 function requestPresentationFullscreen(el: HTMLElement) {
@@ -61,6 +53,10 @@ function requestPresentationFullscreen(el: HTMLElement) {
   return Promise.reject(new Error("fullscreen_unsupported"));
 }
 
+/** 브라우저 전체 화면 슬라이드 영역: 포인터 유휴 시 커서 숨김 */
+const PRESENTATION_FULLSCREEN_CURSOR_IDLE_MS = 2500;
+/** 진입 직후 합성/잔여 포인터 이벤트 무시 — 커서·비디오 바 깜빡임 방지 */
+const PRESENTATION_FULLSCREEN_POINTER_GRACE_MS = 650;
 
 function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDetail }) {
   /** 전체 화면 API 대상(헤더 제외, 슬라이드 영역만) */
@@ -121,12 +117,58 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
     incomingTransition !== "none" &&
     !reduceMotion;
 
+  /** 창 미리보기·전체 화면 공통 표시 모드(contain·cover·fill) */
+  const [presentationFitMode, setPresentationFitMode] =
+    useState<BookCanvasDisplayFitMode>("contain");
+
+  const displayScaleOpts = useMemo(
+    () => ({
+      slideWidth: slideW,
+      slideHeight: slideH,
+      ...BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS,
+      fitMode: presentationFitMode,
+    }),
+    [slideW, slideH, presentationFitMode],
+  );
+
+  const {
+    displayScale,
+    zoomPercent,
+    zoomIn,
+    zoomOut,
+    zoomReset,
+    handleWheel,
+    layoutAvail,
+  } = useBookCanvasDisplayScale(canvasWrapRef, displayScaleOpts);
+
+  const enterPresentationFullscreen = useCallback(() => {
+    queueMicrotask(() => {
+      const el = presentationFsTargetRef.current;
+      if (!el) return;
+      void requestPresentationFullscreen(el).catch(() => undefined);
+    });
+  }, []);
+
   const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
-  const [fsDialogOpen, setFsDialogOpen] = useState(false);
-  const [fsFitDraft, setFsFitDraft] =
-    useState<BookCanvasDisplayFitMode>("contain");
-  const [fsFitMode, setFsFitMode] =
-    useState<BookCanvasDisplayFitMode>("contain");
+  const [hideCursorAfterIdle, setHideCursorAfterIdle] = useState(false);
+  const cursorIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** `performance.now()` 기준: 이 시각 이전 포인터 활동은 커서 표시·유휴 타이머에 반영하지 않음 */
+  const presentationFsPointerIgnoreUntilRef = useRef(0);
+
+  const clearCursorIdleTimer = useCallback(() => {
+    if (cursorIdleTimerRef.current != null) {
+      clearTimeout(cursorIdleTimerRef.current);
+      cursorIdleTimerRef.current = null;
+    }
+  }, []);
+
+  const bumpPresentationCursorIdleTimer = useCallback(() => {
+    clearCursorIdleTimer();
+    cursorIdleTimerRef.current = window.setTimeout(() => {
+      cursorIdleTimerRef.current = null;
+      setHideCursorAfterIdle(true);
+    }, PRESENTATION_FULLSCREEN_CURSOR_IDLE_MS);
+  }, [clearCursorIdleTimer]);
 
   useEffect(() => {
     const sync = () => {
@@ -140,50 +182,36 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
     };
     document.addEventListener("fullscreenchange", sync);
     document.addEventListener("webkitfullscreenchange", sync);
+    sync();
     return () => {
       document.removeEventListener("fullscreenchange", sync);
       document.removeEventListener("webkitfullscreenchange", sync);
     };
   }, []);
 
-  const displayScaleOpts = useMemo(
-    () => ({
-      slideWidth: slideW,
-      slideHeight: slideH,
-      ...(isBrowserFullscreen
-        ? {
-            ...BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS,
-            symmetricVerticalPad: 0,
-            horizontalPad: 0,
-            fitMode: fsFitMode,
-          }
-        : {
-            ...BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS,
-            fitMode: "contain" as const,
-          }),
-    }),
-    [slideW, slideH, isBrowserFullscreen, fsFitMode],
-  );
+  useEffect(() => {
+    if (!isBrowserFullscreen) {
+      clearCursorIdleTimer();
+      setHideCursorAfterIdle(false);
+      presentationFsPointerIgnoreUntilRef.current = 0;
+      return;
+    }
+    clearCursorIdleTimer();
+    presentationFsPointerIgnoreUntilRef.current =
+      performance.now() + PRESENTATION_FULLSCREEN_POINTER_GRACE_MS;
+    /* 진입 직후 커서·미디어 바 숨김; 유예 후 실제 포인터 움직임에서만 다시 표시 */
+    setHideCursorAfterIdle(true);
+    return () => {
+      clearCursorIdleTimer();
+    };
+  }, [isBrowserFullscreen, clearCursorIdleTimer]);
 
-  const {
-    displayScale,
-    zoomPercent,
-    zoomIn,
-    zoomOut,
-    zoomReset,
-    handleWheel,
-    layoutAvail,
-  } = useBookCanvasDisplayScale(canvasWrapRef, displayScaleOpts);
-
-  const confirmEnterFullscreen = useCallback(() => {
-    setFsFitMode(fsFitDraft);
-    setFsDialogOpen(false);
-    queueMicrotask(() => {
-      const el = presentationFsTargetRef.current;
-      if (!el) return;
-      void requestPresentationFullscreen(el).catch(() => undefined);
-    });
-  }, [fsFitDraft]);
+  const onPresentationFsPointerActivity = useCallback(() => {
+    if (!isBrowserFullscreen) return;
+    if (performance.now() < presentationFsPointerIgnoreUntilRef.current) return;
+    setHideCursorAfterIdle(false);
+    bumpPresentationCursorIdleTimer();
+  }, [isBrowserFullscreen, bumpPresentationCursorIdleTimer]);
 
   const slideDurationSec = useMemo(() => {
     const cur = sortedPages[safeIdx];
@@ -316,7 +344,7 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
         className={cn(
           "flex items-center justify-center",
           /* fill은 transform 스케일 후 레이아웃 박스가 max-*에 막히면 가장자리 여백이 생길 수 있음 */
-          isBrowserFullscreen && fsFitMode === "fill"
+          presentationFitMode === "fill"
             ? "min-h-0 min-w-0"
             : "max-h-full max-w-full",
           runSlideEnterAnimation &&
@@ -343,13 +371,15 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
           onSelect={() => undefined}
           onElementChange={() => undefined}
           onVideoDurationKnown={onVideoDurationKnown}
+          viewModeHideMediaChrome={
+            isBrowserFullscreen && hideCursorAfterIdle
+          }
         />
       </div>
     ) : null;
 
   const fillStretch =
-    isBrowserFullscreen &&
-    fsFitMode === "fill" &&
+    presentationFitMode === "fill" &&
     page != null &&
     layoutAvail.w > 0 &&
     layoutAvail.h > 0
@@ -479,11 +509,52 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
                   e.stopPropagation();
                   zoomReset();
                 }}
+                aria-label="줌·배율 초기화"
+                title="자동 맞춤 배율과 줌 100%로 되돌리기"
               >
-                맞춤
+                초기
               </Button>
             </div>
           </div>
+          <ToggleGroup
+            type="single"
+            value={presentationFitMode}
+            onValueChange={(v) => {
+              if (v === "contain" || v === "cover" || v === "fill") {
+                setPresentationFitMode(v);
+              }
+            }}
+            variant="outline"
+            size="sm"
+            spacing={0}
+            className="shrink-0 border border-zinc-700/70 bg-zinc-950/40"
+            aria-label="화면 표시 방식(창·전체 화면 동일)"
+          >
+            <ToggleGroupItem
+              value="contain"
+              aria-label="전체 보기 contain"
+              title="전체 — 슬라이드가 잘리지 않게 보임(여백 가능)"
+              className="h-7 rounded-none border-0 px-1.5 text-[9px] text-zinc-300 data-[state=on]:bg-zinc-700 data-[state=on]:text-zinc-50"
+            >
+              전체
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="cover"
+              aria-label="덮기 cover"
+              title="덮기 — 화면을 가득, 잘림 가능"
+              className="h-7 rounded-none border-0 border-l border-zinc-700/60 px-1.5 text-[9px] text-zinc-300 data-[state=on]:bg-zinc-700 data-[state=on]:text-zinc-50"
+            >
+              덮기
+            </ToggleGroupItem>
+            <ToggleGroupItem
+              value="fill"
+              aria-label="꽉 채우기 fill"
+              title="꽉 채우기 — 비율 무시로 빈틈 없음"
+              className="h-7 rounded-none border-0 border-l border-zinc-700/60 px-1.5 text-[9px] text-zinc-300 data-[state=on]:bg-zinc-700 data-[state=on]:text-zinc-50"
+            >
+              꽉
+            </ToggleGroupItem>
+          </ToggleGroup>
           <Button
             type="button"
             variant="ghost"
@@ -493,10 +564,10 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              setFsDialogOpen(true);
+              enterPresentationFullscreen();
             }}
             aria-label="전체 화면"
-            title="전체 화면(맞춤 방식 선택)"
+            title="전체 화면(Esc로 나가기). 위 표시 방식이 그대로 적용됩니다."
           >
             <Maximize2 className="size-4" />
           </Button>
@@ -526,26 +597,26 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
       </header>
       <div
         ref={presentationFsTargetRef}
-        className="dark relative z-0 box-border flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-950"
+        className={cn(
+          "dark relative z-0 box-border flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-950",
+          isBrowserFullscreen && hideCursorAfterIdle && "book-pres-fs-hide-cursor",
+        )}
+        onPointerMove={onPresentationFsPointerActivity}
+        onPointerDown={onPresentationFsPointerActivity}
       >
         <div
           ref={canvasWrapRef}
           className={bookCanvasStageMatClass(
-            cn(
-              "relative flex h-full min-h-0 w-full flex-1 items-center justify-center overflow-hidden",
-              isBrowserFullscreen
-                ? "p-0"
-                : "px-4 py-5 sm:px-5 sm:py-6",
-            ),
+            "relative flex h-full min-h-0 w-full flex-1 items-center justify-center overflow-hidden p-0",
           )}
           onWheel={handleWheel}
         >
           {slideStage != null ? (
-            isBrowserFullscreen && fsFitMode === "cover" ? (
+            presentationFitMode === "cover" ? (
               <div className="flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
                 {slideStage}
               </div>
-            ) : isBrowserFullscreen && fsFitMode === "fill" && fillStretch != null ? (
+            ) : presentationFitMode === "fill" && fillStretch != null ? (
               <div className="flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
                 <div
                   style={{
@@ -565,85 +636,7 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
     </div>
   );
 
-  return createPortal(
-    <>
-      {shell}
-      <Dialog
-        open={fsDialogOpen}
-        onOpenChange={(open) => {
-          setFsDialogOpen(open);
-          if (open) setFsFitDraft(fsFitMode);
-        }}
-      >
-        <DialogContent
-          overlayClassName="z-[10001]"
-          className="z-[10002] sm:max-w-md"
-          showCloseButton
-        >
-          <DialogHeader>
-            <DialogTitle>슬라이드 전체 화면</DialogTitle>
-            <DialogDescription>
-              화면에 맞추는 방식을 고른 뒤 시작합니다. 나가려면 Esc 키를 누르세요.
-            </DialogDescription>
-          </DialogHeader>
-          <RadioGroup
-            value={fsFitDraft}
-            onValueChange={(v) =>
-              setFsFitDraft(v as BookCanvasDisplayFitMode)
-            }
-            className="grid gap-3"
-          >
-            <div className="flex items-start gap-3 rounded-lg border border-border/80 p-3">
-              <RadioGroupItem value="contain" id="pres-fs-contain" className="mt-0.5" />
-              <div className="grid gap-0.5">
-                <Label htmlFor="pres-fs-contain" className="cursor-pointer font-medium">
-                  맞춤(contain)
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  슬라이드 전체가 보이도록 맞춥니다. 화면 비율에 따라 여백이 생길 수 있습니다.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 rounded-lg border border-border/80 p-3">
-              <RadioGroupItem value="cover" id="pres-fs-cover" className="mt-0.5" />
-              <div className="grid gap-0.5">
-                <Label htmlFor="pres-fs-cover" className="cursor-pointer font-medium">
-                  덮기(cover)
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  화면을 가득 채우도록 확대합니다. 비율이 다르면 가장자리가 잘릴 수 있습니다.
-                </p>
-              </div>
-            </div>
-            <div className="flex items-start gap-3 rounded-lg border border-border/80 p-3">
-              <RadioGroupItem value="fill" id="pres-fs-fill" className="mt-0.5" />
-              <div className="grid gap-0.5">
-                <Label htmlFor="pres-fs-fill" className="cursor-pointer font-medium">
-                  꽉 채우기(fill)
-                </Label>
-                <p className="text-xs text-muted-foreground">
-                  화면 비율에 맞게 늘려서 빈틈 없이 채웁니다. 가로·세로 비율이 달라지면 왜곡될 수 있습니다.
-                </p>
-              </div>
-            </div>
-          </RadioGroup>
-          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => setFsDialogOpen(false)}
-            >
-              취소
-            </Button>
-            <Button type="button" onClick={confirmEnterFullscreen}>
-              전체 화면 시작
-            </Button>
-          </div>
-        </DialogContent>
-      </Dialog>
-    </>,
-    document.body,
-  );
+  return createPortal(shell, document.body);
 }
 
 export function BookPresentationPage() {

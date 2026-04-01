@@ -9,7 +9,7 @@ export const BOOK_AI_USER_GUIDE_BLOCK = `
 - Book list: /books
 - New book: /books/new
 - Open/edit a book: /books/:id (same page for owner edit + public view; guests see read-only + preview link)
-- Slideshow preview: /books/:id/preview (public; header has zoom/fit; **browser fullscreen** on slide area only — pick contain/cover/fill before entering; **Esc** exits fullscreen)
+- Slideshow preview: /books/:id/preview (public; header toggles **전체/contain · 덮기/cover · 꽉/fill** for windowed + **browser fullscreen** (slide area only); zoom **초기** resets scale; **Esc** exits fullscreen; in fullscreen, **cursor and video / media-playlist bars hide immediately** on enter; **~650ms grace** ignores stray pointer events so controls do not flash; then real pointer move shows them, **~2.5s idle** hides again
 
 ### Slide canvas & pages
 - Each book has many slides (= pages). Reorder via left sidebar drag; add/delete pages there.

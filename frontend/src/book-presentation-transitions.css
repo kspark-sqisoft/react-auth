@@ -115,6 +115,12 @@
   }
 }
 
+/* 브라우저 전체 화면 유휴 시 — Konva·Tailwind 자식 cursor보다 우선 */
+.book-pres-fs-hide-cursor,
+.book-pres-fs-hide-cursor * {
+  cursor: none !important;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .book-pres-enter {
     animation: none !important;

@@ -265,6 +265,11 @@ type BookSlideCanvasProps = {
   onMediaPlaylistRemoteCommandConsumed?: () => void;
   /** 동영상 위젯 메타데이터 로드 후 재생 길이(초) — 속성 패널 표시용 */
   onVideoDurationKnown?: (elementId: string, durationSec: number) => void;
+  /**
+   * 보기 모드 전용: `true`이면 비디오·미디어 플레이리스트 하단 컨트롤 바를 표시하지 않음
+   * (예: 전체 화면에서 커서 유휴 시 오버레이와 같이 숨김).
+   */
+  viewModeHideMediaChrome?: boolean;
 };
 
 function BookFreehandDrawLayer({
@@ -809,6 +814,7 @@ export function BookSlideCanvas({
   mediaPlaylistRemoteCommand,
   onMediaPlaylistRemoteCommandConsumed,
   onVideoDurationKnown,
+  viewModeHideMediaChrome = false,
 }: BookSlideCanvasProps) {
   const trRef = useRef<Konva.Transformer>(null);
   const konvaNodeByIdRef = useRef<Map<string, Konva.Node>>(new Map());
@@ -839,6 +845,8 @@ export function BookSlideCanvas({
   const inlineTextEditorRef = useRef<BookTextWidgetInlineEditorHandle>(null);
   /** 편집 모드에서 우클릭: 순서·삭제·슬라이드 전체 맞춤 등 */
   const elementContextMenuEnabled = mode === "edit";
+  const hideViewMediaChrome =
+    mode === "view" && Boolean(viewModeHideMediaChrome);
 
   const visibleElements = useMemo(
     () => elements.filter(isBookElementVisible),
@@ -1395,7 +1403,9 @@ export function BookSlideCanvas({
             el={el}
             scale={scale}
             mode={mode}
-            barVisible={Boolean(videoBarVisible[el.id])}
+            barVisible={
+              !hideViewMediaChrome && Boolean(videoBarVisible[el.id])
+            }
             liveFrame={overlayLiveFrame(el.id, dragLive, transformLive, {
               w: el.width,
               h: el.height,
@@ -1718,7 +1728,9 @@ export function BookSlideCanvas({
                   isSelected={selectedIdSet.has(el.id)}
                   liveFrame={frameLive}
                   barVisible={
-                    mplBarOnHover ? Boolean(videoBarVisible[el.id]) : false
+                    !hideViewMediaChrome &&
+                    mplBarOnHover &&
+                    Boolean(videoBarVisible[el.id])
                   }
                   onBarPointerEnter={
                     mplBarOnHover ? () => showVideoBar(el.id) : undefined

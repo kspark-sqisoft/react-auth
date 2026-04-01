@@ -299,7 +299,7 @@ flowchart TB
 | `/books` | `BookListPage` | 무한 스크롤 UI이나 API는 **`skip`/`take`/`total`** (6.3절) |
 | `/books/new` | `BookEditorPage` | 로그인 필요, 저장 후 상세로 이동 가능 |
 | `/books/:id` | `BookDetailPage` | 공개 URL; 작성자면 편집 UI, 비작성자는 보기·레이어 패널·**미리보기(슬라이드쇼)** |
-| `/books/:id/preview` | `BookPresentationPage` | 공개; 헤더가 있는 창 모드 + **브라우저 전체 화면**(슬라이드 영역만 `requestFullscreen`; 헤더 미포함). 전체 화면 진입 전 다이얼로그에서 **맞춤(contain)·덮기(cover)·꽉 채우기(fill)** 선택. Esc로 전체 화면 종료. 페이지별 **전환 효과**는 `BookPage`에 저장, `book-presentation-transitions.css`로 재생. 맞춤·줌은 `BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS`·`useBookCanvasDisplayFitMode` — 편집 스테이지는 `BOOK_CANVAS_STAGE_DISPLAY_OPTS`(maxFit 1, contain) |
+| `/books/:id/preview` | `BookPresentationPage` | 공개; 헤더 아래 북 스테이지는 **바깥 CSS·맞춤 패딩 없이** 가장자리까지 사용. 창 미리보기와 **브라우저 전체 화면**(슬라이드 영역만 `requestFullscreen`)이 **동일한 표시 모드**(헤더 토글: 전체/contain·덮기/cover·꽉/fill; 줌 **초기**는 배율·줌 리셋). 전체 화면 즉시 진입·Esc 종료; 슬라이드 영역은 **진입 직후** 커서·**비디오·미디어 바** 숨김, 짧은 **포인터 유예(ms)** 뒤 실제 움직임에서만 다시 표시 후 유휴 시 재숨김(`book-pres-fs-hide-cursor`·`viewModeHideMediaChrome`·`PRESENTATION_FULLSCREEN_POINTER_GRACE_MS`). **전환 효과**·`BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS`·줌 — 편집 스테이지는 `BOOK_CANVAS_STAGE_DISPLAY_OPTS`(maxFit 1, contain) |
 | `/books/:id/edit` | → `/books/:id` 리다이렉트 | 레거시 |
 | `/me` | `MyInfoPage` | |
 | `/cats`, `/cats/:id` | Cats 데모 | |
