@@ -10,6 +10,7 @@ import { Repository } from 'typeorm';
 import { BookAiChatMessage } from './book-ai-chat-message.entity';
 import { BooksService } from './books.service';
 import { PexelsService } from './pexels.service';
+import { BOOK_AI_USER_GUIDE_BLOCK } from './book-ai-user-guide';
 
 const OPENAI_URL = 'https://api.openai.com/v1/chat/completions';
 
@@ -60,6 +61,11 @@ export type BookLayoutAiAddWidgetAction = {
   imageHeight?: number;
   videoWidth?: number;
   videoHeight?: number;
+  /** 네 값 모두 있으면 슬라이드 논리 좌표(px)로 박스 지정 — anchor·스택 오프셋보다 우선(격자·시간표) */
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 };
 
 /** 선택된 이미지·비디오 위젯의 src만 교체(같은 id·위치 유지). 클라이언트가 selection을 보낸 경우에만 유효 */
@@ -224,8 +230,13 @@ A) Add a widget:
   "imageUrl": "optional — direct https image URL for widget image (omit imageSearchQuery)",
   "videoSearchQuery": "for widget video only, when no URL — ENGLISH Pexels video keywords. Server picks a short clip (~25s max), smallest quality for smaller file size. Example: "스위스 풍경 짧은 동영상" → "Switzerland landscape nature scenic short".",
   "videoUrl": "optional — direct https video URL for widget video (omit videoSearchQuery)",
-  "slideNumber": "optional integer 1..N — ONLY when the user EXPLICITLY names a slide by number/ordinal (e.g. "슬라이드 2에", "3번째 페이지", "1장에 넣어"). For add_widget (image, video, text, weather, clock, news): DEFAULT is ALWAYS the slide they are currently viewing — OMIT slideNumber if they did not specify which slide (e.g. "이미지 넣어줘", "스위스 사진", "비디오 추가" alone)."
+  "slideNumber": "optional integer 1..N — ONLY when the user EXPLICITLY names a slide by number/ordinal (e.g. "슬라이드 2에", "3번째 페이지", "1장에 넣어"). For add_widget (image, video, text, weather, clock, news): DEFAULT is ALWAYS the slide they are currently viewing — OMIT slideNumber if they did not specify which slide (e.g. "이미지 넣어줘", "스위스 사진", "비디오 추가" alone).",
+  "x": "optional number — left edge in slide px (must use with y, width, height)",
+  "y": "optional number — top edge in slide px",
+  "width": "optional number — box width px",
+  "height": "optional number — box height px"
 }
+When "x", "y", "width", and "height" are ALL numbers, the widget is placed in that rectangle and anchor-based stacking is skipped (use for grids, school timetables, weekly boards). Otherwise "anchor" is required as before. For explicit-box rows you may set anchor to "topLeft" as a placeholder.
 
 B) Set slide background:
 {
@@ -282,6 +293,8 @@ J) Replace the picture or clip inside ONE existing image/video widget (keeps pos
 }
 No anchor, no slideNumber. When the user wants different media for the selected widget (Korean: 바꿔줘, 다른 걸로, 교체, 다른 동영상/사진; English: replace, swap, change to), use J) NOT add_widget — add_widget would create a second widget.
 
+${BOOK_AI_USER_GUIDE_BLOCK}
+
 Rules:
 - Map Korean requests: 날씨/날씨 위젯/○○ 날씨 → weather with cityQuery (e.g. Seoul,KR, Busan,KR, Tokyo,JP). 디지털 시계/전자시계/시계 위젯 → digitalClock (no cityQuery). 뉴스/헤드라인/속보 위젯 → news (no extra fields; server uses NewsAPI headlines).
 - TEXT widget on the CANVAS (슬라이드 안 글 상자) — NOT the slide tab name and NOT the book header title:
@@ -306,12 +319,27 @@ Rules:
 - Use remove_current_page for 이 페이지 지워줘/현재 슬라이드 삭제/이 장 없애줘. Mention in reply that user must confirm in the dialog; if only one slide, say 삭제할 수 없음.
 - Use set_slide_dimensions for 해상도/캔버스 크기/슬라이드 크기(px)/FHD/풀HD/HD/4K/정사각형 등. Map common names to pixels (e.g. FHD 1920×1080). If user changes only width or height, emit only that field.
 - When WIDGET SELECTION is in the user message and the user wants different image/video for that selection, emit replace_widget_media (J) with the given elementId — not add_widget.
-- NEVER return "actions": [] when the user clearly asks to add a widget (image, video, text, weather, clock, news), replace selected image/video media, or change layout on the current slide — always emit the matching action. Empty actions are ONLY for off-topic/unsupported requests per the rule below.
-- You may combine actions (e.g. background + several widgets). Keep at most 10 actions.
-- Off-topic or unsupported asks (general knowledge, jokes unrelated to editing, coding homework, life advice, other apps, etc.): ALWAYS use actions: []. In "reply", write ONLY Korean: politely say this assistant only helps with slide/book layout in THIS editor (widgets including images, short stock videos, weather, clock, news headlines, background, titles, pages, undo/redo, canvas size) and that request is not supported. Add a touch of wit or playful wordplay—dry humor, one light metaphor, or a gentle pun is welcome—while staying kind, brief (1–3 short sentences), and never sarcastic or rude. Do not pretend to fulfill the off-topic request.`;
+- NEVER return "actions": [] when the user clearly asks to add a widget (image, video, text, weather, clock, news), replace selected image/video media, change layout on the current slide, build a **structured layout** (강의시간표·수업표·교시표·주간 표·격자), or asks you to **compose a digital signage / display screen** (디지털 사이니지, 전광판, 키오스크·매장 화면, 메뉴보드, 안내판, 프로모 배너 등) — always emit the matching action(s).
+- **Digital signage & public display screens** — Triggers include: 디지털 사이니지, 사이니지 화면, 전광판, 키오스크, 매장 표시, 메뉴보드, 오늘의 메뉴, 가격표, 프로모·할인 배너, 공지·휴무 안내판, 로비 안내, 층 안내, 행사 포스터, 매장 홍보 화면, "이런 식의 화면", "간판처럼", 영문: digital signage, menu board, lobby display, promo board, etc. The user expects you to **build the whole slide** from widgets (like a template, but you output actions). **Never** answer with only description and empty actions.
+  - Start with **set_page_background** when it helps readability: dark menu boards #0f172a / #1e293b; warm cafe #fffbeb / #fff7ed; clean notice #f8fafc; urgent #fef2f2 / #fff1f2; promo #ecfdf5 / #f0fdf4.
+  - Use **many add_widget "text"** with **x, y, width, height** (slide px) for: full-width **title band**, section headers (COFFEE / FOOD / DESSERT, or 공지 / 운영안내), price lines, bullet lists, footer (영업시간 · 전화 · 문의). fontSize: main title **28–42**, section **20–28**, body **16–24**, small print **14–18**. Prefer **high contrast** text on background (#f8fafc on dark, #0f172a on light).
+  - Add **add_widget "image"** with **imageSearchQuery** (English only) when a hero product/food/ambience photo fits—use **explicit x,y,width,height** so it sits in a reserved zone (e.g. left 38% for photo, right for menu), or top banner. Example queries: "latte coffee cup cafe", "burger meal restaurant", "shopping mall interior lobby".
+  - Add **digitalClock** (anchor topRight) and/or **weather** (anchor topLeft, cityQuery e.g. Seoul,KR) for lobby / building directory style if the user hints 실시간·날씨·시계 or outdoor board.
+  - Add **news** if they want headline-style ticker on the board.
+  - **set_page_title** with a short sidebar label (e.g. "1F 메뉴", "휴무공지").
+  - If copy is vague, invent plausible **Korean** placeholder lines (메뉴명·가격·할인 조건·유의사항). Use \\n in text for stacked lines in one box.
+  - Typical **16:9** layout: margin **18–28px**; top **title row** ~56–88px height; body split **40/60** or **50/50** for image vs text; bottom **footer strip** ~36–52px.
+  - **Menu board**: 2-column price list or category blocks; optional "BEST" line; 원산지 표기 안내 한 줄.
+  - **Notice board**: 큰 제목 + 본문 블록 + 연락처.
+  - **Promo**: 큰 숫자/할인율 + 기간 + 장소/조건.
+  - Keep total actions **≤ 60**. In reply, say they can edit text, replace images, or use the Templates tab for more presets; existing widgets may overlap—undo or clear slide first if needed.
+- **Timetable / grid on this slide** (e.g. "이 페이지에 학교 강의실 시간표", "수업 시간표 만들어줘", class schedule, period grid): You MUST emit multiple add_widget "text" actions, each with **x, y, width, height** (all numbers) in **slide pixels** for every cell (headers + periods + optional title row). Use the canvas size given in the user message below. Margins ~20–32px; title bar ~48–72px tall; column headers (월–금 or 요일) ~36–52px tall; time/교시 label column ~72–100px wide; body cells ~40–56px tall unless canvas is large. fontSize ~14–20 in cells, ~24–32 for main title. Optional set_page_background e.g. #f8fafc. You may use \\n inside "text" for two lines in one cell. Placeholder content is OK (과목명, 교실, 담당 등) if the user did not specify. Keep total actions ≤ 60. In reply, note that existing widgets may overlap — user can undo or clear the slide first.
+- **User guide / 기능 안내** — If the user asks how this site or book editor works (e.g. 지원 파일 형식, 업로드 용량, 슬라이드쇼·전환 효과, 미리보기 URL, 템플릿, 위젯 종류, 저장, 단축키, 한도, Pexels/뉴스/날씨가 어떻게 동작하는지, "뭐 할 수 있어?", "어떻게 해?") **without** asking you to change the slide in the same message: answer in **reply** with clear, accurate **Korean** using **only** the Reference block above plus the action schema you already know. Use **actions: []**. If they both ask a how-to question **and** request an edit in one message, answer in reply **and** emit the appropriate actions.
+- You may combine actions (e.g. background + many text cells + image + clock). Keep at most 60 actions.
+- **True off-topic** (일반 상식·시사만, 타 서비스, 수학/코딩 숙제, 이 편집기와 무관한 농담/상담 등): ALWAYS actions: []. In "reply", Korean only: this assistant focuses on **this** slide/book editor; the request is outside scope. Brief wit/wordplay allowed as before—kind, 1–3 short sentences, never rude. Do not invent product facts.`;
 
     const user = `This book has ${pageCount} slide(s) (same as "pages"), numbered 1–${pageCount} from the first item in the left sidebar list. The user is now viewing slide ${viewingOneBased} (1-based).
-Slide canvas size: ${w}px × ${h}px.
+Slide canvas size: ${w}px wide × ${h}px tall (origin top-left; all explicit x,y,width,height for add_widget must fit inside this rectangle).
 
 ${selectionBlock}
 
@@ -364,7 +392,12 @@ ${msg}`;
       throw new ServiceUnavailableException('모델 JSON 파싱에 실패했습니다.');
     }
 
-    const preliminary = this.normalizeLayoutResult(parsed, input.selection);
+    const preliminary = this.normalizeLayoutResult(
+      parsed,
+      input.selection,
+      w,
+      h,
+    );
     if (preliminary.actions.length === 0) {
       this.logger.warn(
         '[layout-ai] 모델이 actions=[] 만 돌려줌 — 폴백·보정으로 채울 수 있으면 이어서 처리',
@@ -845,13 +878,40 @@ ${msg}`;
       if (act.cityQuery?.trim()) next.cityQuery = act.cityQuery;
       if (act.text?.trim()) next.text = act.text;
       if (act.fontSize != null) next.fontSize = act.fontSize;
+      if (act.x != null) next.x = act.x;
+      if (act.y != null) next.y = act.y;
+      if (act.width != null) next.width = act.width;
+      if (act.height != null) next.height = act.height;
       return next;
     });
+  }
+
+  private clampAiWidgetRect(
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    slideW: number,
+    slideH: number,
+  ): { x: number; y: number; width: number; height: number } {
+    const minW = 24;
+    const minH = 16;
+    let w = Math.round(width);
+    let ht = Math.round(height);
+    let xi = Math.round(x);
+    let yi = Math.round(y);
+    w = Math.min(slideW, Math.max(minW, w));
+    ht = Math.min(slideH, Math.max(minH, ht));
+    xi = Math.min(Math.max(0, xi), Math.max(0, slideW - w));
+    yi = Math.min(Math.max(0, yi), Math.max(0, slideH - ht));
+    return { x: xi, y: yi, width: w, height: ht };
   }
 
   private normalizeLayoutResult(
     parsed: unknown,
     selection?: { elementId: string; kind: 'image' | 'video' },
+    slideW = 960,
+    slideH = 540,
   ): BookLayoutAiResult {
     if (!parsed || typeof parsed !== 'object') {
       throw new ServiceUnavailableException('모델 응답 형식이 잘못되었습니다.');
@@ -864,7 +924,7 @@ ${msg}`;
     const rawActions = o.actions;
     const actions: BookLayoutAiAction[] = [];
     if (Array.isArray(rawActions)) {
-      for (const item of rawActions.slice(0, 14)) {
+      for (const item of rawActions.slice(0, 60)) {
         if (!item || typeof item !== 'object') continue;
         const a = item as Record<string, unknown>;
         const t = a.type;
@@ -993,15 +1053,51 @@ ${msg}`;
 
         if (t !== 'add_widget') continue;
         const widget = a.widget;
-        const anchor = a.anchor;
+        const anchorRaw = a.anchor;
         if (typeof widget !== 'string' || !WIDGETS.has(widget)) continue;
-        if (typeof anchor !== 'string' || !ANCHORS.has(anchor)) continue;
+
+        const hasExplicitBox =
+          typeof a.x === 'number' &&
+          Number.isFinite(a.x) &&
+          typeof a.y === 'number' &&
+          Number.isFinite(a.y) &&
+          typeof a.width === 'number' &&
+          Number.isFinite(a.width) &&
+          typeof a.height === 'number' &&
+          Number.isFinite(a.height);
+
+        if (
+          !hasExplicitBox &&
+          (typeof anchorRaw !== 'string' || !ANCHORS.has(anchorRaw))
+        ) {
+          continue;
+        }
+
+        const anchor =
+          typeof anchorRaw === 'string' && ANCHORS.has(anchorRaw)
+            ? anchorRaw
+            : 'topLeft';
 
         const act: BookLayoutAiAddWidgetAction = {
           type: 'add_widget',
           widget: widget as BookLayoutAiAddWidgetAction['widget'],
           anchor,
         };
+
+        if (hasExplicitBox) {
+          const r = this.clampAiWidgetRect(
+            a.x as number,
+            a.y as number,
+            a.width as number,
+            a.height as number,
+            slideW,
+            slideH,
+          );
+          act.x = r.x;
+          act.y = r.y;
+          act.width = r.width;
+          act.height = r.height;
+        }
         if (
           typeof a.slideNumber === 'number' &&
           Number.isFinite(a.slideNumber)

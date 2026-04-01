@@ -23,7 +23,9 @@ import {
 import {
   applyAutoSlideNamesByIndex,
   BOOK_CANVAS_DRAG_GRID_PX,
+  createBookShapeElement,
   createEmptyEditorPage,
+  placeBookShapeElementAtPointer,
   DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
   DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
   DEFAULT_BOOK_NEWS_WIDGET_HEIGHT,
@@ -45,6 +47,7 @@ import {
   resolveEffectivePresentationTimingElementId,
   toBookPagePayloads,
   type BookEditorPageState,
+  type BookShapeKind,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
 import {
@@ -88,6 +91,7 @@ import { BookAiAssistantPanel } from "@/components/books/BookAiAssistantPanel";
 import { BookEditorToolRail } from "@/components/books/BookEditorToolRail";
 import { BookWidgetPalette } from "@/components/books/BookWidgetPalette";
 import { BookMediaLibraryPanel } from "@/components/books/BookMediaLibraryPanel";
+import { BookElementsPanel } from "@/components/books/BookElementsPanel";
 import { BookSlideDrawingPanel } from "@/components/books/BookSlideDrawingPanel";
 import { BookSlideTemplatesPanel } from "@/components/books/BookSlideTemplatesPanel";
 import { BookMediaLibraryPickDialog } from "@/components/books/BookMediaLibraryPickDialog";
@@ -673,6 +677,34 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       setSelectedIds([el.id]);
     },
     [activePageIndex, updatePages],
+  );
+
+  const onAddShapeFromElementsPanel = useCallback(
+    (kind: BookShapeKind) => {
+      const el = createBookShapeElement(kind, slideWidth, slideHeight);
+      onAppendDrawingElement(el);
+    },
+    [onAppendDrawingElement, slideHeight, slideWidth],
+  );
+
+  const addShapeAt = useCallback(
+    (x: number, y: number, kind: BookShapeKind) => {
+      const base = createBookShapeElement(kind, slideWidth, slideHeight);
+      const placed = placeBookShapeElementAtPointer(base, x, y, slideWidth, slideHeight);
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.elements.push(placed);
+      });
+      setSelectedIds([placed.id]);
+    },
+    [activePageIndex, slideHeight, slideWidth, updatePages],
+  );
+
+  const onDropShape = useCallback(
+    (point: { x: number; y: number }, kind: BookShapeKind) => {
+      addShapeAt(point.x, point.y, kind);
+    },
+    [addShapeAt],
   );
 
   const updateCurrentPageName = useCallback(
@@ -1544,6 +1576,12 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                   onApplyTemplate={applySlideTemplate}
                 />
               ) : null}
+              {leftDockTab === "elements" ? (
+                <BookElementsPanel
+                  className="min-h-0 flex-1"
+                  onAddShape={onAddShapeFromElementsPanel}
+                />
+              ) : null}
               {leftDockTab === "drawing" ? (
                 <BookSlideDrawingPanel
                   className="min-h-0 flex-1"
@@ -1707,6 +1745,12 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 onApplyTemplate={applySlideTemplate}
               />
             ) : null}
+            {leftDockTab === "elements" ? (
+              <BookElementsPanel
+                className="min-h-0 flex-1"
+                onAddShape={onAddShapeFromElementsPanel}
+              />
+            ) : null}
             {leftDockTab === "drawing" ? (
               <BookSlideDrawingPanel
                 className="min-h-0 flex-1"
@@ -1766,6 +1810,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                 onSelect={handleCanvasSelect}
                 onElementChange={onElementChange}
                 onDropWidget={onDropWidget}
+                onDropShape={onDropShape}
                 onDropLibraryMedia={onDropLibraryMedia}
                 onReorderZ={onReorderZ}
                 onDeleteElement={requestRemoveWidget}

@@ -26,6 +26,7 @@ import {
   CloudSun,
   Newspaper,
   Pencil,
+  Shapes,
   Eye,
   EyeOff,
   GripVertical,
@@ -76,6 +77,8 @@ function bookElementLayerLabel(el: BookCanvasElement): string {
       return "미디어";
     case "drawing":
       return "그리기";
+    case "shape":
+      return "도형";
     default:
       return "요소";
   }
@@ -152,6 +155,8 @@ function LayerTypeIcon({ el }: { el: BookCanvasElement }) {
       return <ListVideo className={cls} aria-hidden />;
     case "drawing":
       return <Pencil className={cls} aria-hidden />;
+    case "shape":
+      return <Shapes className={cls} aria-hidden />;
     default:
       return <Layers className={cls} aria-hidden />;
   }

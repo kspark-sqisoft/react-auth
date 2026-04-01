@@ -179,6 +179,378 @@ export function pageSnapshotSignature(p: BookSlideSnapshotPage): string {
   return `${p.backgroundColor}\0${JSON.stringify(p.elements)}`;
 }
 
+function appendBookShapeElementToSnapshotLayer(
+  layer: Konva.Layer,
+  el: Extract<BookCanvasElement, { type: "shape" }>,
+  sx: (v: number) => number,
+  elOp: number,
+): void {
+  const fw = sx(el.width);
+  const fh = sx(el.height);
+  const sp = bookElementPivotKonva({
+    x: sx(el.x),
+    y: sx(el.y),
+    width: fw,
+    height: fh,
+    rotation: el.rotation,
+  });
+  const ox = -fw / 2;
+  const oy = -fh / 2;
+  const chromeBr = sx(resolveBookElementBorderRadius(el));
+  const rawShapeSw = Number(el.strokeWidth);
+  const logicalSw = Number.isFinite(rawShapeSw)
+    ? Math.min(32, Math.max(0, Math.round(rawShapeSw)))
+    : 3;
+  if (
+    (el.shapeKind === "line" || el.shapeKind === "arrow" || el.shapeKind === "cross") &&
+    logicalSw <= 0
+  ) {
+    return;
+  }
+  const fillRaw = el.fill?.trim();
+  const fill =
+    fillRaw && fillRaw !== "transparent" ? fillRaw : undefined;
+  const stroke =
+    logicalSw > 0 ? (el.stroke?.trim() ? el.stroke.trim() : "#1e293b") : undefined;
+  const strokeW =
+    logicalSw > 0 ? Math.max(0.5, sx(logicalSw)) : 0;
+  const innerCr =
+    el.shapeKind === "rect" || el.shapeKind === "roundRect"
+      ? Math.min(Math.max(0, sx(el.cornerRadius ?? 0)), fw / 2, fh / 2)
+      : 0;
+
+  const g = new Konva.Group({
+    x: sp.cx,
+    y: sp.cy,
+    offsetX: sp.offsetX,
+    offsetY: sp.offsetY,
+    rotation: sp.rotation,
+    opacity: elOp,
+    ...(chromeBr > 0
+      ? {
+          clipFunc: (ctx: CanvasRenderingContext2D) => {
+            canvasRoundRectPath(ctx as never, ox, oy, fw, fh, chromeBr);
+          },
+        }
+      : {}),
+  });
+
+  switch (el.shapeKind) {
+    case "rect":
+    case "roundRect":
+      g.add(
+        new Konva.Rect({
+          x: ox,
+          y: oy,
+          width: fw,
+          height: fh,
+          cornerRadius: innerCr,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+        }),
+      );
+      break;
+    case "ellipse":
+      g.add(
+        new Konva.Ellipse({
+          x: 0,
+          y: 0,
+          radiusX: fw / 2,
+          radiusY: fh / 2,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+        }),
+      );
+      break;
+    case "line":
+      g.add(
+        new Konva.Line({
+          points: [ox, 0, ox + fw, 0],
+          stroke,
+          strokeWidth: strokeW,
+          lineCap: "round",
+        }),
+      );
+      break;
+    case "triangle":
+      g.add(
+        new Konva.Line({
+          points: [0, oy, ox + fw, oy + fh, ox, oy + fh],
+          closed: true,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+          lineJoin: "round",
+        }),
+      );
+      break;
+    case "rightTriangle":
+      g.add(
+        new Konva.Line({
+          points: [ox, -oy, -ox, -oy, ox, oy],
+          closed: true,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+          lineJoin: "round",
+        }),
+      );
+      break;
+    case "arrow": {
+      const ptr = Math.min(sx(18), Math.max(sx(8), fw * 0.12));
+      g.add(
+        new Konva.Arrow({
+          points: [ox, 0, ox + fw, 0],
+          stroke,
+          strokeWidth: strokeW,
+          fill: stroke,
+          pointerLength: ptr,
+          pointerWidth: Math.min(sx(16), ptr * 1.2),
+          lineCap: "round",
+        }),
+      );
+      break;
+    }
+    case "chevron": {
+      const inset = fw * 0.38;
+      g.add(
+        new Konva.Line({
+          points: [
+            ox,
+            oy,
+            ox + inset,
+            oy,
+            -ox,
+            0,
+            ox + inset,
+            -oy,
+            ox,
+            -oy,
+          ],
+          closed: true,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+          lineJoin: "round",
+        }),
+      );
+      break;
+    }
+    case "star": {
+      const r = Math.min(fw, fh);
+      g.add(
+        new Konva.Star({
+          x: 0,
+          y: 0,
+          numPoints: 5,
+          innerRadius: r * 0.22,
+          outerRadius: r * 0.48,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+        }),
+      );
+      break;
+    }
+    case "diamond":
+      g.add(
+        new Konva.Line({
+          points: [0, oy, -ox, 0, 0, -oy, ox, 0],
+          closed: true,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+          lineJoin: "round",
+        }),
+      );
+      break;
+    case "hexagon":
+      g.add(
+        new Konva.RegularPolygon({
+          x: 0,
+          y: 0,
+          sides: 6,
+          radius: Math.min(fw, fh) / 2,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+        }),
+      );
+      break;
+    case "pentagon":
+      g.add(
+        new Konva.RegularPolygon({
+          x: 0,
+          y: 0,
+          sides: 5,
+          radius: Math.min(fw, fh) / 2,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+        }),
+      );
+      break;
+    case "octagon":
+      g.add(
+        new Konva.RegularPolygon({
+          x: 0,
+          y: 0,
+          sides: 8,
+          radius: Math.min(fw, fh) / 2,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+        }),
+      );
+      break;
+    case "trapezoid": {
+      const inset = fw * 0.2;
+      g.add(
+        new Konva.Line({
+          points: [
+            ox + inset,
+            oy,
+            -ox - inset,
+            oy,
+            -ox,
+            -oy,
+            ox,
+            -oy,
+          ],
+          closed: true,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+          lineJoin: "round",
+        }),
+      );
+      break;
+    }
+    case "parallelogram": {
+      const skew = fw * 0.28;
+      g.add(
+        new Konva.Line({
+          points: [
+            ox + skew,
+            oy,
+            -ox + skew,
+            oy,
+            -ox,
+            -oy,
+            ox,
+            -oy,
+          ],
+          closed: true,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+          lineJoin: "round",
+        }),
+      );
+      break;
+    }
+    case "ring": {
+      const r = Math.min(fw, fh) / 2;
+      g.add(
+        new Konva.Ring({
+          x: 0,
+          y: 0,
+          innerRadius: Math.max(2, r * 0.5),
+          outerRadius: Math.max(4, r * 0.92),
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+        }),
+      );
+      break;
+    }
+    case "blockArc": {
+      const r = Math.min(fw, fh) / 2;
+      g.add(
+        new Konva.Arc({
+          x: 0,
+          y: 0,
+          innerRadius: Math.max(3, r * 0.45),
+          outerRadius: Math.max(6, r * 0.96),
+          angle: 250,
+          rotation: -125,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+        }),
+      );
+      break;
+    }
+    case "plus": {
+      const t = Math.min(fw, fh) * 0.24;
+      g.add(
+        new Konva.Rect({
+          x: ox,
+          y: -t / 2,
+          width: fw,
+          height: t,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+        }),
+      );
+      g.add(
+        new Konva.Rect({
+          x: -t / 2,
+          y: oy,
+          width: t,
+          height: fh,
+          fill: fill ?? "transparent",
+          stroke,
+          strokeWidth: strokeW,
+        }),
+      );
+      break;
+    }
+    case "cross":
+      g.add(
+        new Konva.Line({
+          points: [ox, oy, -ox, -oy],
+          stroke,
+          strokeWidth: strokeW,
+          lineCap: "round",
+        }),
+      );
+      g.add(
+        new Konva.Line({
+          points: [-ox, oy, ox, -oy],
+          stroke,
+          strokeWidth: strokeW,
+          lineCap: "round",
+        }),
+      );
+      break;
+    default:
+      break;
+  }
+
+  const chromeOw = resolveBookElementOutlineWidth(el);
+  if (chromeOw > 0) {
+    const chromeOc = resolveBookElementOutlineColor(el);
+    g.add(
+      new Konva.Rect({
+        x: ox,
+        y: oy,
+        width: fw,
+        height: fh,
+        cornerRadius: chromeBr,
+        fillEnabled: false,
+        stroke: chromeOc,
+        strokeWidth: Math.max(0.5, sx(chromeOw)),
+      }),
+    );
+  }
+
+  layer.add(g);
+}
+
 /**
  * 슬라이드 한 장을 작은 PNG 데이터 URL로 렌더합니다(페이지 썸네일용).
  * 텍스트는 `Konva.Text` + 평문(리치 HTML은 `richHtmlToPlainText`)만 사용합니다.
@@ -768,6 +1140,8 @@ export async function captureBookSlideToDataURL(
             opacity: elOp,
           }),
         );
+      } else if (el.type === "shape") {
+        appendBookShapeElementToSnapshotLayer(layer, el, sx, elOp);
       } else if (el.type === "drawing") {
         const dw = sx(el.width);
         const dh = sx(el.height);

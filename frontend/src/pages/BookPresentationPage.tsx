@@ -1,8 +1,15 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
 import { createPortal } from "react-dom";
 import { Link, useParams } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, ChevronLeft, ChevronRight, Maximize2 } from "lucide-react";
 import "@/book-presentation-transitions.css";
 import { fetchBook, type BookDetail } from "@/lib/api";
 import { bookKeys } from "@/lib/query-keys";
@@ -24,14 +31,40 @@ import {
 import { BookSlideCanvas } from "@/components/books/BookSlideCanvas";
 import {
   BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS,
+  type BookCanvasDisplayFitMode,
   useBookCanvasDisplayScale,
 } from "@/lib/use-book-canvas-display-scale";
 import { bookCanvasStageMatClass } from "@/lib/book-workspace-ui";
 import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
+function requestPresentationFullscreen(el: HTMLElement) {
+  const wk = el as HTMLElement & {
+    webkitRequestFullscreen?: () => Promise<void> | void;
+  };
+  if (typeof el.requestFullscreen === "function") {
+    return el.requestFullscreen();
+  }
+  if (typeof wk.webkitRequestFullscreen === "function") {
+    return Promise.resolve(wk.webkitRequestFullscreen());
+  }
+  return Promise.reject(new Error("fullscreen_unsupported"));
+}
+
+
 function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDetail }) {
+  /** 전체 화면 API 대상(헤더 제외, 슬라이드 영역만) */
+  const presentationFsTargetRef = useRef<HTMLDivElement>(null);
   const canvasWrapRef = useRef<HTMLDivElement>(null);
 
   const sortedPages = useMemo(() => {
@@ -57,21 +90,24 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
   const safeIdx = Math.min(slideIndex, maxIdx);
   const page = sortedPages[safeIdx];
 
-  const [reduceMotion, setReduceMotion] = useState(false);
-  useEffect(() => {
-    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
-    setReduceMotion(mq.matches);
-    const onChange = () => setReduceMotion(mq.matches);
-    mq.addEventListener("change", onChange);
-    return () => mq.removeEventListener("change", onChange);
-  }, []);
+  const reduceMotion = useSyncExternalStore(
+    (onStoreChange) => {
+      const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+      mq.addEventListener("change", onStoreChange);
+      return () => mq.removeEventListener("change", onStoreChange);
+    },
+    () => window.matchMedia("(prefers-reduced-motion: reduce)").matches,
+    () => false,
+  );
 
   useEffect(() => {
     if (skipNextSlideEnterAnimationRef.current) {
       skipNextSlideEnterAnimationRef.current = false;
       return;
     }
-    setSlideNavEpoch((n) => n + 1);
+    queueMicrotask(() => {
+      setSlideNavEpoch((n) => n + 1);
+    });
   }, [safeIdx]);
 
   const incomingTransition: BookPresentationTransitionId = page
@@ -85,12 +121,69 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
     incomingTransition !== "none" &&
     !reduceMotion;
 
-  const { displayScale, zoomPercent, zoomIn, zoomOut, zoomReset, handleWheel } =
-    useBookCanvasDisplayScale(canvasWrapRef, {
+  const [isBrowserFullscreen, setIsBrowserFullscreen] = useState(false);
+  const [fsDialogOpen, setFsDialogOpen] = useState(false);
+  const [fsFitDraft, setFsFitDraft] =
+    useState<BookCanvasDisplayFitMode>("contain");
+  const [fsFitMode, setFsFitMode] =
+    useState<BookCanvasDisplayFitMode>("contain");
+
+  useEffect(() => {
+    const sync = () => {
+      const el = presentationFsTargetRef.current;
+      const doc = document as Document & {
+        webkitFullscreenElement?: Element | null;
+      };
+      const active =
+        document.fullscreenElement ?? doc.webkitFullscreenElement ?? null;
+      setIsBrowserFullscreen(Boolean(el && active === el));
+    };
+    document.addEventListener("fullscreenchange", sync);
+    document.addEventListener("webkitfullscreenchange", sync);
+    return () => {
+      document.removeEventListener("fullscreenchange", sync);
+      document.removeEventListener("webkitfullscreenchange", sync);
+    };
+  }, []);
+
+  const displayScaleOpts = useMemo(
+    () => ({
       slideWidth: slideW,
       slideHeight: slideH,
-      ...BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS,
+      ...(isBrowserFullscreen
+        ? {
+            ...BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS,
+            symmetricVerticalPad: 0,
+            horizontalPad: 0,
+            fitMode: fsFitMode,
+          }
+        : {
+            ...BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS,
+            fitMode: "contain" as const,
+          }),
+    }),
+    [slideW, slideH, isBrowserFullscreen, fsFitMode],
+  );
+
+  const {
+    displayScale,
+    zoomPercent,
+    zoomIn,
+    zoomOut,
+    zoomReset,
+    handleWheel,
+    layoutAvail,
+  } = useBookCanvasDisplayScale(canvasWrapRef, displayScaleOpts);
+
+  const confirmEnterFullscreen = useCallback(() => {
+    setFsFitMode(fsFitDraft);
+    setFsDialogOpen(false);
+    queueMicrotask(() => {
+      const el = presentationFsTargetRef.current;
+      if (!el) return;
+      void requestPresentationFullscreen(el).catch(() => undefined);
     });
+  }, [fsFitDraft]);
 
   const slideDurationSec = useMemo(() => {
     const cur = sortedPages[safeIdx];
@@ -217,6 +310,59 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
     );
   }
 
+  const slideStage =
+    page != null ? (
+      <div
+        className={cn(
+          "flex items-center justify-center",
+          /* fill은 transform 스케일 후 레이아웃 박스가 max-*에 막히면 가장자리 여백이 생길 수 있음 */
+          isBrowserFullscreen && fsFitMode === "fill"
+            ? "min-h-0 min-w-0"
+            : "max-h-full max-w-full",
+          runSlideEnterAnimation &&
+            `book-pres-enter book-pres-enter--${incomingTransition}`,
+        )}
+        style={
+          runSlideEnterAnimation
+            ? { animationDuration: `${transitionMs}ms` }
+            : undefined
+        }
+      >
+        <BookSlideCanvas
+          pageWidth={slideW}
+          pageHeight={slideH}
+          pageBackgroundColor={
+            typeof page.backgroundColor === "string" && page.backgroundColor.trim()
+              ? page.backgroundColor.trim()
+              : DEFAULT_PAGE_BACKGROUND
+          }
+          scale={displayScale}
+          elements={page.elements}
+          mode="view"
+          selectedIds={[]}
+          onSelect={() => undefined}
+          onElementChange={() => undefined}
+          onVideoDurationKnown={onVideoDurationKnown}
+        />
+      </div>
+    ) : null;
+
+  const fillStretch =
+    isBrowserFullscreen &&
+    fsFitMode === "fill" &&
+    page != null &&
+    layoutAvail.w > 0 &&
+    layoutAvail.h > 0
+      ? (() => {
+          const cw = slideW * displayScale;
+          const ch = slideH * displayScale;
+          return {
+            sx: cw > 0 ? layoutAvail.w / cw : 1,
+            sy: ch > 0 ? layoutAvail.h / ch : 1,
+          };
+        })()
+      : null;
+
   const shell = (
     <div className="fixed inset-0 z-[10000] flex flex-col bg-zinc-950 text-zinc-100">
       <header className="pointer-events-auto relative z-10 grid h-9 min-h-9 min-w-0 shrink-0 grid-cols-[minmax(0,1fr)_auto_minmax(0,1fr)] items-center gap-x-1.5 border-b border-zinc-800 bg-zinc-950 px-1.5 sm:gap-x-2 sm:px-2">
@@ -342,6 +488,22 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
             type="button"
             variant="ghost"
             size="sm"
+            className="h-8 w-8 shrink-0 touch-manipulation p-0 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-50"
+            onPointerDown={(e) => e.stopPropagation()}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setFsDialogOpen(true);
+            }}
+            aria-label="전체 화면"
+            title="전체 화면(맞춤 방식 선택)"
+          >
+            <Maximize2 className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
             className={cn(
               "h-8 w-8 shrink-0 touch-manipulation p-0 text-zinc-200 hover:bg-zinc-800 hover:text-zinc-50",
               nextDisabled && "cursor-not-allowed opacity-35 hover:bg-transparent hover:text-zinc-200",
@@ -362,51 +524,126 @@ function BookPresentationInner({ bookId, data }: { bookId: number; data: BookDet
         </nav>
         <div className="min-w-0 justify-self-end" aria-hidden />
       </header>
-      <div className="dark relative z-0 box-border min-h-0 min-w-0 flex-1">
+      <div
+        ref={presentationFsTargetRef}
+        className="dark relative z-0 box-border flex min-h-0 min-w-0 flex-1 flex-col bg-zinc-950"
+      >
         <div
           ref={canvasWrapRef}
           className={bookCanvasStageMatClass(
-            "relative flex h-full min-h-0 w-full items-center justify-center overflow-hidden px-4 py-5 sm:px-5 sm:py-6",
+            cn(
+              "relative flex h-full min-h-0 w-full flex-1 items-center justify-center overflow-hidden",
+              isBrowserFullscreen
+                ? "p-0"
+                : "px-4 py-5 sm:px-5 sm:py-6",
+            ),
           )}
           onWheel={handleWheel}
         >
-          {page ? (
-            <div
-              className={cn(
-                "flex max-h-full max-w-full items-center justify-center",
-                runSlideEnterAnimation &&
-                  `book-pres-enter book-pres-enter--${incomingTransition}`,
-              )}
-              style={
-                runSlideEnterAnimation
-                  ? { animationDuration: `${transitionMs}ms` }
-                  : undefined
-              }
-            >
-              <BookSlideCanvas
-                pageWidth={slideW}
-                pageHeight={slideH}
-                pageBackgroundColor={
-                  typeof page.backgroundColor === "string" && page.backgroundColor.trim()
-                    ? page.backgroundColor.trim()
-                    : DEFAULT_PAGE_BACKGROUND
-                }
-                scale={displayScale}
-                elements={page.elements}
-                mode="view"
-                selectedIds={[]}
-                onSelect={() => undefined}
-                onElementChange={() => undefined}
-                onVideoDurationKnown={onVideoDurationKnown}
-              />
-            </div>
+          {slideStage != null ? (
+            isBrowserFullscreen && fsFitMode === "cover" ? (
+              <div className="flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
+                {slideStage}
+              </div>
+            ) : isBrowserFullscreen && fsFitMode === "fill" && fillStretch != null ? (
+              <div className="flex h-full w-full min-h-0 min-w-0 items-center justify-center overflow-hidden">
+                <div
+                  style={{
+                    transform: `scale(${fillStretch.sx}, ${fillStretch.sy})`,
+                    transformOrigin: "center center",
+                  }}
+                >
+                  {slideStage}
+                </div>
+              </div>
+            ) : (
+              slideStage
+            )
           ) : null}
         </div>
       </div>
     </div>
   );
 
-  return createPortal(shell, document.body);
+  return createPortal(
+    <>
+      {shell}
+      <Dialog
+        open={fsDialogOpen}
+        onOpenChange={(open) => {
+          setFsDialogOpen(open);
+          if (open) setFsFitDraft(fsFitMode);
+        }}
+      >
+        <DialogContent
+          overlayClassName="z-[10001]"
+          className="z-[10002] sm:max-w-md"
+          showCloseButton
+        >
+          <DialogHeader>
+            <DialogTitle>슬라이드 전체 화면</DialogTitle>
+            <DialogDescription>
+              화면에 맞추는 방식을 고른 뒤 시작합니다. 나가려면 Esc 키를 누르세요.
+            </DialogDescription>
+          </DialogHeader>
+          <RadioGroup
+            value={fsFitDraft}
+            onValueChange={(v) =>
+              setFsFitDraft(v as BookCanvasDisplayFitMode)
+            }
+            className="grid gap-3"
+          >
+            <div className="flex items-start gap-3 rounded-lg border border-border/80 p-3">
+              <RadioGroupItem value="contain" id="pres-fs-contain" className="mt-0.5" />
+              <div className="grid gap-0.5">
+                <Label htmlFor="pres-fs-contain" className="cursor-pointer font-medium">
+                  맞춤(contain)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  슬라이드 전체가 보이도록 맞춥니다. 화면 비율에 따라 여백이 생길 수 있습니다.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 rounded-lg border border-border/80 p-3">
+              <RadioGroupItem value="cover" id="pres-fs-cover" className="mt-0.5" />
+              <div className="grid gap-0.5">
+                <Label htmlFor="pres-fs-cover" className="cursor-pointer font-medium">
+                  덮기(cover)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  화면을 가득 채우도록 확대합니다. 비율이 다르면 가장자리가 잘릴 수 있습니다.
+                </p>
+              </div>
+            </div>
+            <div className="flex items-start gap-3 rounded-lg border border-border/80 p-3">
+              <RadioGroupItem value="fill" id="pres-fs-fill" className="mt-0.5" />
+              <div className="grid gap-0.5">
+                <Label htmlFor="pres-fs-fill" className="cursor-pointer font-medium">
+                  꽉 채우기(fill)
+                </Label>
+                <p className="text-xs text-muted-foreground">
+                  화면 비율에 맞게 늘려서 빈틈 없이 채웁니다. 가로·세로 비율이 달라지면 왜곡될 수 있습니다.
+                </p>
+              </div>
+            </div>
+          </RadioGroup>
+          <div className="flex flex-col-reverse gap-2 pt-2 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setFsDialogOpen(false)}
+            >
+              취소
+            </Button>
+            <Button type="button" onClick={confirmEnterFullscreen}>
+              전체 화면 시작
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>,
+    document.body,
+  );
 }
 
 export function BookPresentationPage() {

@@ -11,7 +11,21 @@ import {
 } from "react";
 import { getBookImageIfReady, loadBookImage } from "@/lib/book-image-cache";
 import { createPortal } from "react-dom";
-import { Group, Image as KonvaImage, Layer, Line, Rect, Stage, Transformer } from "react-konva";
+import {
+  Arc,
+  Arrow,
+  Ellipse,
+  Group,
+  Image as KonvaImage,
+  Layer,
+  Line,
+  Rect,
+  RegularPolygon,
+  Ring,
+  Stage,
+  Star,
+  Transformer,
+} from "react-konva";
 import type Konva from "konva";
 import { FolderOpen, Library, Pause, Play, Square } from "lucide-react";
 import {
@@ -32,11 +46,13 @@ import {
   resolveBookElementOutlineWidth,
   resolveBookElementRotation,
   snapKonvaBookNodePositionToGrid,
+  BOOK_SHAPE_KINDS,
   buildBookDrawingElement,
   isBookElementLocked,
   isBookElementVisible,
   resolveMediaPlaylistShowControls,
   type BookCanvasElement,
+  type BookShapeKind,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
 import { publicAssetUrl } from "@/lib/api";
@@ -104,6 +120,9 @@ export const BOOK_WIDGET_DRAG_TYPE = "application/x-book-widget";
 /** 미디어 라이브러리에서 슬라이드로 드래그할 때 사용 */
 export const BOOK_LIBRARY_DRAG_TYPE = "application/x-book-library-media";
 
+/** Elements 패널 도형 → 슬라이드 드롭 */
+export const BOOK_SHAPE_DRAG_TYPE = "application/x-book-shape";
+
 export type BookLibraryDragPayload = {
   kind: "image" | "video";
   src: string;
@@ -135,6 +154,46 @@ export function parseLibraryDropPayload(
   }
 }
 
+export function setShapeDragData(
+  e: DragEvent<HTMLElement>,
+  shapeKind: BookShapeKind,
+): void {
+  e.dataTransfer.setData(BOOK_SHAPE_DRAG_TYPE, JSON.stringify({ shapeKind }));
+  e.dataTransfer.setData("text/plain", `book-shape:${shapeKind}`);
+  e.dataTransfer.effectAllowed = "copy";
+}
+
+export function parseShapeDropPayload(
+  e: DragEvent<HTMLElement>,
+): BookShapeKind | null {
+  try {
+    const raw = e.dataTransfer.getData(BOOK_SHAPE_DRAG_TYPE);
+    if (raw) {
+      const o = JSON.parse(raw) as unknown;
+      if (o && typeof o === "object" && !Array.isArray(o)) {
+        const sk = (o as Record<string, unknown>).shapeKind;
+        if (
+          typeof sk === "string" &&
+          (BOOK_SHAPE_KINDS as readonly string[]).includes(sk)
+        ) {
+          return sk as BookShapeKind;
+        }
+      }
+    }
+  } catch {
+    /* ignore */
+  }
+  const plain = e.dataTransfer.getData("text/plain").trim();
+  const m = /^book-shape:([a-zA-Z][a-zA-Z0-9]*)$/.exec(plain);
+  if (
+    m &&
+    (BOOK_SHAPE_KINDS as readonly string[]).includes(m[1]!)
+  ) {
+    return m[1] as BookShapeKind;
+  }
+  return null;
+}
+
 /** 위젯 **중심**이 슬라이드 가로·세로 가운데에서 이 거리(논리 px) 안이면 기준선 표시 */
 export const DEFAULT_BOOK_SLIDE_CENTER_GUIDE_THRESHOLD_PX = 10;
 
@@ -164,6 +223,8 @@ type BookSlideCanvasProps = {
   onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
   /** 편집 모드에서 팔레트 위젯을 캔버스로 드롭 */
   onDropWidget?: (point: { x: number; y: number }, kind: BookDropWidgetKind) => void;
+  /** 편집 모드에서 Elements 도형을 캔버스로 드롭 */
+  onDropShape?: (point: { x: number; y: number }, shapeKind: BookShapeKind) => void;
   /** 편집 모드: 미디어 라이브러리에서 업로드된 URL을 슬라이드에 배치 */
   onDropLibraryMedia?: (
     point: { x: number; y: number },
@@ -728,6 +789,7 @@ export function BookSlideCanvas({
   onSelect,
   onElementChange,
   onDropWidget,
+  onDropShape,
   onDropLibraryMedia,
   onReorderZ,
   onDeleteElement,
@@ -1213,7 +1275,9 @@ export function BookSlideCanvas({
   const dropEnabled =
     mode === "edit" &&
     editInteractionTool === "default" &&
-    (Boolean(onDropWidget) || Boolean(onDropLibraryMedia));
+    (Boolean(onDropWidget) ||
+      Boolean(onDropLibraryMedia) ||
+      Boolean(onDropShape));
 
   const parseDropKind = (e: DragEvent): BookDropWidgetKind | null => {
     const raw =
@@ -1244,6 +1308,19 @@ export function BookSlideCanvas({
       const y = Math.max(0, Math.min(ly, pageHeight - 24));
       onDropLibraryMedia({ x, y }, lib);
       return;
+    }
+    if (onDropShape) {
+      const sk = parseShapeDropPayload(e);
+      if (sk) {
+        e.preventDefault();
+        const rect = e.currentTarget.getBoundingClientRect();
+        const lx = (e.clientX - rect.left) / scale;
+        const ly = (e.clientY - rect.top) / scale;
+        const x = Math.max(0, Math.min(lx, pageWidth));
+        const y = Math.max(0, Math.min(ly, pageHeight));
+        onDropShape({ x, y }, sk);
+        return;
+      }
     }
     if (!onDropWidget) return;
     e.preventDefault();
@@ -1440,6 +1517,22 @@ export function BookSlideCanvas({
                 return (
                   <BookImageShape
                     key={`${el.id}:${el.src}`}
+                    el={el}
+                    locked={locked}
+                    liveSync={shapeLiveSync}
+                    registerKonvaNode={registerKonvaNode}
+                    mode={mode}
+                    onSelect={onSelect}
+                    onElementChange={onElementChange}
+                    zMenuEnabled={elementContextMenuEnabled && !locked}
+                    onZMenu={(cx, cy) => openZMenu(el.id, cx, cy)}
+                  />
+                );
+              }
+              if (el.type === "shape") {
+                return (
+                  <BookShapeHitShape
+                    key={el.id}
                     el={el}
                     locked={locked}
                     liveSync={shapeLiveSync}
@@ -1872,6 +1965,469 @@ export function BookSlideCanvas({
         )
         : null}
     </div>
+  );
+}
+
+function BookShapeHitShape({
+  el,
+  locked,
+  liveSync,
+  registerKonvaNode,
+  mode,
+  onSelect,
+  onElementChange,
+  zMenuEnabled,
+  onZMenu,
+}: {
+  el: Extract<BookCanvasElement, { type: "shape" }>;
+  locked: boolean;
+  liveSync: BookShapeLiveSync;
+  registerKonvaNode: (elementId: string, node: Konva.Node | null) => void;
+  mode: "edit" | "view";
+  onSelect: (detail: BookCanvasSelectDetail) => void;
+  onElementChange: (id: string, patch: Partial<BookCanvasElement>) => void;
+  zMenuEnabled: boolean;
+  onZMenu: (clientX: number, clientY: number) => void;
+}) {
+  const basePivot = bookElementPivotKonva(el);
+  const tf = liveSync.transformLive?.id === el.id ? liveSync.transformLive : null;
+  const dg = liveSync.dragLive?.id === el.id ? liveSync.dragLive : null;
+  let fw = el.width;
+  let fh = el.height;
+  let gcx = basePivot.cx;
+  let gcy = basePivot.cy;
+  let grot = basePivot.rotation;
+  if (tf) {
+    fw = tf.width;
+    fh = tf.height;
+    gcx = tf.cx;
+    gcy = tf.cy;
+    grot = tf.rotation;
+  } else if (dg) {
+    gcx = dg.cx;
+    gcy = dg.cy;
+  }
+  const ox = -fw / 2;
+  const oy = -fh / 2;
+  const tOpacity = resolveBookElementOpacity(el.opacity);
+  const chromeBr = resolveBookElementBorderRadius(el);
+  const chromeOw = resolveBookElementOutlineWidth(el);
+  const chromeOc = resolveBookElementOutlineColor(el);
+  const showKonvaChromeOutline = mode === "edit" && chromeOw > 0;
+  const innerCr =
+    el.shapeKind === "rect" || el.shapeKind === "roundRect"
+      ? Math.min(
+        Math.max(0, el.cornerRadius ?? 0),
+        fw / 2,
+        fh / 2,
+      )
+      : 0;
+  const rawShapeSw = Number(el.strokeWidth);
+  const strokeW =
+    Number.isFinite(rawShapeSw) ? Math.min(32, Math.max(0, Math.round(rawShapeSw))) : 3;
+  const fill =
+    el.fill?.trim() && el.fill.trim() !== "transparent" ? el.fill : undefined;
+  const stroke =
+    strokeW > 0 ? (el.stroke?.trim() ? el.stroke.trim() : "#1e293b") : undefined;
+
+  const shapeBody = (() => {
+    if (
+      (el.shapeKind === "line" || el.shapeKind === "arrow" || el.shapeKind === "cross") &&
+      strokeW <= 0
+    ) {
+      return null;
+    }
+    switch (el.shapeKind) {
+      case "rect":
+      case "roundRect":
+        return (
+          <Rect
+            x={ox}
+            y={oy}
+            width={fw}
+            height={fh}
+            cornerRadius={innerCr}
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            listening={false}
+          />
+        );
+      case "ellipse":
+        return (
+          <Ellipse
+            x={0}
+            y={0}
+            radiusX={fw / 2}
+            radiusY={fh / 2}
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            listening={false}
+          />
+        );
+      case "line":
+        return (
+          <Line
+            points={[ox, 0, ox + fw, 0]}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            lineCap="round"
+            listening={false}
+          />
+        );
+      case "triangle":
+        return (
+          <Line
+            points={[0, oy, ox + fw, oy + fh, ox, oy + fh]}
+            closed
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            lineJoin="round"
+            listening={false}
+          />
+        );
+      case "rightTriangle":
+        return (
+          <Line
+            points={[ox, -oy, -ox, -oy, ox, oy]}
+            closed
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            lineJoin="round"
+            listening={false}
+          />
+        );
+      case "arrow": {
+        const ptr = Math.min(18, Math.max(8, fw * 0.12));
+        return (
+          <Arrow
+            points={[ox, 0, ox + fw, 0]}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            fill={stroke}
+            pointerLength={ptr}
+            pointerWidth={Math.min(16, ptr * 1.2)}
+            lineCap="round"
+            listening={false}
+          />
+        );
+      }
+      case "chevron": {
+        const inset = fw * 0.38;
+        return (
+          <Line
+            points={[
+              ox,
+              oy,
+              ox + inset,
+              oy,
+              -ox,
+              0,
+              ox + inset,
+              -oy,
+              ox,
+              -oy,
+            ]}
+            closed
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            lineJoin="round"
+            listening={false}
+          />
+        );
+      }
+      case "star": {
+        const r = Math.min(fw, fh);
+        return (
+          <Star
+            x={0}
+            y={0}
+            numPoints={5}
+            innerRadius={r * 0.22}
+            outerRadius={r * 0.48}
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            listening={false}
+          />
+        );
+      }
+      case "diamond":
+        return (
+          <Line
+            points={[0, oy, -ox, 0, 0, -oy, ox, 0]}
+            closed
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            lineJoin="round"
+            listening={false}
+          />
+        );
+      case "hexagon":
+        return (
+          <RegularPolygon
+            x={0}
+            y={0}
+            sides={6}
+            radius={Math.min(fw, fh) / 2}
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            listening={false}
+          />
+        );
+      case "pentagon":
+        return (
+          <RegularPolygon
+            x={0}
+            y={0}
+            sides={5}
+            radius={Math.min(fw, fh) / 2}
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            listening={false}
+          />
+        );
+      case "octagon":
+        return (
+          <RegularPolygon
+            x={0}
+            y={0}
+            sides={8}
+            radius={Math.min(fw, fh) / 2}
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            listening={false}
+          />
+        );
+      case "trapezoid": {
+        const inset = fw * 0.2;
+        return (
+          <Line
+            points={[
+              ox + inset,
+              oy,
+              -ox - inset,
+              oy,
+              -ox,
+              -oy,
+              ox,
+              -oy,
+            ]}
+            closed
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            lineJoin="round"
+            listening={false}
+          />
+        );
+      }
+      case "parallelogram": {
+        const skew = fw * 0.28;
+        return (
+          <Line
+            points={[
+              ox + skew,
+              oy,
+              -ox + skew,
+              oy,
+              -ox,
+              -oy,
+              ox,
+              -oy,
+            ]}
+            closed
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            lineJoin="round"
+            listening={false}
+          />
+        );
+      }
+      case "ring": {
+        const r = Math.min(fw, fh) / 2;
+        return (
+          <Ring
+            x={0}
+            y={0}
+            innerRadius={Math.max(2, r * 0.5)}
+            outerRadius={Math.max(4, r * 0.92)}
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            listening={false}
+          />
+        );
+      }
+      case "blockArc": {
+        const r = Math.min(fw, fh) / 2;
+        return (
+          <Arc
+            x={0}
+            y={0}
+            innerRadius={Math.max(3, r * 0.45)}
+            outerRadius={Math.max(6, r * 0.96)}
+            angle={250}
+            rotation={-125}
+            fill={fill ?? "transparent"}
+            stroke={stroke}
+            strokeWidth={strokeW}
+            listening={false}
+          />
+        );
+      }
+      case "plus": {
+        const t = Math.min(fw, fh) * 0.24;
+        return (
+          <>
+            <Rect
+              x={ox}
+              y={-t / 2}
+              width={fw}
+              height={t}
+              fill={fill ?? "transparent"}
+              stroke={stroke}
+              strokeWidth={strokeW}
+              listening={false}
+            />
+            <Rect
+              x={-t / 2}
+              y={oy}
+              width={t}
+              height={fh}
+              fill={fill ?? "transparent"}
+              stroke={stroke}
+              strokeWidth={strokeW}
+              listening={false}
+            />
+          </>
+        );
+      }
+      case "cross":
+        return (
+          <>
+            <Line
+              points={[ox, oy, -ox, -oy]}
+              stroke={stroke}
+              strokeWidth={strokeW}
+              lineCap="round"
+              listening={false}
+            />
+            <Line
+              points={[-ox, oy, ox, -oy]}
+              stroke={stroke}
+              strokeWidth={strokeW}
+              lineCap="round"
+              listening={false}
+            />
+          </>
+        );
+      default:
+        return null;
+    }
+  })();
+
+  return (
+    <Group
+      ref={(node) => {
+        registerKonvaNode(el.id, node);
+      }}
+      x={gcx}
+      y={gcy}
+      rotation={grot}
+      scaleX={tf ? 1 : undefined}
+      scaleY={tf ? 1 : undefined}
+      opacity={tOpacity}
+      clipFunc={(ctx) => {
+        canvasRoundRectPath(ctx as never, ox, oy, fw, fh, chromeBr);
+      }}
+      draggable={mode === "edit" && !locked}
+      onMouseDown={(e) => {
+        if (mode !== "edit") return;
+        e.cancelBubble = true;
+        onSelect({ id: el.id, shiftKey: e.evt.shiftKey });
+      }}
+      onContextMenu={
+        zMenuEnabled
+          ? (e) => {
+            e.cancelBubble = true;
+            e.evt.preventDefault();
+            onZMenu(e.evt.clientX, e.evt.clientY);
+          }
+          : undefined
+      }
+      onDragStart={
+        locked ? undefined : (e) => liveSync.onDragLiveStart(el.id, e.target)
+      }
+      onDragMove={
+        locked ? undefined : (e) => liveSync.onDragMoveSnapGrid(el.id, e.target, fw, fh)
+      }
+      onDragEnd={
+        locked
+          ? undefined
+          : (e) => {
+            liveSync.commitDragEndPosition(el.id, e.target as Konva.Node, fw, fh);
+          }
+      }
+      onTransformStart={
+        locked ? undefined : (e) => liveSync.onTransformLiveStart(el.id, e.target)
+      }
+      onTransform={
+        locked
+          ? undefined
+          : (e) => {
+            bakeKonvaBookWidgetGroupDuringTransform(e.target as Konva.Group);
+            liveSync.onTransformLiveMove(el.id, e.target);
+          }
+      }
+      onTransformEnd={
+        locked
+          ? undefined
+          : (e) => {
+            commitBookWidgetHitShellTransformEnd(
+              e,
+              el.id,
+              24,
+              24,
+              liveSync,
+              onElementChange,
+            );
+          }
+      }
+    >
+      {shapeBody}
+      {showKonvaChromeOutline ? (
+        <Rect
+          x={ox}
+          y={oy}
+          width={fw}
+          height={fh}
+          cornerRadius={chromeBr}
+          fillEnabled={false}
+          stroke={chromeOc}
+          strokeWidth={chromeOw}
+          listening={false}
+        />
+      ) : null}
+      <Rect
+        name={KONVA_BOOK_WIDGET_HIT_RECT_NAME}
+        x={ox}
+        y={oy}
+        width={fw}
+        height={fh}
+        cornerRadius={chromeBr}
+        fill="rgba(0,0,0,0.01)"
+      />
+    </Group>
   );
 }
 

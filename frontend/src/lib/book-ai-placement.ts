@@ -30,6 +30,10 @@ export type BookLayoutAiAddWidgetAction = {
   imageHeight?: number;
   videoWidth?: number;
   videoHeight?: number;
+  x?: number;
+  y?: number;
+  width?: number;
+  height?: number;
 };
 
 export type BookLayoutAiReplaceWidgetMediaAction = {
@@ -144,6 +148,36 @@ function imageBoxSize(
     w: Math.max(80, Math.round(w * scale)),
     h: Math.max(60, Math.round(h * scale)),
   };
+}
+
+function hasExplicitGeometry(a: BookLayoutAiAddWidgetAction): boolean {
+  return (
+    typeof a.x === "number" &&
+    Number.isFinite(a.x) &&
+    typeof a.y === "number" &&
+    Number.isFinite(a.y) &&
+    typeof a.width === "number" &&
+    Number.isFinite(a.width) &&
+    typeof a.height === "number" &&
+    Number.isFinite(a.height)
+  );
+}
+
+function clampPlacementBox(
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+  slideW: number,
+  slideH: number,
+): { x: number; y: number; w: number; h: number } {
+  const minW = 24;
+  const minH = 16;
+  const w = Math.min(slideW, Math.max(minW, Math.round(width)));
+  const h = Math.min(slideH, Math.max(minH, Math.round(height)));
+  const xi = Math.min(Math.max(0, Math.round(x)), Math.max(0, slideW - w));
+  const yi = Math.min(Math.max(0, Math.round(y)), Math.max(0, slideH - h));
+  return { x: xi, y: yi, w, h };
 }
 
 function widgetSize(
@@ -327,12 +361,25 @@ export function widgetPlacementsFromLayoutAiActions(
       if (!src || !/^https:\/\//i.test(src)) continue;
     }
 
-    const { w, h } = widgetSize(a);
-    const base = anchorToTopLeft(a.anchor, slideW, slideH, w, h);
-    const x = base.x + stack * 16;
-    const y = base.y + stack * 16;
-    stack += 1;
-    const snapped = snapBookElementTopLeftToGrid(x, y, gridPx);
+    const explicit = hasExplicitGeometry(a);
+    let w: number;
+    let h: number;
+    let snapped: { x: number; y: number };
+    if (explicit) {
+      const box = clampPlacementBox(a.x!, a.y!, a.width!, a.height!, slideW, slideH);
+      w = box.w;
+      h = box.h;
+      snapped = snapBookElementTopLeftToGrid(box.x, box.y, gridPx);
+    } else {
+      const wh = widgetSize(a);
+      w = wh.w;
+      h = wh.h;
+      const base = anchorToTopLeft(a.anchor, slideW, slideH, w, h);
+      const x = base.x + stack * 16;
+      const y = base.y + stack * 16;
+      stack += 1;
+      snapped = snapBookElementTopLeftToGrid(x, y, gridPx);
+    }
     const id = crypto.randomUUID();
     const targetSlideNumber = widgetTargetSlideNumber(a);
 
@@ -422,7 +469,12 @@ export function widgetPlacementsFromLayoutAiActions(
         ? Math.round(a.fontSize)
         : DEFAULT_TEXT_FONT;
     const plain = a.text?.trim() || "텍스트를 입력하세요";
-    const safe = escapeRichText(plain);
+    const safeHtmlBody = plain
+      .split("\n")
+      .map((line) => escapeRichText(line))
+      .join("<br/>");
+    const textW = explicit ? w : 480;
+    const textH = explicit ? h : defaultTextWidgetBoxHeight(fs);
     out.push({
       element: {
         id,
@@ -430,11 +482,11 @@ export function widgetPlacementsFromLayoutAiActions(
         x: snapped.x,
         y: snapped.y,
         text: plain,
-        richHtml: `<p>${safe}</p>`,
+        richHtml: `<p>${safeHtmlBody}</p>`,
         fontSize: fs,
         fill: "#111827",
-        width: 480,
-        height: defaultTextWidgetBoxHeight(fs),
+        width: textW,
+        height: textH,
       },
       targetSlideNumber,
     });

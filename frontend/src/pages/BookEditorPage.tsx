@@ -7,7 +7,9 @@ import { createBook, type BookCanvasElement } from "@/lib/api";
 import {
   applyAutoSlideNamesByIndex,
   BOOK_CANVAS_DRAG_GRID_PX,
+  createBookShapeElement,
   createEmptyEditorPage,
+  placeBookShapeElementAtPointer,
   DEFAULT_BOOK_DIGITAL_CLOCK_HEIGHT,
   DEFAULT_BOOK_DIGITAL_CLOCK_WIDTH,
   DEFAULT_BOOK_NEWS_WIDGET_HEIGHT,
@@ -27,6 +29,7 @@ import {
   reorderPagesArray,
   resolveEffectivePresentationTimingElementId,
   toBookPagePayloads,
+  type BookShapeKind,
   type ElementZOrderOp,
 } from "@/lib/book-canvas";
 import {
@@ -69,6 +72,7 @@ import {
   type BookDropWidgetKind,
 } from "@/components/books/BookSlideCanvas";
 import { BookEditorToolRail } from "@/components/books/BookEditorToolRail";
+import { BookElementsPanel } from "@/components/books/BookElementsPanel";
 import { BookSlideDrawingPanel } from "@/components/books/BookSlideDrawingPanel";
 import { BookSlideTemplatesPanel } from "@/components/books/BookSlideTemplatesPanel";
 import { BookAiAssistantPanel } from "@/components/books/BookAiAssistantPanel";
@@ -488,6 +492,34 @@ export function BookEditorPage() {
       setSelectedIds([el.id]);
     },
     [activePageIndex, updatePages],
+  );
+
+  const onAddShapeFromElementsPanel = useCallback(
+    (kind: BookShapeKind) => {
+      const el = createBookShapeElement(kind, slideWidth, slideHeight);
+      onAppendDrawingElement(el);
+    },
+    [onAppendDrawingElement, slideHeight, slideWidth],
+  );
+
+  const addShapeAt = useCallback(
+    (x: number, y: number, kind: BookShapeKind) => {
+      const base = createBookShapeElement(kind, slideWidth, slideHeight);
+      const placed = placeBookShapeElementAtPointer(base, x, y, slideWidth, slideHeight);
+      updatePages((draft) => {
+        const p = draft[activePageIndex];
+        if (p) p.elements.push(placed);
+      });
+      setSelectedIds([placed.id]);
+    },
+    [activePageIndex, slideHeight, slideWidth, updatePages],
+  );
+
+  const onDropShape = useCallback(
+    (point: { x: number; y: number }, kind: BookShapeKind) => {
+      addShapeAt(point.x, point.y, kind);
+    },
+    [addShapeAt],
   );
 
   const updateCurrentPageName = useCallback(
@@ -1012,6 +1044,12 @@ export function BookEditorPage() {
                   onApplyTemplate={applySlideTemplate}
                 />
               ) : null}
+              {leftDockTab === "elements" ? (
+                <BookElementsPanel
+                  className="min-h-0 flex-1"
+                  onAddShape={onAddShapeFromElementsPanel}
+                />
+              ) : null}
               {leftDockTab === "drawing" ? (
                 <BookSlideDrawingPanel
                   className="min-h-0 flex-1"
@@ -1072,6 +1110,7 @@ export function BookEditorPage() {
                     onSelect={handleCanvasSelect}
                     onElementChange={onElementChange}
                     onDropWidget={onDropWidget}
+                    onDropShape={onDropShape}
                     onReorderZ={onReorderZ}
                     onDeleteElement={requestRemoveWidget}
                     centerGuideThresholdPx={centerGuideThresholdPx}

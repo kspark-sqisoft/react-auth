@@ -10,6 +10,9 @@ import {
 const MIN_USER_ZOOM = 0.25;
 const MAX_USER_ZOOM = 4;
 
+/** 슬라이드를 뷰포트 안에 넣는 방식(미리보기 전체 화면 등). */
+export type BookCanvasDisplayFitMode = "contain" | "cover" | "fill";
+
 /**
  * 북 편집 스테이지(`BookDetailPage`·`BookEditorPage`)와 슬라이드쇰 미리보기에서 같은 맞춤 규칙을 쓰면
  * `BookSlideCanvas` 논리 좌표·텍스트 HTML 오버레이가 동일 배율로 그려진다.
@@ -53,6 +56,10 @@ export function useBookCanvasDisplayScale(
      * 맞춤 배율 상한(기본 1). 미리보기에서 뷰포트가 슬라이드 논리 크기보다 크면 1 초과로 확대해 화면을 채움.
      */
     maxFitScale?: number;
+    /**
+     * contain: 전체가 보이도록 축소(여백 가능). cover: 뷰를 덮도록 확대(잘림). fill: 비율 무시로 뷰를 꽉 채움(추가 CSS 스케일).
+     */
+    fitMode?: BookCanvasDisplayFitMode;
   },
 ) {
   const {
@@ -62,25 +69,39 @@ export function useBookCanvasDisplayScale(
     symmetricVerticalPad,
     horizontalPad = 48,
     maxFitScale = 1,
+    fitMode = "contain",
   } = opts;
   const [fitScale, setFitScale] = useState(0.55);
   const [zoomMul, setZoomMul] = useState(1);
   const [, bumpFitLayout] = useReducer((n: number) => n + 1, 0);
+  const [layoutAvail, setLayoutAvail] = useState({ w: 0, h: 0 });
 
   const measureFitScale = useCallback(() => {
     const el = wrapRef.current;
     if (!el) return;
     const cr = el.getBoundingClientRect();
+    const cs = getComputedStyle(el);
+    const pl = Number.parseFloat(cs.paddingLeft) || 0;
+    const pr = Number.parseFloat(cs.paddingRight) || 0;
+    const pt = Number.parseFloat(cs.paddingTop) || 0;
+    const pb = Number.parseFloat(cs.paddingBottom) || 0;
+    const contentW = Math.max(0, el.clientWidth - pl - pr);
+    const contentH = Math.max(0, el.clientHeight - pt - pb);
+    const boxW = contentW > 0 ? contentW : cr.width;
+    const boxH = contentH > 0 ? contentH : cr.height;
     const verticalDeduction =
       symmetricVerticalPad != null
         ? 2 * symmetricVerticalPad
         : bottomPad;
-    const s = Math.min(
-      (cr.width - horizontalPad) / slideWidth,
-      (cr.height - verticalDeduction) / slideHeight,
-      maxFitScale,
-    );
-    setFitScale(Math.max(0.22, Math.min(s, maxFitScale)));
+    const availW = Math.max(1, boxW - horizontalPad);
+    const availH = Math.max(1, boxH - verticalDeduction);
+    const sx = availW / slideWidth;
+    const sy = availH / slideHeight;
+    const base =
+      fitMode === "cover" ? Math.max(sx, sy) : Math.min(sx, sy);
+    const s = Math.max(0.22, Math.min(base, maxFitScale));
+    setFitScale(s);
+    setLayoutAvail({ w: availW, h: availH });
   }, [
     wrapRef,
     slideWidth,
@@ -89,6 +110,7 @@ export function useBookCanvasDisplayScale(
     symmetricVerticalPad,
     horizontalPad,
     maxFitScale,
+    fitMode,
   ]);
 
   useLayoutEffect(() => {
@@ -98,7 +120,7 @@ export function useBookCanvasDisplayScale(
     const ro = new ResizeObserver(() => measureFitScale());
     ro.observe(el);
     return () => ro.disconnect();
-  }, [measureFitScale]);
+  }, [measureFitScale, wrapRef]);
 
   const displayScale = fitScale * zoomMul;
 
@@ -133,5 +155,14 @@ export function useBookCanvasDisplayScale(
     [zoomIn, zoomOut],
   );
 
-  return { displayScale, zoomPercent, zoomIn, zoomOut, zoomReset, handleWheel };
+  return {
+    displayScale,
+    zoomPercent,
+    zoomIn,
+    zoomOut,
+    zoomReset,
+    handleWheel,
+    layoutAvail,
+    fitMode,
+  };
 }

@@ -64,6 +64,7 @@ function bookElementTimingLabel(el: BookCanvasElement, displayIndex: number): st
     digitalClock: "디지털 시계",
     news: "뉴스",
     drawing: "그리기",
+    shape: "도형",
   };
   const kind = typeKo[el.type] ?? el.type;
   return `${displayIndex + 1}. ${kind}`;

@@ -173,7 +173,7 @@ erDiagram
 | `ChatMessage` | `chat_message` | roomId, authorId, body, 인덱스(roomId, createdAt) |
 | `Cat` | `study_cats` | name, age, breed |
 
-> **북 캔버스 요소**는 `BookPage.elementsJson`에 JSON 배열로 저장됩니다. 타입·필드 정의는 프론트 `book-canvas.ts` 및 백엔드 `books.service` 검증 로직과 맞춥니다.
+> **북 캔버스 요소**는 `BookPage.elementsJson`에 JSON 배열로 저장됩니다. 타입·필드 정의는 프론트 `book-canvas.ts` 및 백엔드 `books.service` 검증 로직과 맞춥니다. 요소 `type`에는 `text`·`image`·`video`·위젯류·`drawing`·**`shape`**(파워포인트식 기본 도형 다수 — 둥근 사각·사다리꼴·평행사변형·쉐브론·호·플러스·X 등, Konva)가 포함됩니다. `shape`의 `strokeWidth`는 0~32이며 **0이면 테두리 없음**(면이 있는 도형만 채만 보임; `line`·`arrow`·`cross`는 0이면 화면에 안 보임).
 
 ---
 
@@ -299,7 +299,7 @@ flowchart TB
 | `/books` | `BookListPage` | 무한 스크롤 UI이나 API는 **`skip`/`take`/`total`** (6.3절) |
 | `/books/new` | `BookEditorPage` | 로그인 필요, 저장 후 상세로 이동 가능 |
 | `/books/:id` | `BookDetailPage` | 공개 URL; 작성자면 편집 UI, 비작성자는 보기·레이어 패널·**미리보기(슬라이드쇼)** |
-| `/books/:id/preview` | `BookPresentationPage` | 공개; 전체 화면 슬라이드쇼(작성자 여부 무관). 페이지별 **전환 효과**(none·fade·slide·zoom·blur 등)는 `BookPage`에 저장, `book-presentation-transitions.css`로 재생. 맞춤·줌은 `BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS` — 편집 스테이지는 `BOOK_CANVAS_STAGE_DISPLAY_OPTS`(maxFit 1) |
+| `/books/:id/preview` | `BookPresentationPage` | 공개; 헤더가 있는 창 모드 + **브라우저 전체 화면**(슬라이드 영역만 `requestFullscreen`; 헤더 미포함). 전체 화면 진입 전 다이얼로그에서 **맞춤(contain)·덮기(cover)·꽉 채우기(fill)** 선택. Esc로 전체 화면 종료. 페이지별 **전환 효과**는 `BookPage`에 저장, `book-presentation-transitions.css`로 재생. 맞춤·줌은 `BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS`·`useBookCanvasDisplayFitMode` — 편집 스테이지는 `BOOK_CANVAS_STAGE_DISPLAY_OPTS`(maxFit 1, contain) |
 | `/books/:id/edit` | → `/books/:id` 리다이렉트 | 레거시 |
 | `/me` | `MyInfoPage` | |
 | `/cats`, `/cats/:id` | Cats 데모 | |
@@ -377,6 +377,8 @@ sequenceDiagram
 
 > OpenAI 요청에 **이전 대화를 넣지 않으므로**, DB에 기록만 해도 **토큰 사용량은 늘지 않습니다.** (향후 “기억”을 모델에 넣으면 그때 입력 토큰이 증가합니다.)
 
+시스템 프롬프트에는 `backend/src/books/book-ai-user-guide.ts`에 정리한 **사실 기반 사용자 가이드**(지원 미디어 MIME·용량, `/preview`, 전환·템플릿, 위젯 종류, AI가 할 수 있는 액션 한계 등)가 포함되어, “지원 포맷이 뭐야?” 같은 **기능 문의**에도 한국어로 답할 수 있게 한다. 레이아웃 AI의 `add_widget`은 선택적으로 **x, y, width, height**(슬라이드 논리 px)를 받아 격자·**강의 시간표**·**디지털 사이니지**(메뉴보드·공지·프로모 등)처럼 여러 텍스트·이미지·시계·날씨 위젯을 한 화면에 구성할 수 있다. 가이드·프롬프트 내용은 제품과 어긋나면 안 되므로 스펙 변경 시 해당 파일을 함께 수정한다.
+
 ### 7.4 채팅(WebSocket)
 
 ```mermaid
@@ -409,6 +411,7 @@ mindmap
       썸네일
     캔버스
       텍스트·이미지·비디오·날씨·시계·뉴스
+      Elements 도형(Konva)
       그리기 레이어
       정렬·가이드
     속성
@@ -428,11 +431,14 @@ mindmap
 | 상세·편집 통합 | `pages/BookDetailPage.tsx` |
 | 신규 북 | `pages/BookEditorPage.tsx` |
 | 슬라이드 캔버스 | `components/books/BookSlideCanvas.tsx` |
+| Elements(도형) 패널 | `components/books/BookElementsPanel.tsx` — 왼쪽 툴레일 **Elements** 탭; 위젯 팔레트와 같이 **슬라이드로 드래그**해 놓거나 클릭해 가운데 추가 (`BOOK_SHAPE_DRAG_TYPE` / `onDropShape`) |
 | AI 패널 | `components/books/BookAiAssistantPanel.tsx` |
 | 캔버스 타입·도구 | `lib/book-canvas.ts`, `lib/book-text-widget.ts` |
 | 슬라이드 템플릿(사이니지) | `lib/book-slide-templates.ts` — 카테고리: 메뉴·공지·**실생활**·뉴스·비주얼 |
 | 슬라이드쇼 전환 | `lib/book-presentation-transition.ts`, `book-presentation-transitions.css` |
 | AI 배치 해석 | `lib/book-ai-placement.ts` |
+
+백엔드 레이아웃 AI 시스템 프롬프트·가이드 문구: `backend/src/books/book-ai.service.ts`, `backend/src/books/book-ai-user-guide.ts`.
 
 ---
 

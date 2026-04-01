@@ -235,6 +235,46 @@ export type BookCanvasElementPublic =
       rotation?: number;
       visible?: boolean;
       locked?: boolean;
+    }
+  | {
+      id: string;
+      type: 'shape';
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      shapeKind:
+        | 'rect'
+        | 'roundRect'
+        | 'ellipse'
+        | 'line'
+        | 'triangle'
+        | 'rightTriangle'
+        | 'arrow'
+        | 'chevron'
+        | 'star'
+        | 'diamond'
+        | 'hexagon'
+        | 'pentagon'
+        | 'octagon'
+        | 'trapezoid'
+        | 'parallelogram'
+        | 'ring'
+        | 'blockArc'
+        | 'plus'
+        | 'cross';
+      fill: string;
+      stroke: string;
+      strokeWidth: number;
+      cornerRadius?: number;
+      opacity?: number;
+      rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
+      presentationHoldSec?: number;
     };
 
 export type BookPagePublic = {
@@ -468,7 +508,8 @@ export class BooksService {
         o.type !== 'digitalClock' &&
         o.type !== 'news' &&
         o.type !== 'mediaPlaylist' &&
-        o.type !== 'drawing'
+        o.type !== 'drawing' &&
+        o.type !== 'shape'
       ) {
         throw new BadRequestException('지원하지 않는 요소 타입입니다.');
       }
@@ -1059,6 +1100,86 @@ export class BooksService {
             'mediaPlaylistShowControls은 true 또는 false여야 합니다.',
           );
         }
+      } else if (o.type === 'shape') {
+        const w = o.width;
+        const h = o.height;
+        if (
+          typeof w !== 'number' ||
+          typeof h !== 'number' ||
+          w < 10 ||
+          h < 10 ||
+          w > 4000 ||
+          h > 4000
+        ) {
+          throw new BadRequestException('도형 크기가 올바르지 않습니다.');
+        }
+        const allowed = new Set([
+          'rect',
+          'roundRect',
+          'ellipse',
+          'line',
+          'triangle',
+          'rightTriangle',
+          'arrow',
+          'chevron',
+          'star',
+          'diamond',
+          'hexagon',
+          'pentagon',
+          'octagon',
+          'trapezoid',
+          'parallelogram',
+          'ring',
+          'blockArc',
+          'plus',
+          'cross',
+        ]);
+        if (typeof o.shapeKind !== 'string' || !allowed.has(o.shapeKind)) {
+          throw new BadRequestException('도형 종류가 올바르지 않습니다.');
+        }
+        if (typeof o.fill !== 'string' || o.fill.length > 40) {
+          throw new BadRequestException('도형 fill 색이 올바르지 않습니다.');
+        }
+        if (/[<>]/.test(o.fill) || /url\s*\(/i.test(o.fill)) {
+          throw new BadRequestException(
+            '도형 fill에 허용되지 않는 문자가 있습니다.',
+          );
+        }
+        if (typeof o.stroke !== 'string' || o.stroke.length > 40) {
+          throw new BadRequestException('도형 stroke 색이 올바르지 않습니다.');
+        }
+        if (/[<>]/.test(o.stroke) || /url\s*\(/i.test(o.stroke)) {
+          throw new BadRequestException(
+            '도형 stroke에 허용되지 않는 문자가 있습니다.',
+          );
+        }
+        const sw = o.strokeWidth;
+        if (
+          typeof sw !== 'number' ||
+          sw < 0 ||
+          sw > 32 ||
+          !Number.isFinite(sw)
+        ) {
+          throw new BadRequestException(
+            '도형 strokeWidth가 올바르지 않습니다.',
+          );
+        }
+        if (
+          (o.shapeKind === 'rect' || o.shapeKind === 'roundRect') &&
+          o.cornerRadius != null
+        ) {
+          const cr = o.cornerRadius;
+          if (
+            typeof cr !== 'number' ||
+            !Number.isFinite(cr) ||
+            cr < 0 ||
+            cr > 200
+          ) {
+            throw new BadRequestException(
+              '도형 cornerRadius가 올바르지 않습니다.',
+            );
+          }
+        }
       } else if (o.type === 'drawing') {
         const w = o.width;
         const h = o.height;
@@ -1324,7 +1445,9 @@ export class BooksService {
       return {
         sortOrder: p.sortOrder,
         name:
-          typeof p.name === 'string' ? p.name.trim().slice(0, PAGE_NAME_MAX) : '',
+          typeof p.name === 'string'
+            ? p.name.trim().slice(0, PAGE_NAME_MAX)
+            : '',
         backgroundColor: this.normalizePageBackgroundColor(p.backgroundColor),
         elements,
         presentationTimingElementId,

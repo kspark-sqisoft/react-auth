@@ -1,4 +1,4 @@
-import { Blocks, FileStack, ImagePlus, LayoutTemplate, Pencil } from "lucide-react";
+import { Blocks, FileStack, ImagePlus, LayoutTemplate, Pencil, Shapes } from "lucide-react";
 import type { BookEditorLeftTab } from "@/lib/book-editor-panel-events";
 import { Button } from "@/components/ui/button";
 import {
@@ -28,7 +28,7 @@ export type BookEditorToolRailProps = {
   mediaDisabledHint?: string;
 };
 
-/** 워크스페이스 최좌측 세로 탭 — 페이지 / 위젯 / 미디어 / 템플릿 / 드로잉 */
+/** 워크스페이스 최좌측 세로 탭 — 페이지 / 위젯 / 미디어 / 템플릿 / Elements / 드로잉 */
 export function BookEditorToolRail({
   className,
   activeTab,
@@ -106,6 +106,18 @@ export function BookEditorToolRail({
             onClick={() => onActiveTabChange("templates")}
           >
             <LayoutTemplate className="size-[22px]" aria-hidden />
+          </Button>
+        </RailTooltip>
+        <RailTooltip label="Elements — 사각형·화살표 등 도형 추가">
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            className={cn(railBtn, activeTab === "elements" && railBtnActive)}
+            aria-pressed={activeTab === "elements"}
+            onClick={() => onActiveTabChange("elements")}
+          >
+            <Shapes className="size-[22px]" aria-hidden />
           </Button>
         </RailTooltip>
         <RailTooltip label="드로잉 — 슬라이드에서 자유 곡선 그리기">

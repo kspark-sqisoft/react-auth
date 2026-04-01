@@ -19,10 +19,12 @@ import { publicAssetUrl } from "@/lib/api";
 import {
   BOOK_MEDIA_OBJECT_FIT_VALUES,
   BOOK_NEWS_CATEGORIES,
+  BOOK_SHAPE_KINDS,
   BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS,
   DEFAULT_MEDIA_PLAYLIST_IMAGE_DURATION_SEC,
   MEDIA_PLAYLIST_MAX_ITEMS,
   type BookCanvasElement,
+  type BookShapeKind,
   type BookMediaPlaylistItem,
   type BookDigitalClockDisplay,
   type BookDigitalClockDisplayResolved,
@@ -297,6 +299,104 @@ function InspectorPresentationTimingSection({
         elementId={el.id}
         value={el.presentationHoldSec}
         onChange={onChange}
+      />
+    </div>
+  );
+}
+
+function bookShapeKindLabelKo(k: BookShapeKind): string {
+  switch (k) {
+    case "rect":
+      return "사각형";
+    case "roundRect":
+      return "둥근 사각형";
+    case "ellipse":
+      return "타원";
+    case "line":
+      return "선";
+    case "triangle":
+      return "삼각형";
+    case "rightTriangle":
+      return "직각삼각형";
+    case "arrow":
+      return "화살표";
+    case "chevron":
+      return "쉐브론";
+    case "star":
+      return "별";
+    case "diamond":
+      return "마름모";
+    case "hexagon":
+      return "육각형";
+    case "pentagon":
+      return "오각형";
+    case "octagon":
+      return "팔각형";
+    case "trapezoid":
+      return "사다리꼴";
+    case "parallelogram":
+      return "평행사변형";
+    case "ring":
+      return "링";
+    case "blockArc":
+      return "블록 호";
+    case "plus":
+      return "더하기";
+    case "cross":
+      return "X자";
+    default:
+      return k;
+  }
+}
+
+/** `type="number"`는 빈 칸·자리수 수정이 어려워 텍스트 draft + blur 시 확정 */
+function InspectorStrokeWidthPxInput({
+  inputId,
+  label,
+  value,
+  min,
+  max,
+  onCommit,
+}: {
+  inputId: string;
+  label: string;
+  value: number;
+  min: number;
+  max: number;
+  onCommit: (n: number) => void;
+}) {
+  const [draft, setDraft] = useState(() => String(Math.round(value)));
+  return (
+    <div className="space-y-1">
+      <Label htmlFor={inputId}>{label}</Label>
+      <Input
+        id={inputId}
+        type="text"
+        inputMode="numeric"
+        autoComplete="off"
+        className="font-mono tabular-nums"
+        value={draft}
+        onChange={(e) => {
+          const t = e.target.value.replace(/\D/g, "").slice(0, 3);
+          setDraft(t);
+        }}
+        onBlur={() => {
+          if (draft.trim() === "") {
+            setDraft(String(Math.round(value)));
+            return;
+          }
+          const n = Number(draft);
+          if (!Number.isFinite(n)) {
+            setDraft(String(Math.round(value)));
+            return;
+          }
+          const clamped = Math.min(max, Math.max(min, Math.round(n)));
+          onCommit(clamped);
+          setDraft(String(clamped));
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur();
+        }}
       />
     </div>
   );
@@ -694,7 +794,9 @@ function ElementShapeChromeFields({
     el.type === "news" ||
     el.type === "mediaPlaylist"
       ? `저장하지 않으면 기본 ${BOOK_WIDGET_DEFAULT_ROUNDED_RADIUS}px(둥근 카드)입니다.`
-      : "텍스트·이미지·동영상은 기본 0(각진 모서리)입니다.";
+      : el.type === "shape"
+        ? "도형을 감싼 프레임(클립) 모서리입니다. 사각 도형 자체의 둥근 모서리는 인스펙터의 ‘모서리 둥글기’로 바꿉니다."
+        : "텍스트·이미지·동영상은 기본 0(각진 모서리)입니다.";
 
   return (
     <div className="space-y-2 border-t border-border pt-3">
@@ -1991,26 +2093,189 @@ export function BookInspectorPanel({
                         aria-label="선 색 직접 선택"
                       />
                     </div>
+                    <InspectorStrokeWidthPxInput
+                      key={`${selected.id}-insp-draw-sw-${Math.round(selected.strokeWidth)}`}
+                      inputId="insp-draw-sw"
+                      label="선 굵기 (px)"
+                      value={selected.strokeWidth}
+                      min={1}
+                      max={48}
+                      onCommit={(n) =>
+                        onChange(selected.id, { strokeWidth: n })
+                      }
+                    />
+                    <ElementOpacitySlider
+                      elementId={selected.id}
+                      opacity={selected.opacity}
+                      onChange={onChange}
+                    />
+                    <PositionSizeFields el={selected} onChange={onChange} />
+                  </>
+                ) : selected.type === "shape" ? (
+                  <>
                     <div className="space-y-1">
-                      <Label htmlFor="insp-draw-sw">선 굵기 (px)</Label>
-                      <Input
-                        id="insp-draw-sw"
-                        type="number"
-                        min={1}
-                        max={48}
-                        value={Math.round(selected.strokeWidth)}
-                        onChange={(e) =>
+                      <Label htmlFor="insp-shape-kind" className="text-xs text-muted-foreground">
+                        도형 종류
+                      </Label>
+                      <Select
+                        value={selected.shapeKind}
+                        onValueChange={(v) =>
                           onChange(selected.id, {
-                            strokeWidth: num(e.target.value, selected.strokeWidth, 1, 48),
+                            shapeKind: v as BookShapeKind,
                           })
                         }
+                      >
+                        <SelectTrigger id="insp-shape-kind" className="h-9">
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BOOK_SHAPE_KINDS.map((k) => (
+                            <SelectItem key={k} value={k}>
+                              {bookShapeKindLabelKo(k)}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {selected.shapeKind === "rect" ||
+                    selected.shapeKind === "roundRect" ? (
+                      <div className="space-y-1">
+                        <Label htmlFor="insp-shape-cr">모서리 둥글기 (px)</Label>
+                        <Input
+                          id="insp-shape-cr"
+                          type="number"
+                          min={0}
+                          max={200}
+                          value={Math.round(selected.cornerRadius ?? 0)}
+                          onChange={(e) =>
+                            onChange(selected.id, {
+                              cornerRadius: num(
+                                e.target.value,
+                                selected.cornerRadius ?? 0,
+                                0,
+                                200,
+                              ),
+                            })
+                          }
+                        />
+                      </div>
+                    ) : null}
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">면 색</Label>
+                      <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/25 p-1">
+                        {BOOK_HEX_COLOR_PRESETS.map((c) => {
+                          const fillNorm = (selected.fill ?? "")
+                            .trim()
+                            .replace(/\s/g, "")
+                            .toLowerCase();
+                          const active = fillNorm === c.toLowerCase();
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              title={c}
+                              aria-label={`면 색 ${c}`}
+                              aria-pressed={active}
+                              className={cn(
+                                "size-7 shrink-0 rounded-md border border-border shadow-sm ring-offset-background hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
+                                active && "ring-2 ring-primary ring-offset-2",
+                              )}
+                              style={{ backgroundColor: c }}
+                              onClick={() => onChange(selected.id, { fill: c })}
+                            />
+                          );
+                        })}
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Input
+                          type="color"
+                          className="h-9 w-14 shrink-0 cursor-pointer px-1"
+                          value={
+                            selected.fill.startsWith("#") && selected.fill.length >= 7
+                              ? selected.fill.slice(0, 7)
+                              : selected.fill === "transparent"
+                                ? "#cbd5e1"
+                                : "#94a3b8"
+                          }
+                          onChange={(e) => onChange(selected.id, { fill: e.target.value })}
+                          aria-label="면 색 직접 선택"
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-8 text-xs"
+                          onClick={() => onChange(selected.id, { fill: "transparent" })}
+                        >
+                          투명
+                        </Button>
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label className="text-xs text-muted-foreground">선 색</Label>
+                      <div className="flex flex-wrap gap-1 rounded-md border border-border bg-muted/25 p-1">
+                        {BOOK_HEX_COLOR_PRESETS.map((c) => {
+                          const strokeNorm = selected.stroke.trim().replace(/\s/g, "").toLowerCase();
+                          const active = strokeNorm === c.toLowerCase();
+                          return (
+                            <button
+                              key={c}
+                              type="button"
+                              title={c}
+                              aria-label={`선 색 ${c}`}
+                              aria-pressed={active}
+                              className={cn(
+                                "size-7 shrink-0 rounded-md border border-border shadow-sm ring-offset-background hover:scale-105 focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:outline-none",
+                                active && "ring-2 ring-primary ring-offset-2",
+                              )}
+                              style={{ backgroundColor: c }}
+                              onClick={() => onChange(selected.id, { stroke: c })}
+                            />
+                          );
+                        })}
+                      </div>
+                      <Input
+                        type="color"
+                        className="h-9 w-14 shrink-0 cursor-pointer px-1"
+                        value={
+                          selected.stroke.startsWith("#") && selected.stroke.length >= 7
+                            ? selected.stroke.slice(0, 7)
+                            : "#000000"
+                        }
+                        onChange={(e) => onChange(selected.id, { stroke: e.target.value })}
+                        aria-label="선 색 직접 선택"
                       />
+                    </div>
+                    <div className="flex flex-wrap items-end gap-2">
+                      <div className="min-w-0 flex-1">
+                        <InspectorStrokeWidthPxInput
+                          key={`${selected.id}-insp-shape-sw-${Math.round(selected.strokeWidth)}`}
+                          inputId="insp-shape-sw"
+                          label="선 굵기 (px) · 0이면 테두리 없음"
+                          value={selected.strokeWidth}
+                          min={0}
+                          max={32}
+                          onCommit={(n) =>
+                            onChange(selected.id, { strokeWidth: n })
+                          }
+                        />
+                      </div>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="h-9 shrink-0 text-xs"
+                        onClick={() => onChange(selected.id, { strokeWidth: 0 })}
+                      >
+                        선 없음
+                      </Button>
                     </div>
                     <ElementOpacitySlider
                       elementId={selected.id}
                       opacity={selected.opacity}
                       onChange={onChange}
                     />
+                    <ElementShapeChromeFields el={selected} onChange={onChange} />
                     <PositionSizeFields el={selected} onChange={onChange} />
                   </>
                 ) : selected.type === "image" ? (

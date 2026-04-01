@@ -289,6 +289,33 @@ export function resolveMediaPlaylistImageDurationSec(
   return DEFAULT_MEDIA_PLAYLIST_IMAGE_DURATION_SEC;
 }
 
+/** Konva 기본 도형(요소 패널에서 추가) */
+export const BOOK_SHAPE_KINDS = [
+  "rect",
+  "roundRect",
+  "ellipse",
+  "line",
+  "triangle",
+  "rightTriangle",
+  "arrow",
+  "chevron",
+  "star",
+  "diamond",
+  "hexagon",
+  "pentagon",
+  "octagon",
+  "trapezoid",
+  "parallelogram",
+  "ring",
+  "blockArc",
+  "plus",
+  "cross",
+] as const;
+export type BookShapeKind = (typeof BOOK_SHAPE_KINDS)[number];
+
+export const DEFAULT_BOOK_SHAPE_WIDTH = 200;
+export const DEFAULT_BOOK_SHAPE_HEIGHT = 120;
+
 export type BookCanvasElement =
   | {
       id: string;
@@ -496,7 +523,112 @@ export type BookCanvasElement =
       visible?: boolean;
       locked?: boolean;
       presentationHoldSec?: number;
+    }
+  | {
+      id: string;
+      type: "shape";
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+      shapeKind: BookShapeKind;
+      /** 면 색(CSS). 선 전용 도형은 투명 가능 */
+      fill: string;
+      stroke: string;
+      strokeWidth: number;
+      /** shapeKind가 rect·roundRect일 때만(논리 px) */
+      cornerRadius?: number;
+      opacity?: number;
+      rotation?: number;
+      borderRadius?: number;
+      outlineWidth?: number;
+      outlineColor?: string;
+      visible?: boolean;
+      locked?: boolean;
+      presentationHoldSec?: number;
     };
+
+export function createBookShapeElement(
+  shapeKind: BookShapeKind,
+  pageW: number,
+  pageH: number,
+): Extract<BookCanvasElement, { type: "shape" }> {
+  const isLineLike =
+    shapeKind === "line" || shapeKind === "arrow" || shapeKind === "cross";
+  const isSquareish =
+    shapeKind === "diamond" ||
+    shapeKind === "hexagon" ||
+    shapeKind === "pentagon" ||
+    shapeKind === "octagon" ||
+    shapeKind === "ring" ||
+    shapeKind === "blockArc";
+  let w = DEFAULT_BOOK_SHAPE_WIDTH;
+  let h = DEFAULT_BOOK_SHAPE_HEIGHT;
+  if (isLineLike && shapeKind !== "cross") {
+    w = Math.min(280, Math.max(120, Math.round(pageW * 0.45)));
+    h = 32;
+  } else if (shapeKind === "cross") {
+    const s = Math.min(120, Math.round(Math.min(pageW, pageH) * 0.18));
+    w = s;
+    h = s;
+  } else if (shapeKind === "ring") {
+    const s = Math.min(160, Math.round(Math.min(pageW, pageH) * 0.22));
+    w = s;
+    h = s;
+  } else if (shapeKind === "plus") {
+    const s = Math.min(112, Math.round(Math.min(pageW, pageH) * 0.17));
+    w = s;
+    h = s;
+  } else if (shapeKind === "chevron") {
+    w = Math.min(240, Math.round(pageW * 0.38));
+    h = Math.min(100, Math.round(pageH * 0.2));
+  } else if (shapeKind === "rightTriangle") {
+    w = DEFAULT_BOOK_SHAPE_WIDTH;
+    h = Math.min(160, Math.round(pageH * 0.32));
+  } else if (isSquareish) {
+    const s = Math.min(168, Math.round(Math.min(pageW, pageH) * 0.24));
+    w = s;
+    h = s;
+  }
+  const x = Math.max(16, Math.round((pageW - w) / 2));
+  const y = Math.max(16, Math.round((pageH - h) / 2));
+  const baseFill = isLineLike ? "transparent" : "rgba(59,130,246,0.28)";
+  const cornerRound =
+    shapeKind === "roundRect"
+      ? Math.min(28, Math.round(Math.min(w, h) * 0.14))
+      : undefined;
+  return {
+    id: crypto.randomUUID(),
+    type: "shape",
+    x,
+    y,
+    width: w,
+    height: h,
+    shapeKind,
+    fill: baseFill,
+    stroke: "#1e40af",
+    strokeWidth: 3,
+    ...(shapeKind === "rect" ? { cornerRadius: 10 } : {}),
+    ...(cornerRound !== undefined ? { cornerRadius: cornerRound } : {}),
+  };
+}
+
+/** 드롭 지점을 박스 중심으로 보고 x,y(좌상단)를 페이지 안에 맞춥니다. */
+export function placeBookShapeElementAtPointer(
+  el: Extract<BookCanvasElement, { type: "shape" }>,
+  pointerX: number,
+  pointerY: number,
+  pageW: number,
+  pageH: number,
+): Extract<BookCanvasElement, { type: "shape" }> {
+  const w = el.width;
+  const h = el.height;
+  let x = Math.round(pointerX - w / 2);
+  let y = Math.round(pointerY - h / 2);
+  x = Math.max(0, Math.min(x, pageW - w));
+  y = Math.max(0, Math.min(y, pageH - h));
+  return { ...el, x, y };
+}
 
 export function resolveMediaPlaylistLoop(
   el: Extract<BookCanvasElement, { type: "mediaPlaylist" }>,
@@ -988,6 +1120,49 @@ function normalizeBookElementsForSave(
         mediaPlaylistItems,
       });
     }
+    if (el.type === "shape") {
+      const wh = finiteWH(
+        el.width,
+        el.height,
+        DEFAULT_BOOK_SHAPE_WIDTH,
+        DEFAULT_BOOK_SHAPE_HEIGHT,
+      );
+      const sw = Number(el.strokeWidth);
+      const strokeW = Number.isFinite(sw)
+        ? Math.min(32, Math.max(0, Math.round(sw)))
+        : 3;
+      const fill =
+        typeof el.fill === "string" && el.fill.trim()
+          ? el.fill.trim().slice(0, 40)
+          : "rgba(59,130,246,0.28)";
+      const stroke =
+        typeof el.stroke === "string" && el.stroke.trim()
+          ? el.stroke.trim().slice(0, 40)
+          : "#1e40af";
+      const kind = BOOK_SHAPE_KINDS.includes(el.shapeKind)
+        ? el.shapeKind
+        : "rect";
+      const crRaw = el.cornerRadius;
+      const cornerRadius =
+        (kind === "rect" || kind === "roundRect") &&
+        typeof crRaw === "number" &&
+        Number.isFinite(crRaw)
+          ? Math.min(200, Math.max(0, crRaw))
+          : undefined;
+      const { cornerRadius: _stripCr, ...shapeRest } = el;
+      void _stripCr;
+      return finalizeElementForApi({
+        ...shapeRest,
+        ...xy,
+        width: Math.min(4000, Math.max(10, wh.width)),
+        height: Math.min(4000, Math.max(10, wh.height)),
+        shapeKind: kind,
+        fill,
+        stroke,
+        strokeWidth: strokeW,
+        ...(cornerRadius !== undefined ? { cornerRadius } : {}),
+      });
+    }
     if (el.type === "drawing") {
       const wh = finiteWH(el.width, el.height, 16, 16);
       const ptsIn = Array.isArray(el.points) ? el.points : [];
@@ -1208,6 +1383,9 @@ export function duplicateBookEditorPage(
     }
     if (el.type === "drawing") {
       return { ...el, id, points: [...el.points] };
+    }
+    if (el.type === "shape") {
+      return { ...el, id };
     }
     return { ...el, id };
   });
@@ -1737,6 +1915,53 @@ export function normalizeBookElements(raw: unknown[]): BookCanvasElement[] {
         ...(showCtl === false
           ? { mediaPlaylistShowControls: false as const }
           : {}),
+        ...chrome,
+        ...(opacity !== undefined ? { opacity } : {}),
+        ...(rotation !== undefined ? { rotation } : {}),
+        ...(o.visible === false ? { visible: false as const } : {}),
+        ...(o.locked === true ? { locked: true as const } : {}),
+        ...presentationHoldFromRaw(o),
+      });
+    } else if (o.type === "shape") {
+      const sk = o.shapeKind;
+      const shapeKind =
+        typeof sk === "string" &&
+        (BOOK_SHAPE_KINDS as readonly string[]).includes(sk)
+          ? (sk as BookShapeKind)
+          : "rect";
+      const w = Number(o.width);
+      const h = Number(o.height);
+      const width = Number.isFinite(w)
+        ? Math.min(4000, Math.max(10, w))
+        : DEFAULT_BOOK_SHAPE_WIDTH;
+      const height = Number.isFinite(h)
+        ? Math.min(4000, Math.max(10, h))
+        : DEFAULT_BOOK_SHAPE_HEIGHT;
+      const fillRaw = typeof o.fill === "string" ? o.fill.trim().slice(0, 40) : "";
+      const strokeRaw = typeof o.stroke === "string" ? o.stroke.trim().slice(0, 40) : "";
+      const sw = Number(o.strokeWidth);
+      const strokeW = Number.isFinite(sw)
+        ? Math.min(32, Math.max(0, Math.round(sw)))
+        : 3;
+      const crRaw = o.cornerRadius;
+      const cornerRadius =
+        (shapeKind === "rect" || shapeKind === "roundRect") &&
+        typeof crRaw === "number" &&
+        Number.isFinite(crRaw)
+          ? Math.min(200, Math.max(0, crRaw))
+          : undefined;
+      out.push({
+        id: o.id,
+        type: "shape",
+        x: Number(o.x) || 0,
+        y: Number(o.y) || 0,
+        width,
+        height,
+        shapeKind,
+        fill: fillRaw || "rgba(59,130,246,0.28)",
+        stroke: strokeRaw || "#1e40af",
+        strokeWidth: strokeW,
+        ...(cornerRadius !== undefined ? { cornerRadius } : {}),
         ...chrome,
         ...(opacity !== undefined ? { opacity } : {}),
         ...(rotation !== undefined ? { rotation } : {}),
