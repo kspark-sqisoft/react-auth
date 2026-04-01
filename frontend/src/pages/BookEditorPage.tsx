@@ -1001,13 +1001,18 @@ export function BookEditorPage() {
           </Button>
         }
         left={
-          <div className="flex h-full min-h-0 w-full min-w-0 flex-row">
+          <div className="flex h-full min-h-0 w-fit max-w-full flex-row">
             <BookEditorToolRail
               activeTab={leftDockTab}
               onActiveTabChange={setLeftDockTab}
               mediaLibraryEnabled={false}
             />
-            <div className={bookLeftDockContentColumnClass("border-s border-border/40")}>
+            <div
+              className={bookLeftDockContentColumnClass("border-s border-border/40", {
+                slideWidth,
+                slideHeight,
+              })}
+            >
               {leftDockTab === "page" ? (
                 <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                   <BookPageSidebar
@@ -1028,6 +1033,8 @@ export function BookEditorPage() {
                     onRemovePageAtIndex={requestRemovePageAt}
                     onDuplicatePageAtIndex={duplicatePageAt}
                     canRemovePage={pages.length > 1}
+                    slideWidth={slideWidth}
+                    slideHeight={slideHeight}
                   />
                 </div>
               ) : null}

@@ -33,7 +33,11 @@ import {
   ContextMenuFloatingItem,
   ContextMenuFloatingPanel,
 } from "@/components/ui/context-menu";
-import { slideDisplayLabel } from "@/lib/book-canvas";
+import {
+  DEFAULT_SLIDE_HEIGHT,
+  DEFAULT_SLIDE_WIDTH,
+  slideDisplayLabel,
+} from "@/lib/book-canvas";
 import {
   bookDockedPanelFooterClass,
   bookDockedPanelHeaderIconClass,
@@ -65,6 +69,9 @@ type BookPageSidebarProps = {
   onDuplicatePageAtIndex?: (index: number) => void;
   /** 왼쪽 툴레일 옆 열에 넣을 때 true — 전체 너비에 맞추고 옆 테두리 제거 */
   fluid?: boolean;
+  /** 슬라이드 해상도(썸네일 세로 비율). 미지정 시 기본 슬라이드 크기 */
+  slideWidth?: number;
+  slideHeight?: number;
 };
 
 function useDismissFloatingMenu(
@@ -186,7 +193,7 @@ function PageInsertGap({
 
 function slideRowClass(active: boolean, fluid?: boolean) {
   return cn(
-    "block min-w-0 w-full text-left transition-colors",
+    "block w-full min-w-full flex-1 shrink-0 text-left transition-colors",
     fluid ? "rounded-xl border-2 p-2.5" : "rounded-lg border p-1.5",
     active
       ? "border-primary bg-primary/10 font-medium text-foreground shadow-sm ring-1 ring-primary/15"
@@ -194,26 +201,35 @@ function slideRowClass(active: boolean, fluid?: boolean) {
   );
 }
 
-/** 16:9 영역을 이미지(또는 배경)로 꽉 채우고, 상단에 제목 오버레이 + 하단 번호 */
+/** 가로는 목록 행(카드) 안을 꽉 채우고, 세로만 슬라이드 비율 반영 */
 function SlideCardPreview({
   thumbUrl,
   index,
   label,
   fluid,
+  slideWidth,
+  slideHeight,
 }: {
   thumbUrl?: string;
   index: number;
   label: string;
   fluid?: boolean;
+  slideWidth: number;
+  slideHeight: number;
 }) {
+  const aw = Math.max(1, slideWidth);
+  const ah = Math.max(1, slideHeight);
   return (
     <div
       className={cn(
-        "relative aspect-video w-full shrink-0 overflow-hidden bg-white dark:bg-black",
+        "relative box-border h-auto w-full max-w-full shrink-0 overflow-hidden bg-white dark:bg-black",
         fluid
-          ? "min-h-[100px] rounded-lg shadow-md ring-2 ring-border/70 dark:ring-border"
+          ? "rounded-lg shadow-md ring-2 ring-border/70 dark:ring-border"
           : "rounded-md shadow-sm ring-1 ring-border/80 dark:ring-border",
       )}
+      style={{
+        aspectRatio: `${aw} / ${ah}`,
+      }}
     >
       {thumbUrl ? (
         <img
@@ -263,6 +279,8 @@ function SortableSlideRow({
   label,
   thumbUrl,
   fluid,
+  slideWidth,
+  slideHeight,
   onSelect,
   onRemovePageAtIndex,
   canRemovePage,
@@ -274,6 +292,8 @@ function SortableSlideRow({
   label: string;
   thumbUrl?: string;
   fluid?: boolean;
+  slideWidth: number;
+  slideHeight: number;
   onSelect: (i: number) => void;
   onRemovePageAtIndex?: (i: number) => void;
   canRemovePage?: boolean;
@@ -291,7 +311,7 @@ function SortableSlideRow({
   };
 
   const rowClass = cn(
-    "flex min-w-0 items-stretch rounded-md border border-transparent",
+    "flex w-full min-w-0 items-stretch rounded-md border border-transparent",
     fluid ? "gap-1 p-1" : "gap-0.5 p-0.5",
     "cursor-grab touch-none active:cursor-grabbing",
     isDragging && "relative z-[1] opacity-[0.35]",
@@ -381,7 +401,14 @@ function SortableSlideRow({
           onClick={() => onSelect(index)}
           className={slideRowClass(index === activeIndex, fluid)}
         >
-          <SlideCardPreview fluid={fluid} thumbUrl={thumbUrl} index={index} label={label} />
+          <SlideCardPreview
+            fluid={fluid}
+            thumbUrl={thumbUrl}
+            index={index}
+            label={label}
+            slideWidth={slideWidth}
+            slideHeight={slideHeight}
+          />
         </button>
       </div>
       {menuPortal}
@@ -395,6 +422,8 @@ function StaticSlideRow({
   label,
   thumbUrl,
   fluid,
+  slideWidth,
+  slideHeight,
   onSelect,
 }: {
   index: number;
@@ -402,12 +431,14 @@ function StaticSlideRow({
   label: string;
   thumbUrl?: string;
   fluid?: boolean;
+  slideWidth: number;
+  slideHeight: number;
   onSelect: (i: number) => void;
 }) {
   return (
     <div
       className={cn(
-        "flex min-w-0 items-stretch rounded-md border border-transparent",
+        "flex w-full min-w-0 items-stretch rounded-md border border-transparent",
         fluid ? "gap-1 p-1" : "gap-0.5 p-0.5",
       )}
     >
@@ -416,7 +447,14 @@ function StaticSlideRow({
         onClick={() => onSelect(index)}
         className={slideRowClass(index === activeIndex, fluid)}
       >
-        <SlideCardPreview fluid={fluid} thumbUrl={thumbUrl} index={index} label={label} />
+        <SlideCardPreview
+          fluid={fluid}
+          thumbUrl={thumbUrl}
+          index={index}
+          label={label}
+          slideWidth={slideWidth}
+          slideHeight={slideHeight}
+        />
       </button>
     </div>
   );
@@ -428,27 +466,38 @@ function DragOverlayRow({
   active,
   thumbUrl,
   fluid,
+  slideWidth,
+  slideHeight,
 }: {
   index: number;
   label: string;
   active: boolean;
   thumbUrl?: string;
   fluid?: boolean;
+  slideWidth: number;
+  slideHeight: number;
 }) {
   return (
     <div
       className={cn(
-        "flex min-w-0 cursor-grabbing items-stretch rounded-md border border-primary/40 bg-card shadow-lg",
+        "flex w-full min-w-0 cursor-grabbing items-stretch rounded-md border border-primary/40 bg-card shadow-lg",
         fluid ? "gap-1 p-1" : "gap-0.5 p-0.5",
       )}
     >
       <div
         className={cn(
           slideRowClass(active, fluid),
-          "pointer-events-none min-w-0 w-full flex-1",
+          "pointer-events-none w-full flex-1",
         )}
       >
-        <SlideCardPreview fluid={fluid} thumbUrl={thumbUrl} index={index} label={label} />
+        <SlideCardPreview
+          fluid={fluid}
+          thumbUrl={thumbUrl}
+          index={index}
+          label={label}
+          slideWidth={slideWidth}
+          slideHeight={slideHeight}
+        />
       </div>
     </div>
   );
@@ -469,7 +518,11 @@ export function BookPageSidebar({
   canRemovePage,
   onDuplicatePageAtIndex,
   fluid = false,
+  slideWidth: slideWidthProp,
+  slideHeight: slideHeightProp,
 }: BookPageSidebarProps) {
+  const slideWidth = slideWidthProp ?? DEFAULT_SLIDE_WIDTH;
+  const slideHeight = slideHeightProp ?? DEFAULT_SLIDE_HEIGHT;
   const edit = mode === "edit";
   const reorder = Boolean(edit && onReorderPages);
 
@@ -531,7 +584,7 @@ export function BookPageSidebar({
         onDragCancel={handleDragCancel}
       >
         <SortableContext items={sortableIds} strategy={verticalListSortingStrategy}>
-          <div className={cn("flex flex-col", listGapReorder)}>
+          <div className={cn("flex w-full min-w-0 flex-col", listGapReorder)}>
             {sortableIds.map((id, i) => (
               <Fragment key={id}>
                 <PageInsertGap
@@ -547,6 +600,8 @@ export function BookPageSidebar({
                   activeIndex={activeIndex}
                   label={slideDisplayLabel(pageLabels?.[i], i)}
                   thumbUrl={thumbFor(i)}
+                  slideWidth={slideWidth}
+                  slideHeight={slideHeight}
                   onSelect={onSelectPage}
                   onRemovePageAtIndex={edit ? onRemovePageAtIndex : undefined}
                   canRemovePage={canRemovePage}
@@ -570,12 +625,14 @@ export function BookPageSidebar({
               label={overlayLabel}
               active={activeOverlayIndex === activeIndex}
               thumbUrl={thumbFor(activeOverlayIndex)}
+              slideWidth={slideWidth}
+              slideHeight={slideHeight}
             />
           ) : null}
         </DragOverlay>
       </DndContext>
     ) : (
-      <div className={cn("flex flex-col", listGapStatic)}>
+      <div className={cn("flex w-full min-w-0 flex-col", listGapStatic)}>
         {Array.from({ length: pageCount }, (_, i) => (
           <StaticSlideRow
             key={pageKeys?.[i] ?? `page-${i}`}
@@ -588,6 +645,8 @@ export function BookPageSidebar({
                 ? thumbnailsByKey[pageKeys[i]!]
                 : undefined
             }
+            slideWidth={slideWidth}
+            slideHeight={slideHeight}
             onSelect={onSelectPage}
           />
         ))}
@@ -600,7 +659,7 @@ export function BookPageSidebar({
         "flex h-full min-h-0 max-h-full flex-col overflow-hidden bg-card/50",
         fluid
           ? "w-full min-w-0 shrink-0 border-0"
-          : "w-[13.75rem] shrink-0 border-r border-border sm:w-[15.5rem]",
+          : "w-[20rem] shrink-0 border-r border-border sm:w-[24rem]",
       )}
     >
       <div

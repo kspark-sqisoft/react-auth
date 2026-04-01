@@ -1,4 +1,10 @@
+import { DEFAULT_SLIDE_HEIGHT, DEFAULT_SLIDE_WIDTH } from "@/lib/book-canvas";
 import { cn } from "@/lib/utils";
+
+export type BookLeftDockSlideDims = {
+  slideWidth: number;
+  slideHeight: number;
+};
 
 /**
  * 북 편집/보기 워크스페이스 — 도킹 패널·헤더를 한 톤으로 맞출 때 사용.
@@ -25,10 +31,35 @@ export function bookDockedPanelHeaderIconClass(className?: string) {
   return cn("size-4 shrink-0 text-muted-foreground opacity-[0.92]", className);
 }
 
-/** 툴레일 오른쪽 탭 콘텐츠 열 */
-export function bookLeftDockContentColumnClass(className?: string) {
+/** Tailwind JIT용 리터럴 — 기준에 ×1.12, 가로형은 추가 ×1.18(합 ≈1.322) */
+const bookLeftDockWidthClass = {
+  portrait:
+    "w-[min(calc(11rem*2/3*1.12),calc(100vw-5rem))] sm:w-[calc(17rem*2/3*1.12)] lg:w-[calc(20rem*2/3*1.12)]",
+  landscape:
+    "w-[min(calc(11rem*2/3*1.322),calc(100vw-5rem))] sm:w-[calc(17rem*2/3*1.322)] lg:w-[calc(20rem*2/3*1.322)]",
+  neutral:
+    "w-[min(calc(11rem*2/3*1.12),calc(100vw-5rem))] sm:w-[calc(17rem*2/3*1.12)] lg:w-[calc(20rem*2/3*1.12)]",
+} as const;
+
+function bookLeftDockWidthTier(sw: number, sh: number): keyof typeof bookLeftDockWidthClass {
+  const w = Math.max(1, sw);
+  const h = Math.max(1, sh);
+  if (h > w) return "portrait";
+  if (w > h) return "landscape";
+  return "neutral";
+}
+
+/** 툴레일 오른쪽 탭 콘텐츠 열 — `flex-1`+불명확한 부모 너비면 열이 0에 가깝게 수축할 수 있어 고정 폭 계열로 둠. 슬라이드 비율에 따라 폭 배율 조정 */
+export function bookLeftDockContentColumnClass(
+  className?: string,
+  slide?: BookLeftDockSlideDims,
+) {
+  const sw = slide?.slideWidth ?? DEFAULT_SLIDE_WIDTH;
+  const sh = slide?.slideHeight ?? DEFAULT_SLIDE_HEIGHT;
+  const tier = bookLeftDockWidthTier(sw, sh);
   return cn(
-    "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden border-border/50 bg-gradient-to-b from-muted/[0.08] via-card/30 to-card/40 sm:max-w-[24rem]",
+    "flex min-h-0 shrink-0 flex-col overflow-hidden border-border/50 bg-gradient-to-b from-muted/[0.08] via-card/30 to-card/40",
+    bookLeftDockWidthClass[tier],
     className,
   );
 }

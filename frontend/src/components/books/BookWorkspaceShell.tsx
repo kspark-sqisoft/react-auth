@@ -141,7 +141,7 @@ export function BookWorkspaceShell({
       <div className="flex min-h-0 min-w-0 flex-1 overflow-x-visible overflow-y-hidden">
         {leftOpen ? (
           <div className="relative z-20 flex min-h-0 shrink-0 self-stretch overflow-visible">
-            <div className="flex h-full min-h-0 min-w-0 max-h-full flex-col overflow-hidden border-e border-border/50 bg-gradient-to-b from-card/80 to-muted/[0.06]">
+            <div className="flex h-full min-h-0 max-h-full flex-col overflow-hidden border-e border-border/50 bg-gradient-to-b from-card/80 to-muted/[0.06]">
               {left}
             </div>
             <PanelEdgeToggle

@@ -1537,13 +1537,18 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
           </>
         }
         left={
-          <div className="flex h-full min-h-0 w-full min-w-0 flex-row">
+          <div className="flex h-full min-h-0 w-fit max-w-full flex-row">
             <BookEditorToolRail
               activeTab={leftDockTab}
               onActiveTabChange={setLeftDockTab}
               mediaLibraryEnabled
             />
-            <div className={bookLeftDockContentColumnClass("border-s border-border/40")}>
+            <div
+              className={bookLeftDockContentColumnClass("border-s border-border/40", {
+                slideWidth,
+                slideHeight,
+              })}
+            >
               {leftDockTab === "page" ? (
                 <BookPageSidebar
                   fluid
@@ -1553,6 +1558,8 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                   mode="edit"
                   onAddPage={addPage}
                   canRemovePage={false}
+                  slideWidth={slideWidth}
+                  slideHeight={slideHeight}
                 />
               ) : null}
               {leftDockTab === "widgets" ? (
@@ -1694,13 +1701,18 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         </>
       }
       left={
-        <div className="flex h-full min-h-0 w-full min-w-0 flex-row">
+        <div className="flex h-full min-h-0 w-fit max-w-full flex-row">
           <BookEditorToolRail
             activeTab={leftDockTab}
             onActiveTabChange={setLeftDockTab}
             mediaLibraryEnabled
           />
-          <div className={bookLeftDockContentColumnClass("border-s border-border/40")}>
+          <div
+            className={bookLeftDockContentColumnClass("border-s border-border/40", {
+              slideWidth,
+              slideHeight,
+            })}
+          >
             {leftDockTab === "page" ? (
               <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
                 <BookPageSidebar
@@ -1721,6 +1733,8 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
                   onRemovePageAtIndex={requestRemovePageAt}
                   onDuplicatePageAtIndex={duplicatePageAt}
                   canRemovePage={localPages.length > 1}
+                  slideWidth={slideWidth}
+                  slideHeight={slideHeight}
                 />
               </div>
             ) : null}
@@ -2167,6 +2181,8 @@ function BookDetailGuestBookView({
           pageLabels={guestPageLabels}
           onSelectPage={setPageIndex}
           mode="view"
+          slideWidth={guestSlideW}
+          slideHeight={guestSlideH}
         />
       }
       center={

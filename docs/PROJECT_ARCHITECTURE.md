@@ -173,7 +173,7 @@ erDiagram
 | `ChatMessage` | `chat_message` | roomId, authorId, body, 인덱스(roomId, createdAt) |
 | `Cat` | `study_cats` | name, age, breed |
 
-> **북 캔버스 요소**는 `BookPage.elementsJson`에 JSON 배열로 저장됩니다. 타입·필드 정의는 프론트 `book-canvas.ts` 및 백엔드 `books.service` 검증 로직과 맞춥니다. 요소 `type`에는 `text`·`image`·`video`·위젯류·`drawing`·**`shape`**(파워포인트식 기본 도형 다수 — 둥근 사각·사다리꼴·평행사변형·쉐브론·호·플러스·X 등, Konva)가 포함됩니다. `shape`의 `strokeWidth`는 0~32이며 **0이면 테두리 없음**(면이 있는 도형만 채만 보임; `line`·`arrow`·`cross`는 0이면 화면에 안 보임).
+> **북 캔버스 요소**는 `BookPage.elementsJson`에 JSON 배열로 저장됩니다. 타입·필드 정의는 프론트 `book-canvas.ts` 및 백엔드 `books.service` 검증 로직과 맞춥니다. 요소 `type`에는 `text`·`image`·`video`·위젯류·`drawing`·**`shape`**(파워포인트식 기본 도형 다수 — 둥근 사각·사다리꼴·평행사변형·쉐브론·호·플러스·X 등, Konva)가 포함됩니다. `shape`의 `strokeWidth`는 0~32이며 **0이면 테두리 없음**(면이 있는 도형만 채만 보임; `line`·`arrow`·`cross`는 0이면 화면에 안 보임). 왼쪽 페이지 목록(`BookPageSidebar`) 썸네일은 행(카드) 가로를 꽉 채우고, 세로만 `slideWidth`/`slideHeight` 비율(`aspect-ratio`)로 맞춥니다. 편집기에서 툴레일 오른쪽 탭 열은 `bookLeftDockContentColumnClass(slideWidth, slideHeight)`로 **명시 폭**(기준 11·17·20rem의 `calc(*2/3)`에 공통 **×1.12**, `min(..., 100vw-5rem)`); 가로가 더 긴 해상도는 추가로 **×1.18**(대략 합 **×1.322**). 세로형·정사각은 동일 기준 폭. 공개 보기 등(비-fluid) 페이지 패널은 `BookPageSidebar` 고정 `w-*`(약 20rem / sm 24rem).
 
 ---
 
