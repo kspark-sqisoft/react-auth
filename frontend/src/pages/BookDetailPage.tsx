@@ -152,6 +152,23 @@ function mapServerPagesToLocal(pages: BookPageDto[]): BookEditorPageState[] {
   );
 }
 
+/** 워크스페이스 헤더: 슬라이드쇼 미리보기(새 탭) — 저장·삭제 옆에서 눈에 띄게 */
+function BookSlidePreviewOpenButton({ bookId }: { bookId: number }) {
+  return (
+    <Button
+      type="button"
+      size="sm"
+      asChild
+      className="relative h-7 overflow-hidden border-0 bg-linear-to-br from-violet-600 via-fuchsia-600 to-rose-500 px-2.5 text-xs font-semibold leading-none text-white shadow-[0_2px_14px_-2px_rgba(124,58,237,0.55)] ring-1 ring-white/25 transition [text-shadow:0_1px_1px_rgba(0,0,0,0.2)] hover:brightness-110 hover:shadow-[0_4px_20px_-2px_rgba(168,85,247,0.55)] focus-visible:ring-2 focus-visible:ring-violet-400 focus-visible:ring-offset-2 dark:from-violet-500 dark:via-fuchsia-600 dark:to-rose-600 dark:shadow-[0_2px_18px_-4px_rgba(167,139,250,0.45)]"
+    >
+      <Link to={`/books/${bookId}/preview`} target="_blank" rel="noreferrer">
+        <MonitorPlay className="mr-1.5 size-3.5 shrink-0 drop-shadow-sm" aria-hidden />
+        미리보기
+      </Link>
+    </Button>
+  );
+}
+
 /**
  * 북 진입 시 곧바로 편집 UI(위젯·저장).
  * 부모 `key`는 `book.id`만 씁니다. `updatedAt`까지 넣으면 저장·refetch 때마다 remount 되어
@@ -1503,19 +1520,8 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         }
         actions={
           <>
-            <div className="flex flex-wrap items-center justify-end gap-1.5">
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                className="h-7 px-2 text-xs"
-                asChild
-              >
-                <Link to={`/books/${bookId}/preview`} target="_blank" rel="noreferrer">
-                  <MonitorPlay className="mr-1.5 size-3.5" />
-                  미리보기
-                </Link>
-              </Button>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              <BookSlidePreviewOpenButton bookId={bookId} />
               <Button
                 type="button"
                 size="sm"
@@ -1673,19 +1679,8 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       }
       actions={
         <>
-          <div className="flex flex-wrap items-center justify-end gap-1.5">
-            <Button
-              type="button"
-              size="sm"
-              variant="outline"
-              className="h-7 px-2 text-xs"
-              asChild
-            >
-              <Link to={`/books/${bookId}/preview`} target="_blank" rel="noreferrer">
-                <MonitorPlay className="mr-1.5 size-3.5" />
-                미리보기
-              </Link>
-            </Button>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <BookSlidePreviewOpenButton bookId={bookId} />
             <Button
               type="button"
               size="sm"
@@ -2176,19 +2171,8 @@ function BookDetailGuestBookView({
         </div>
       }
       actions={
-        <div className="flex flex-wrap items-center justify-end gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            className="h-7 px-2 text-xs"
-            asChild
-          >
-            <Link to={`/books/${data.id}/preview`} target="_blank" rel="noreferrer">
-              <MonitorPlay className="mr-1.5 size-3.5" />
-              미리보기
-            </Link>
-          </Button>
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          <BookSlidePreviewOpenButton bookId={data.id} />
         </div>
       }
       left={
