@@ -42,6 +42,14 @@ describe('CatsController', () => {
     });
   });
 
+  describe('studyGuardSample', () => {
+    it('Guard 통과를 가정한 응답 형태', async () => {
+      const out = await controller.studyGuardSample();
+      expect(out.ok).toBe(true);
+      expect(out.hint).toContain('REQUEST_FLOW');
+    });
+  });
+
   describe('findOne', () => {
     it('id 로 서비스 위임', async () => {
       service.findOne.mockResolvedValue({ id: 2, name: 'b' });

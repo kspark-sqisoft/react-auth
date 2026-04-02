@@ -17,6 +17,7 @@ import {
  *
  * Nest 연결
  * - CatsModule에서 TypeOrmModule.forFeature([Cat]) 로 등록해야 @InjectRepository(Cat) 사용 가능.
+ * - HTTP 요청이 DB에 닿기까지의 단계(서비스·리포지토리)는 **cats/REQUEST_FLOW.md** 참고.
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  */
 @Entity('study_cats')

@@ -8,6 +8,7 @@ import type { Request } from 'express';
 
 /**
  * POST/DELETE에서 JwtAuthGuard보다 먼저 실행되어, “가드 체인이 시작됐음”을 로그로 남깁니다.
+ * Nest ② Guard 단계 — 전체 순서는 `REQUEST_FLOW.md`.
  */
 @Injectable()
 export class CatsBeforeJwtLogGuard implements CanActivate {

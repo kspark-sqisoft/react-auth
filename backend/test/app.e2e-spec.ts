@@ -170,4 +170,20 @@ describe('App (e2e)', () => {
       expect(tree.some((c) => c.content === '첫 댓글')).toBe(true);
     });
   });
+
+  describe('GET /cats/_study/guard-sample (Cats study Guard)', () => {
+    it('헤더 없으면 401', () => {
+      return request(app.getHttpServer())
+        .get('/cats/_study/guard-sample')
+        .expect(401);
+    });
+
+    it('x-cats-study: yes 이면 200 · ok', async () => {
+      const res = await request(app.getHttpServer())
+        .get('/cats/_study/guard-sample')
+        .set('x-cats-study', 'yes')
+        .expect(200);
+      expect((res.body as { ok?: boolean }).ok).toBe(true);
+    });
+  });
 });

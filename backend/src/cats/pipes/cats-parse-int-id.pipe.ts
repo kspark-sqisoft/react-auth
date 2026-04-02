@@ -10,6 +10,7 @@ const inner = new ParseIntPipe();
 
 /**
  * 내장 ParseIntPipe와 동일 동작 + 학습용 로그(:id 문자열 → number).
+ * Nest 순서상 Guard·Interceptor(`next.handle()` 경로) 다음, 컨트롤러 직전 — `REQUEST_FLOW.md`.
  */
 @Injectable()
 export class CatsParseIntIdPipe implements PipeTransform<

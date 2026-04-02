@@ -15,9 +15,10 @@ import type { CreateCatDto } from '../dto/create-cat.dto';
  * - PipeTransform<TInput, TOutput> : transform()의 반환값이 최종적으로 핸들러 인자로 전달됩니다.
  * - 내장 예: ParseIntPipe, ValidationPipe(전역/파라미터), ParseBoolPipe 등.
  *
- * 실행 시점
- * - Guard 이후, Interceptor의 “핸들러 호출 전” 구간과 함께 생각하면 됩니다.
- * - @Body(ParseCreateCatPipe) 처럼 “어느 인자에 어떤 Pipe를 쓸지”를 지정합니다.
+ * 실행 시점 (Nest 공식 순서)
+ * - **Guard 다음**, **Interceptor가 `next.handle()`을 호출한 뒤** 파이프·핸들러 쪽에서 실행됩니다.
+ *   (Interceptor `intercept()` 본문의 “직전” 로그가 파이프보다 먼저 찍히는 이유.)
+ * - 표: `REQUEST_FLOW.md` — @Body(ParseCreateCatPipe) 로 어느 인자에 붙일지 지정.
  *
  * 이 Pipe는 class-validator 없이 직접 검증해, 의존성을 늘리지 않고 학습용으로 동작을 명확히 합니다.
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━

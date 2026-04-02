@@ -15,7 +15,8 @@ import type { Request } from 'express';
  * Interceptor (인터셉터)
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * - 역할: 핸들러 실행 “전후”에 추가 로직을 넣습니다. RxJS Observable 흐름을 감쌉니다.
- * - next.handle() : 실제 컨트롤러·Pipe까지 포함한 나머지 파이프라인을 실행하는 Observable입니다.
+ * - next.handle() : **Guard 다음**에 호출되며, 그 안에서 Pipe → Controller → Service → Repository 가 이어집니다.
+ *   (공식 순서: Middleware → Guards → **Interceptor(이 클래스)** → Pipes → Handler)
  * - pipe(tap(...)) : 응답이 성공적으로 나온 뒤(에러가 아닌 complete 경로) 부가 작업 — 여기서는 소요 시간 로그.
  *
  * 흔한 활용

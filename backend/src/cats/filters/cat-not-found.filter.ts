@@ -8,6 +8,7 @@ import { CatNotFoundException } from '../exceptions/cat-not-found.exception';
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * - 역할: throw된 예외 중 “지정한 타입”만 골라 잡아, HTTP 응답(status, body)을 직접 작성할 수 있습니다.
  * - @Catch(CatNotFoundException) : 이 클래스의 catch()는 해당 예외(및 서브클래스)에만 적용됩니다.
+ * - 흐름: Service 등에서 throw → (선택) Interceptor `catchError`에서 로그 후 재전파 → **여기서 HTTP 응답 확정**.
  * - ArgumentsHost : HTTP뿐 아니라 RPC, WS 등 실행 컨텍스트를 추상화 — 여기서는 switchToHttp().
  *
  * 전역 등록 vs 컨트롤러 등록

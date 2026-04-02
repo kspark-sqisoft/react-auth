@@ -31,6 +31,7 @@ import { CatNotFoundFilter } from './filters/cat-not-found.filter';
 import { CatsAfterJwtLogGuard } from './guards/cats-after-jwt-log.guard';
 import { CatsBeforeJwtLogGuard } from './guards/cats-before-jwt-log.guard';
 import { CatsJwtLogGuard } from './guards/cats-jwt-log.guard';
+import { CatsStudyGuard } from './guards/cats-study.guard';
 import { CatsLoggingInterceptor } from './interceptors/cats-logging.interceptor';
 import { CatsParseIntIdPipe } from './pipes/cats-parse-int-id.pipe';
 import { ParseCreateCatPipe } from './pipes/parse-create-cat.pipe';
@@ -51,6 +52,8 @@ import { CatsService } from './cats.service';
  * - @UseGuards      : 메서드별로 “이 요청을 실행해도 되는지” 사전 판단 (인증/인가 등).
  * - @Body/@Param + Pipe : 파라미터마다 Pipe가 실행되어 변환·검증 (내장 ParseIntPipe, 커스텀 ParseCreateCatPipe).
  * - 커스텀 @CatsClientMeta() : 파라미터 데코레이터로 요청 객체에서 값을 꺼내 주입.
+ *
+ * 요청 생명주기(미들웨어→가드→인터셉터→파이프→…→필터)는 **src/cats/REQUEST_FLOW.md** 와 `cats.module.ts` 주석을 본다.
  *
  * Swagger(@ApiTags, @ApiOperation, @ApiBody, @ApiBearerAuth)
  * - API 문서용 메타데이터이며, 런타임 Nest 파이프라인과는 별개입니다.
@@ -77,6 +80,25 @@ export class CatsController {
       cats,
       _study: { decoratorCatsClientMeta: meta },
     }));
+  }
+
+  /**
+   * `@Get(':id')`보다 **위**에 두어야 `_study`가 id로 잡히지 않습니다.
+   * Middleware → CatsStudyGuard → Interceptor → … 순서만 보기 위한 최소 라우트.
+   */
+  @Get('_study/guard-sample')
+  @UseGuards(CatsStudyGuard)
+  @ApiOperation({
+    summary: '[학습] Guard 단독 데모',
+    description:
+      '요청 헤더 `x-cats-study: yes` 필요. 없으면 401. JWT 없음. REQUEST_FLOW.md 참고.',
+  })
+  studyGuardSample() {
+    this.logger.log(`[CATS·컨트롤러] studyGuardSample() CatsStudyGuard 통과`);
+    return {
+      ok: true,
+      hint: 'CatsStudyGuard 이후 컨트롤러까지 도달. 순서는 REQUEST_FLOW.md 참고.',
+    };
   }
 
   @Get(':id')

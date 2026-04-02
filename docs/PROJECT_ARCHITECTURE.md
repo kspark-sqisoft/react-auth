@@ -253,8 +253,14 @@ flowchart LR
 |----------|-----------------|
 | `WeatherController` | `GET /weather/current`, `GET /weather/seoul` |
 | `NewsController` | `GET /news/headlines` — 쿼리 `country`, 선택 `category`, `pageSize`(1–10); 서버 `NEWSAPI_KEY` 필요 |
-| `CatsController` | `GET/POST/DELETE /cats`, `GET /cats/:id` |
+| `CatsController` | `GET/POST/PATCH/DELETE /cats`, `GET /cats/:id`, 이미지 업로드 등 |
 | `AppController` | `GET /` 헬스 등 |
+
+#### 5.2.1 Cats study 모듈 — HTTP 요청 생명주기
+
+학습용 `CatsModule`은 Nest **미들웨어 → 가드 → 인터셉터 → 파이프 → 컨트롤러 → 서비스 → TypeORM Repository** 순(및 예외 시 **Exception Filter**)을 로그와 코드로 따라갈 수 있게 짜여 있습니다. 표·다이어그램·공식 문서 링크는 백엔드 **`backend/src/cats/REQUEST_FLOW.md`** 에 모아 두었고, `cats.module.ts` 주석에도 요약이 있습니다.
+
+- **Guard만 따로 보기:** `GET /cats/_study/guard-sample` — 헤더 `x-cats-study: yes` 필요(없으면 401).
 
 > HTTP API는 기본적으로 **루트 경로**에 마운트됩니다. Swagger UI: **`/api-docs`** (포트는 `backend` 설정 참고).
 
@@ -455,7 +461,7 @@ react-auth/
 │       ├── users/
 │       ├── weather/
 │       ├── news/            # NewsAPI 헤드라인 프록시
-│       ├── cats/
+│       ├── cats/            # 학습용 CRUD + REQUEST_FLOW.md(요청 생명주기 문서)
 │       └── main.ts
 ├── frontend/                # Vite + React
 │   └── src/

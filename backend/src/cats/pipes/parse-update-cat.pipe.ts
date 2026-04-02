@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import type { UpdateCatDto } from '../dto/update-cat.dto';
 
+/** PATCH body 검증 — 실행 순서는 `REQUEST_FLOW.md` (Pipe 단계). */
 @Injectable()
 export class ParseUpdateCatPipe implements PipeTransform<
   unknown,

@@ -13,9 +13,13 @@ import { CatNotFoundException } from './exceptions/cat-not-found.exception';
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
  * Service (서비스)
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
- * - 역할: 도메인 규칙과 데이터 접근(여기서는 TypeORM Repository)을 담당합니다.
+ * - 역할: 도메인 규칙과 데이터 접근(여기서는 TypeORM **Repository(Cat)**)을 담당합니다.
+ * - 생성자 `@InjectRepository(Cat)` 로 받은 `this.cats` 가 ⑦ Repository 단계 — `find` / `findOne` / `save` / `delete`.
  * - @Injectable() 으로 Nest DI에 등록되며, 컨트롤러 생성자 주입으로 사용합니다.
  * - 컨트롤러는 “HTTP 관점”, 서비스는 “비즈니스 관점”으로 나누면 테스트·재사용이 쉬워집니다.
+ *
+ * 파이프라인에서의 위치: Middleware→Guard→Interceptor→**Pipe→Controller→(여기 Service→Repository)**.
+ * 전체 순서: **REQUEST_FLOW.md**
  *
  * 예외 처리와 Filter의 관계
  * - 여기서 throw하는 CatNotFoundException은 HTTP 관점에서 404에 해당합니다.

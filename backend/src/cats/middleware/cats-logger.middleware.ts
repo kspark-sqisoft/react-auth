@@ -13,6 +13,9 @@ import {
  * - 역할: Express 스타일의 (req, res, next) 함수입니다. 라우팅·Guard보다 일반적으로 더 바깥 단계에서 실행됩니다.
  * - Nest에서는 모듈이 NestModule을 구현하고 configure(consumer)에서 어떤 경로에 적용할지 등록합니다.
  *
+ * 실행 순서(요약): **이 미들웨어 → Guards → Interceptors → Pipes → Controller → …**
+ * (표와 설명: `REQUEST_FLOW.md`)
+ *
  * Guard / Interceptor 와의 차이
  * - 미들웨어: DI가 제한적일 수 있고, “특정 핸들러”가 아니라 경로 단위에 붙는 경우가 많음.
  * - Guard: 라우트 핸들러 실행 허가, ExecutionContext로 메타데이터 접근.
