@@ -15,6 +15,14 @@ export function bookDockedPanelRootClass(className?: string) {
   return cn("flex h-full min-h-0 flex-col overflow-hidden bg-card/50", className);
 }
 
+/** 오른쪽 독: 레이어 아래 **페이지·위젯 속성** 영역 — 배경으로 레이어 블록과 구분 */
+export function bookRightDockInspectorShellClass(className?: string) {
+  return cn(
+    "min-h-0 flex-1 overflow-hidden bg-card/[0.44] dark:bg-card/[0.34]",
+    className,
+  );
+}
+
 /**
  * 도킹 패널 제목 행·가운데 캔버스 툴바 행 공통 — `AppLayout` 사이트 헤더와 동일 `h-12`로 한 줄로 맞음.
  */

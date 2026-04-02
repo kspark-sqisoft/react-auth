@@ -52,6 +52,7 @@ import {
   bookCanvasStageMatClass,
   bookCanvasToolbarRowClass,
   bookLeftDockContentColumnClass,
+  bookRightDockInspectorShellClass,
 } from "@/lib/book-workspace-ui";
 import { bookKeys } from "@/lib/query-keys";
 import {
@@ -1180,7 +1181,7 @@ export function BookEditorPage() {
                   onElementChange(eid, { presentationHoldSec: sec })
                 }
               />
-              <div className="min-h-0 flex-1 overflow-hidden">
+              <div className={bookRightDockInspectorShellClass()}>
                 {canvasSelectedIds.length >= 2 ? (
                   <BookInspectorPanel
                     embedded

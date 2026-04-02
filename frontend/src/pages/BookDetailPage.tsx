@@ -73,6 +73,7 @@ import {
   bookCanvasStageMatClass,
   bookCanvasToolbarRowClass,
   bookLeftDockContentColumnClass,
+  bookRightDockInspectorShellClass,
 } from "@/lib/book-workspace-ui";
 import { bookKeys } from "@/lib/query-keys";
 import {
@@ -1961,7 +1962,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
             }
             videoDurationSecByElementId={videoDurationByElementId}
           />
-          <div className="min-h-0 flex-1 overflow-hidden">
+          <div className={bookRightDockInspectorShellClass()}>
             {canvasSelectedIds.length >= 2 ? (
               <BookInspectorPanel
                 embedded

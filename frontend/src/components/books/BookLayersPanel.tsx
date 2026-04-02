@@ -628,8 +628,10 @@ export function BookLayersPanel({
   return (
     <div
       className={cn(
-        "flex min-h-0 flex-col border-b border-border/70 bg-muted/[0.04]",
-        expandVertical ? "flex-1 border-b-0" : "shrink-0",
+        "flex min-h-0 flex-col",
+        expandVertical
+          ? "flex-1 border-b-0 bg-muted/[0.08] dark:bg-muted/[0.1]"
+          : "shrink-0 border-b-2 border-border/80 bg-muted/[0.14] dark:bg-muted/[0.18]",
         className,
       )}
     >
