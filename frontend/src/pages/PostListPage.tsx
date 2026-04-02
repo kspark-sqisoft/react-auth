@@ -18,6 +18,7 @@ import {
   type PostLikeState,
   type PostsPageResponse,
 } from "@/lib/api";
+import { SITE_APP_MAIN_SCROLL_ID } from "@/lib/app-layout-scroll";
 import { appLog } from "@/lib/app-log";
 import { toast } from "sonner";
 import { postKeys } from "@/lib/query-keys";
@@ -224,11 +225,26 @@ export function PostListPage() {
   );
 
   useEffect(() => {
-    const pageScrollHeight = () =>
-      Math.max(
-        document.documentElement.scrollHeight,
-        document.body.scrollHeight,
-      );
+    const scrollRoot = () => document.getElementById(SITE_APP_MAIN_SCROLL_ID);
+
+    const scrollMetrics = () => {
+      const el = scrollRoot();
+      if (el) {
+        return {
+          scrollHeight: el.scrollHeight,
+          scrollTop: el.scrollTop,
+          clientHeight: el.clientHeight,
+        } as const;
+      }
+      return {
+        scrollHeight: Math.max(
+          document.documentElement.scrollHeight,
+          document.body.scrollHeight,
+        ),
+        scrollTop: window.scrollY,
+        clientHeight: window.innerHeight,
+      } as const;
+    };
 
     const checkLoadMore = () => {
       if (!scrollArmedRef.current) return;
@@ -236,10 +252,10 @@ export function PostListPage() {
 
       if (!hasNextPageRef.current) return;
 
-      const fullHeight = pageScrollHeight();
-      const viewBottom = window.scrollY + window.innerHeight;
+      const { scrollHeight: fullHeight, scrollTop, clientHeight } = scrollMetrics();
+      const viewBottom = scrollTop + clientHeight;
       /** 스크롤이 거의 없는 짧은 페이지: 휠/터치 한 번이면 다음 페이지 허용 */
-      const shortPage = fullHeight <= window.innerHeight + NEAR_BOTTOM_PX;
+      const shortPage = fullHeight <= clientHeight + NEAR_BOTTOM_PX;
       const nearBottom = viewBottom >= fullHeight - NEAR_BOTTOM_PX;
       if (!shortPage && !nearBottom) return;
 
@@ -251,11 +267,13 @@ export function PostListPage() {
       queueMicrotask(checkLoadMore);
     };
 
-    window.addEventListener("scroll", onUserScrollIntent, { passive: true });
+    const main = scrollRoot();
+    const scrollTarget: EventTarget = main ?? window;
+    scrollTarget.addEventListener("scroll", onUserScrollIntent, { passive: true });
     window.addEventListener("wheel", onUserScrollIntent, { passive: true });
     window.addEventListener("touchmove", onUserScrollIntent, { passive: true });
     return () => {
-      window.removeEventListener("scroll", onUserScrollIntent);
+      scrollTarget.removeEventListener("scroll", onUserScrollIntent);
       window.removeEventListener("wheel", onUserScrollIntent);
       window.removeEventListener("touchmove", onUserScrollIntent);
     };

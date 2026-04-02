@@ -18,6 +18,7 @@ import {
   fetchBooksPage,
   type BookListItem as BookListItemModel,
 } from "@/lib/api";
+import { SITE_APP_MAIN_SCROLL_ID } from "@/lib/app-layout-scroll";
 import { appLog } from "@/lib/app-log";
 import {
   DEFAULT_SLIDE_HEIGHT,
@@ -200,11 +201,26 @@ export function BookListPage() {
   }, [isFetchingNextPage]);
 
   useEffect(() => {
-    const pageScrollHeight = () =>
-      Math.max(
-        document.documentElement.scrollHeight,
-        document.body.scrollHeight,
-      );
+    const scrollRoot = () => document.getElementById(SITE_APP_MAIN_SCROLL_ID);
+
+    const scrollMetrics = () => {
+      const el = scrollRoot();
+      if (el) {
+        return {
+          scrollHeight: el.scrollHeight,
+          scrollTop: el.scrollTop,
+          clientHeight: el.clientHeight,
+        } as const;
+      }
+      return {
+        scrollHeight: Math.max(
+          document.documentElement.scrollHeight,
+          document.body.scrollHeight,
+        ),
+        scrollTop: window.scrollY,
+        clientHeight: window.innerHeight,
+      } as const;
+    };
 
     const checkLoadMore = () => {
       if (!scrollArmedRef.current) return;
@@ -214,9 +230,9 @@ export function BookListPage() {
       if (t === null) return;
       if (itemsRef.current.length >= t) return;
 
-      const fullHeight = pageScrollHeight();
-      const viewBottom = window.scrollY + window.innerHeight;
-      const shortPage = fullHeight <= window.innerHeight + NEAR_BOTTOM_PX;
+      const { scrollHeight: fullHeight, scrollTop, clientHeight } = scrollMetrics();
+      const viewBottom = scrollTop + clientHeight;
+      const shortPage = fullHeight <= clientHeight + NEAR_BOTTOM_PX;
       const nearBottom = viewBottom >= fullHeight - NEAR_BOTTOM_PX;
       if (!shortPage && !nearBottom) return;
 
@@ -228,11 +244,13 @@ export function BookListPage() {
       queueMicrotask(checkLoadMore);
     };
 
-    window.addEventListener("scroll", onUserScrollIntent, { passive: true });
+    const main = scrollRoot();
+    const scrollTarget: EventTarget = main ?? window;
+    scrollTarget.addEventListener("scroll", onUserScrollIntent, { passive: true });
     window.addEventListener("wheel", onUserScrollIntent, { passive: true });
     window.addEventListener("touchmove", onUserScrollIntent, { passive: true });
     return () => {
-      window.removeEventListener("scroll", onUserScrollIntent);
+      scrollTarget.removeEventListener("scroll", onUserScrollIntent);
       window.removeEventListener("wheel", onUserScrollIntent);
       window.removeEventListener("touchmove", onUserScrollIntent);
     };

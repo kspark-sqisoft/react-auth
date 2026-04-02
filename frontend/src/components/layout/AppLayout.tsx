@@ -8,6 +8,7 @@ import { useAuth } from "@/stores/auth-store";
 import { Button } from "@/components/ui/button";
 import { SafeImage } from "@/components/ui/safe-image";
 import { cn } from "@/lib/utils";
+import { SITE_APP_MAIN_SCROLL_ID } from "@/lib/app-layout-scroll";
 import {
   floatingDockBookSiteChromeToggleClass,
   floatingDockBookSiteFooterCollapsedStripClass,
@@ -19,11 +20,14 @@ import {
 const BOOK_WORKSPACE_CHROME_HEADER_KEY = "book-workspace-chrome-header-collapsed";
 const BOOK_WORKSPACE_CHROME_FOOTER_KEY = "book-workspace-chrome-footer-collapsed";
 
+/** `true` = 접힘. 저장값 없음 → 북 상세 첫 진입은 접힌 상태가 기본 */
 function readBookChromeCollapsed(key: string): boolean {
   try {
-    return localStorage.getItem(key) === "1";
+    const v = localStorage.getItem(key);
+    if (v === "0") return false;
+    return true;
   } catch {
-    return false;
+    return true;
   }
 }
 
@@ -63,50 +67,59 @@ export function AppLayout() {
   /** `BookWorkspaceShell` 사용 라우트 — 사이트 헤더 아래에 맞추려 main 패딩 제거·flex 높이 체인 */
   const bookShellRoute =
     location.pathname === "/books/new" || /^\/books\/\d+$/.test(location.pathname);
+  /** 북 **상세**(`/books/:숫자`)만 사이트 헤더·푸터 접기/펼치기 — `/books/new`·그 외 라우트는 항상 헤더·푸터 표시 */
+  const bookDetailChromeRoute = /^\/books\/\d+$/.test(location.pathname);
   /** 북 슬라이드쇼 미리보기 — 전체 화면에 가깝게 쓰므로 플로팅 채팅 숨김 */
   const bookPresentationPreviewRoute = /^\/books\/\d+\/preview$/.test(location.pathname);
   /** 홈: 3D 씬이 헤더~푸터 사이를 꽉 채우도록 뷰포트 높이·main flex 체인 */
   const homeRoute = location.pathname === "/";
   const fullViewportShell = bookShellRoute || homeRoute;
 
-  const [bookSiteHeaderCollapsed, setBookSiteHeaderCollapsed] = useState(false);
-  const [bookSiteFooterCollapsed, setBookSiteFooterCollapsed] = useState(false);
-  const bookShellEnteredRef = useRef(false);
+  const [bookSiteHeaderCollapsed, setBookSiteHeaderCollapsed] = useState(() =>
+    readBookChromeCollapsed(BOOK_WORKSPACE_CHROME_HEADER_KEY),
+  );
+  const [bookSiteFooterCollapsed, setBookSiteFooterCollapsed] = useState(() =>
+    readBookChromeCollapsed(BOOK_WORKSPACE_CHROME_FOOTER_KEY),
+  );
+  const bookDetailChromeEnteredRef = useRef(false);
 
   useEffect(() => {
-    if (!bookShellRoute) {
-      bookShellEnteredRef.current = false;
+    if (!bookDetailChromeRoute) {
+      bookDetailChromeEnteredRef.current = false;
       return;
     }
-    if (bookShellEnteredRef.current) return;
-    bookShellEnteredRef.current = true;
+    if (bookDetailChromeEnteredRef.current) return;
+    bookDetailChromeEnteredRef.current = true;
     startTransition(() => {
       setBookSiteHeaderCollapsed(readBookChromeCollapsed(BOOK_WORKSPACE_CHROME_HEADER_KEY));
       setBookSiteFooterCollapsed(readBookChromeCollapsed(BOOK_WORKSPACE_CHROME_FOOTER_KEY));
     });
-  }, [bookShellRoute]);
+  }, [bookDetailChromeRoute]);
 
   useEffect(() => {
-    if (!bookShellRoute) return;
+    if (!bookDetailChromeRoute) return;
     writeBookChromeCollapsed(BOOK_WORKSPACE_CHROME_HEADER_KEY, bookSiteHeaderCollapsed);
-  }, [bookShellRoute, bookSiteHeaderCollapsed]);
+  }, [bookDetailChromeRoute, bookSiteHeaderCollapsed]);
 
   useEffect(() => {
-    if (!bookShellRoute) return;
+    if (!bookDetailChromeRoute) return;
     writeBookChromeCollapsed(BOOK_WORKSPACE_CHROME_FOOTER_KEY, bookSiteFooterCollapsed);
-  }, [bookShellRoute, bookSiteFooterCollapsed]);
+  }, [bookDetailChromeRoute, bookSiteFooterCollapsed]);
+
+  const showBookSiteHeader =
+    !bookShellRoute || !bookDetailChromeRoute || !bookSiteHeaderCollapsed;
+  const showBookSiteFooter =
+    !bookShellRoute || !bookDetailChromeRoute || !bookSiteFooterCollapsed;
 
   return (
     <div
       className={cn(
-        "flex flex-col bg-background text-foreground",
-        /* 북·홈: 문서 스크롤 없이 뷰포트에 고정(푸터·헤더 항상 보임) */
-        fullViewportShell
-          ? "h-dvh max-h-dvh min-h-0 overflow-hidden"
-          : "min-h-screen",
+        "flex min-h-0 flex-col overflow-hidden bg-background text-foreground",
+        /* 헤더·푸터는 뷰포트에 고정, 본문은 `<main>` 안에서만 스크롤 */
+        "h-dvh max-h-dvh",
       )}
     >
-      {bookShellRoute && bookSiteHeaderCollapsed ? null : (
+      {showBookSiteHeader ? (
         <header className="shrink-0 border-b border-border bg-card/40 backdrop-blur-sm">
           <div
             className={cn(
@@ -159,17 +172,19 @@ export function AppLayout() {
                   <Button type="button" variant="outline" size="sm" onClick={() => void signOut()}>
                     로그아웃
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    className={floatingDockBookSiteChromeToggleClass}
-                    aria-label="사이트 헤더 접기"
-                    title="북 영역을 더 넓게"
-                    onClick={() => setBookSiteHeaderCollapsed(true)}
-                  >
-                    <ChevronUp className="size-3.5" aria-hidden />
-                  </Button>
+                  {bookDetailChromeRoute ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      className={floatingDockBookSiteChromeToggleClass}
+                      aria-label="사이트 헤더 접기"
+                      title="북 영역을 더 넓게"
+                      onClick={() => setBookSiteHeaderCollapsed(true)}
+                    >
+                      <ChevronUp className="size-3.5" aria-hidden />
+                    </Button>
+                  ) : null}
                 </>
               ) : (
                 <>
@@ -179,24 +194,26 @@ export function AppLayout() {
                   <Button asChild size="sm">
                     <Link to="/signup">회원가입</Link>
                   </Button>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="icon-sm"
-                    className={floatingDockBookSiteChromeToggleClass}
-                    aria-label="사이트 헤더 접기"
-                    title="북 영역을 더 넓게"
-                    onClick={() => setBookSiteHeaderCollapsed(true)}
-                  >
-                    <ChevronUp className="size-3.5" aria-hidden />
-                  </Button>
+                  {bookDetailChromeRoute ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon-sm"
+                      className={floatingDockBookSiteChromeToggleClass}
+                      aria-label="사이트 헤더 접기"
+                      title="북 영역을 더 넓게"
+                      onClick={() => setBookSiteHeaderCollapsed(true)}
+                    >
+                      <ChevronUp className="size-3.5" aria-hidden />
+                    </Button>
+                  ) : null}
                 </>
               )}
             </div>
           </div>
         </header>
-      )}
-      {bookShellRoute && bookSiteHeaderCollapsed ? (
+      ) : null}
+      {bookDetailChromeRoute && bookSiteHeaderCollapsed ? (
         <div className={floatingDockBookSiteHeaderCollapsedStripClass}>
           <div className={floatingDockBookSiteHeaderCollapsedStripInnerClass}>
             <Button
@@ -214,20 +231,21 @@ export function AppLayout() {
         </div>
       ) : null}
       <main
+        id={SITE_APP_MAIN_SCROLL_ID}
         className={cn(
-          "w-full flex-1",
+          "w-full min-h-0 flex-1",
           fullViewportShell
-            ? "flex min-h-0 max-w-none flex-col overflow-hidden p-0"
+            ? "flex max-w-none flex-col overflow-hidden p-0"
             : cn(
-                "mx-auto px-4 py-8",
+                "overflow-y-auto overscroll-contain mx-auto px-4 py-8",
                 wideMain ? "max-w-6xl" : "max-w-3xl",
               ),
         )}
       >
         <Outlet />
       </main>
-      {bookShellRoute && bookSiteFooterCollapsed ? null : (
-        <footer className="mt-auto shrink-0 border-t border-border bg-card/40 backdrop-blur-sm">
+      {showBookSiteFooter ? (
+        <footer className="shrink-0 border-t border-border bg-card/40 backdrop-blur-sm">
           <div
             className={cn(
               "mx-auto flex w-full flex-col gap-2 px-4 py-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 sm:py-2.5",
@@ -277,7 +295,7 @@ export function AppLayout() {
                   </NavLink>
                 </>
               )}
-              {bookShellRoute ? (
+              {bookDetailChromeRoute ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -293,8 +311,8 @@ export function AppLayout() {
             </nav>
           </div>
         </footer>
-      )}
-      {bookShellRoute && bookSiteFooterCollapsed ? (
+      ) : null}
+      {bookDetailChromeRoute && bookSiteFooterCollapsed ? (
         <div className={floatingDockBookSiteFooterCollapsedStripClass}>
           <div className={floatingDockBookSiteFooterCollapsedStripInnerClass}>
             <Button
