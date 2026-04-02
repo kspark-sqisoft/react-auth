@@ -329,3 +329,56 @@
     );
   }
 }
+
+/* 북 AI 플로팅 FAB — 닫힌 상태에서만 적용(`BookAiAssistantPanel`) */
+@keyframes book-ai-fab-attention {
+  0%,
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+    box-shadow:
+      0 12px 24px -6px rgb(124 58 237 / 0.38),
+      0 6px 12px -4px rgb(79 70 229 / 0.22);
+  }
+  18% {
+    opacity: 0.62;
+    filter: brightness(1.12);
+    box-shadow:
+      0 14px 28px -5px rgb(124 58 237 / 0.55),
+      0 0 0 3px rgb(167 139 250 / 0.28);
+  }
+  36% {
+    opacity: 1;
+    filter: brightness(1);
+    box-shadow:
+      0 12px 24px -6px rgb(124 58 237 / 0.38),
+      0 6px 12px -4px rgb(79 70 229 / 0.22);
+  }
+  52% {
+    opacity: 0.62;
+    filter: brightness(1.12);
+    box-shadow:
+      0 14px 28px -5px rgb(124 58 237 / 0.55),
+      0 0 0 3px rgb(167 139 250 / 0.28);
+  }
+  70%,
+  100% {
+    opacity: 1;
+    filter: brightness(1);
+    box-shadow:
+      0 12px 24px -6px rgb(124 58 237 / 0.38),
+      0 6px 12px -4px rgb(79 70 229 / 0.22);
+  }
+}
+
+@layer utilities {
+  .book-ai-fab-attention {
+    animation: book-ai-fab-attention 2.8s ease-in-out infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .book-ai-fab-attention {
+      animation: none;
+    }
+  }
+}

@@ -53,7 +53,7 @@ export function BookCanvasToolbar({
   return (
     <div
       className={cn(
-        "pointer-events-auto z-10 flex items-center gap-0.5 rounded-xl border border-border/80 bg-card/95 px-2 py-1.5 shadow-sm ring-1 ring-black/[0.03] backdrop-blur-md dark:ring-white/[0.06]",
+        "pointer-events-auto z-10 flex h-full min-h-0 min-w-0 flex-1 items-center gap-0.5",
         className,
       )}
       role="toolbar"
@@ -65,33 +65,33 @@ export function BookCanvasToolbar({
             type="button"
             size="icon"
             variant="outline"
-            className="size-8 shrink-0"
+            className="size-7 shrink-0"
             disabled={!canUndo}
             onClick={onUndo}
             aria-label="실행 취소"
             title="실행 취소 (Ctrl+Z)"
           >
-            <Undo2 className="size-4" />
+            <Undo2 className="size-3.5" />
           </Button>
           <Button
             type="button"
             size="icon"
             variant="outline"
-            className="size-8 shrink-0"
+            className="size-7 shrink-0"
             disabled={!canRedo}
             onClick={onRedo}
             aria-label="다시 실행"
             title="다시 실행 (Ctrl+Shift+Z)"
           >
-            <Redo2 className="size-4" />
+            <Redo2 className="size-3.5" />
           </Button>
-          <div className="mx-0.5 h-6 w-px bg-border" aria-hidden />
+          <div className="mx-0.5 h-5 w-px bg-border" aria-hidden />
         </>
       ) : null}
       {showCenterGuideControl || showDragGridControl ? (
-        <div className="flex items-center gap-2 px-1">
+        <div className="flex items-center gap-1.5 px-0.5">
           {showCenterGuideControl ? (
-            <label className="flex items-center gap-1.5">
+            <label className="flex items-center gap-1">
               <span className="shrink-0 text-xs text-muted-foreground">중앙선</span>
               <Input
                 type="number"
@@ -109,17 +109,17 @@ export function BookCanvasToolbar({
                   );
                   onCenterGuideThresholdPxChange(clamped);
                 }}
-                className="h-8 w-[3.25rem] px-1.5 text-center text-xs tabular-nums"
+                className="h-7 w-11 min-w-0 px-1 py-0 text-center text-xs leading-none tabular-nums md:text-xs"
                 aria-label="가운데 기준선이 나타나는 거리(논리 픽셀)"
                 title="드래그할 때, 위젯 가운데가 슬라이드 가운데에서 이 거리 안이면 분홍 기준선이 보입니다"
               />
             </label>
           ) : null}
           {showCenterGuideControl && showDragGridControl ? (
-            <div className="h-6 w-px bg-border" aria-hidden />
+            <div className="h-5 w-px bg-border" aria-hidden />
           ) : null}
           {showDragGridControl ? (
-            <label className="flex items-center gap-1.5">
+            <label className="flex items-center gap-1">
               <span className="shrink-0 text-xs text-muted-foreground">그리드</span>
               <Input
                 type="number"
@@ -137,7 +137,7 @@ export function BookCanvasToolbar({
                   );
                   onDragGridPxChange(clamped);
                 }}
-                className="h-8 w-[3.25rem] px-1.5 text-center text-xs tabular-nums"
+                className="h-7 w-11 min-w-0 px-1 py-0 text-center text-xs leading-none tabular-nums md:text-xs"
                 aria-label="드래그 스냅 그리드 간격(논리 픽셀)"
                 title="드래그할 때 위치가 이 간격(논리 px)의 배수로 맞춰집니다"
               />
@@ -146,40 +146,41 @@ export function BookCanvasToolbar({
         </div>
       ) : null}
       {showSnapControlsDividerBeforeZoom ? (
-        <div className="mx-0.5 h-6 w-px bg-border" aria-hidden />
+        <div className="mx-0.5 h-5 w-px bg-border" aria-hidden />
       ) : null}
       <Button
         type="button"
         size="icon"
         variant="outline"
-        className="size-8 shrink-0"
+        className="size-7 shrink-0"
         onClick={onZoomOut}
         aria-label="축소"
         title="축소 (Ctrl+휠)"
       >
-        <Minus className="size-4" />
+        <Minus className="size-3.5" />
       </Button>
-      <span className="min-w-[2.75rem] select-none text-center text-xs tabular-nums text-muted-foreground">
+      <span className="min-w-9 select-none text-center text-xs leading-none tabular-nums text-muted-foreground">
         {zoomPercent}%
       </span>
       <Button
         type="button"
         size="icon"
         variant="outline"
-        className="size-8 shrink-0"
+        className="size-7 shrink-0"
         onClick={onZoomIn}
         aria-label="확대"
         title="확대 (Ctrl+휠)"
       >
-        <Plus className="size-4" />
+        <Plus className="size-3.5" />
       </Button>
       <Button
         type="button"
         size="sm"
         variant="ghost"
-        className="h-8 shrink-0 px-2 text-xs"
+        className="h-7 shrink-0 px-2 text-xs leading-none"
         onClick={onZoomReset}
         aria-label="줌 초기화"
+        title="줌 100%로 되돌리고, 스테이지에 contain 맞춤으로 다시 맞춤"
       >
         맞춤
       </Button>

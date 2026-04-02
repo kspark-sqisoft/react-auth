@@ -9,6 +9,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { SafeImage } from "@/components/ui/safe-image";
+import {
+  floatingDockChatInsetEndClass,
+  floatingDockFabButtonClass,
+  floatingDockFabIconClass,
+  floatingDockVerticalInsetClass,
+} from "@/lib/floating-dock-chrome";
 import { cn } from "@/lib/utils";
 
 type ChatMessageEvt = {
@@ -385,11 +391,21 @@ export function ChatDock() {
   const badgeText = unread > 9 ? "9+" : String(unread);
 
   return (
-    <div className="pointer-events-none fixed end-3 top-[max(0.75rem,env(safe-area-inset-top,0px))] bottom-[max(0.75rem,env(safe-area-inset-bottom,0px))] z-[240] flex min-h-0 flex-col sm:end-6 sm:top-[max(1.5rem,env(safe-area-inset-top,0px))] sm:bottom-[max(1.5rem,env(safe-area-inset-bottom,0px))]">
-      <div className="pointer-events-auto flex min-h-0 flex-1 flex-col items-end justify-end gap-3">
+    <div
+      className={cn(
+        "pointer-events-none fixed z-[240] flex min-h-0 flex-col",
+        floatingDockVerticalInsetClass,
+        floatingDockChatInsetEndClass,
+      )}
+    >
+      {/*
+        래퍼에 pointer-events-auto + flex-1을 두면 오른쪽 가늘 띠 전체(뷰포트 세로)가 히트 영역이 되어
+        북 속성 패널 등 그 아래 UI가 클릭되지 않는다. 실제 대화상자·FAB만 pointer-events-auto.
+      */}
+      <div className="pointer-events-none flex min-h-0 flex-1 flex-col items-end justify-end gap-3">
         {open ? (
           <div
-            className="flex h-full max-h-[min(90dvh,48rem)] min-h-0 w-[min(100vw-2rem,22rem)] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl sm:w-[24rem]"
+            className="pointer-events-auto flex h-full max-h-[min(90dvh,48rem)] min-h-0 w-[min(100vw-2rem,22rem)] flex-col overflow-hidden rounded-xl border border-border bg-card text-card-foreground shadow-xl sm:w-[24rem]"
             role="dialog"
             aria-label="채팅"
           >
@@ -603,12 +619,13 @@ export function ChatDock() {
         ) : null}
 
         {!open ? (
-          <div className="relative">
+          <div className="pointer-events-auto relative">
             <Button
               type="button"
               size="icon"
               className={cn(
-                "size-14 rounded-full shadow-lg",
+                floatingDockFabButtonClass,
+                "shadow-lg",
                 unread > 0 && "ring-2 ring-primary ring-offset-2 ring-offset-background",
               )}
               aria-label={unread > 0 ? `채팅 열기 (읽지 않음 ${unread})` : "채팅 열기"}
@@ -618,7 +635,7 @@ export function ChatDock() {
                 setOpen(true);
               }}
             >
-              <MessageCircle className="size-7" strokeWidth={1.75} />
+              <MessageCircle className={floatingDockFabIconClass} strokeWidth={1.75} />
             </Button>
             {unread > 0 ? (
               <span

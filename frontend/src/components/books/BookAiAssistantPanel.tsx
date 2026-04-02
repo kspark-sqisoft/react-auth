@@ -25,7 +25,13 @@ import {
 import type { BookCanvasElement } from "@/lib/book-canvas";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { cn } from "@/lib/utils";
+import {
+  floatingDockAiInsetStartClass,
+  floatingDockBottomInsetClass,
+  floatingDockFabButtonClass,
+  floatingDockFabIconClass,
+} from "@/lib/floating-dock-chrome";
+  import { cn } from "@/lib/utils";
 
 type ChatLine = { role: "user" | "assistant"; text: string; lineKey: string };
 
@@ -449,8 +455,9 @@ export function BookAiAssistantPanel({
   const shell = (
     <div
       className={cn(
-        "pointer-events-none fixed left-4 flex max-h-[calc(100svh-1rem)] flex-col justify-end gap-2",
-        "bottom-[max(1rem,env(safe-area-inset-bottom,0px))]",
+        "pointer-events-none fixed flex max-h-[calc(100svh-1rem)] flex-col justify-end gap-3 sm:max-h-[calc(100svh-2.5rem)]",
+        floatingDockAiInsetStartClass,
+        floatingDockBottomInsetClass,
         className,
       )}
       style={{
@@ -471,8 +478,8 @@ export function BookAiAssistantPanel({
           onPointerDownCapture={() => onRaiseFloatingStack?.()}
         >
           <header className="flex shrink-0 items-center gap-2 border-b border-violet-300/40 bg-white/55 px-4 py-3 dark:border-violet-600/35 dark:bg-black/25">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-linear-to-br from-violet-500 to-indigo-600 text-white shadow-md shadow-violet-600/30">
-              <Sparkles className="size-5" aria-hidden />
+            <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-linear-to-br from-violet-500 to-indigo-600 text-white shadow-md shadow-violet-600/30">
+              <Sparkles className="size-4" aria-hidden />
             </div>
             <div className="min-w-0 flex-1">
               <h2 className="font-heading text-base font-semibold leading-tight tracking-tight text-violet-950 dark:text-violet-50">
@@ -661,9 +668,13 @@ export function BookAiAssistantPanel({
         type="button"
         size="icon"
         className={cn(
-          "pointer-events-auto size-14 rounded-full shadow-xl shadow-violet-600/35",
-          "border-2 border-white/25 bg-linear-to-br from-violet-600 to-indigo-600 text-white",
-          "hover:from-violet-500 hover:to-indigo-500 dark:shadow-violet-950/60",
+          floatingDockFabButtonClass,
+          "pointer-events-auto ring-2 ring-inset ring-white/35",
+          "bg-linear-to-br from-violet-600 to-indigo-600 text-white",
+          "hover:from-violet-500 hover:to-indigo-500",
+          !open &&
+            "book-ai-fab-attention shadow-xl shadow-violet-600/35 dark:shadow-violet-950/60",
+          open && "shadow-xl shadow-violet-600/35 dark:shadow-violet-950/60",
         )}
         aria-expanded={open}
         aria-label={open ? "AI 어시스턴트 패널 접기" : "AI 어시스턴트 패널 열기"}
@@ -673,7 +684,7 @@ export function BookAiAssistantPanel({
           setOpen((o) => !o);
         }}
       >
-        <Bot className="size-7" aria-hidden />
+        <Bot className={floatingDockFabIconClass} strokeWidth={1.75} aria-hidden />
       </Button>
     </div>
   );

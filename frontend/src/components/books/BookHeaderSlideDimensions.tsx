@@ -51,7 +51,7 @@ export function BookHeaderSlideDimensions({
 
   return (
     <div
-      className="flex flex-wrap items-center gap-x-3 gap-y-1 border-l border-border/70 pl-3 sm:gap-x-4 sm:pl-4"
+      className="flex flex-wrap items-center gap-x-2 gap-y-0.5 border-l border-border/70 pl-2 sm:gap-x-3 sm:pl-3"
       title={`슬라이드 캔버스 크기(px). ${DIM_MIN}~${DIM_MAX}. 입력 후 Enter 또는 포커스 이동.`}
     >
       <span className="text-[11px] font-semibold tracking-tight text-foreground/80 sm:text-xs">캔버스</span>
@@ -67,7 +67,7 @@ export function BookHeaderSlideDimensions({
           type="text"
           inputMode="numeric"
           autoComplete="off"
-          className="h-8 w-[4.25rem] px-2 text-xs tabular-nums sm:h-9 sm:w-[4.5rem] sm:text-sm"
+          className="h-7 w-16 px-1.5 text-[11px] tabular-nums sm:w-[4.25rem] sm:text-xs"
           value={wShown}
           onFocus={() => setWEdit(String(slideWidth))}
           onChange={(e) => setWEdit(e.target.value.replace(/\D/g, ""))}
@@ -89,7 +89,7 @@ export function BookHeaderSlideDimensions({
           type="text"
           inputMode="numeric"
           autoComplete="off"
-          className="h-8 w-[4.25rem] px-2 text-xs tabular-nums sm:h-9 sm:w-[4.5rem] sm:text-sm"
+          className="h-7 w-16 px-1.5 text-[11px] tabular-nums sm:w-[4.25rem] sm:text-xs"
           value={hShown}
           onFocus={() => setHEdit(String(slideHeight))}
           onChange={(e) => setHEdit(e.target.value.replace(/\D/g, ""))}

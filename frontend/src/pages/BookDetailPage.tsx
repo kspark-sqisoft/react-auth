@@ -71,6 +71,7 @@ import { defaultTextWidgetBoxHeight } from "@/lib/book-text-widget";
 import { warmBookCanvasImagesForNeighborPages } from "@/lib/book-image-cache";
 import {
   bookCanvasStageMatClass,
+  bookCanvasToolbarRowClass,
   bookLeftDockContentColumnClass,
 } from "@/lib/book-workspace-ui";
 import { bookKeys } from "@/lib/query-keys";
@@ -1483,9 +1484,9 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       <>
       <BookWorkspaceShell
         titleArea={
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:gap-x-3">
             <Input
-              className="h-9 min-w-[10rem] max-w-md flex-1 rounded-md border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/25 focus-visible:bg-muted/20 focus-visible:ring-1 focus-visible:ring-ring/50 sm:text-lg"
+              className="h-8 min-w-[10rem] max-w-md flex-1 rounded-md border-transparent bg-transparent pl-2.5 pr-2 text-sm font-semibold shadow-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/25 focus-visible:bg-muted/20 focus-visible:ring-1 focus-visible:ring-ring/50 sm:text-base"
               value={bookTitle}
               onChange={(e) => setBookTitle(e.target.value)}
               placeholder="북 제목"
@@ -1502,35 +1503,41 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
         }
         actions={
           <>
-            <div className="flex flex-wrap items-center justify-end gap-2">
-              <Button type="button" size="sm" variant="outline" asChild>
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7 px-2 text-xs"
+                asChild
+              >
                 <Link to={`/books/${bookId}/preview`} target="_blank" rel="noreferrer">
-                  <MonitorPlay className="mr-2 size-4" />
+                  <MonitorPlay className="mr-1.5 size-3.5" />
                   미리보기
                 </Link>
               </Button>
               <Button
                 type="button"
                 size="sm"
-                className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
+                className="h-7 border-transparent bg-blue-600 px-2.5 text-xs text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
                 onClick={() => saveMutation.mutate()}
                 disabled={saveMutation.isPending}
               >
                 {saveMutation.isPending ? (
-                  <Spinner className="mr-2 size-4 text-white" />
+                  <Spinner className="mr-1.5 size-3.5 text-white" />
                 ) : (
-                  <Save className="mr-2 size-4" />
+                  <Save className="mr-1.5 size-3.5" />
                 )}
                 저장
               </Button>
               <Button
                 type="button"
                 size="sm"
-                className="border-transparent bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/40"
+                className="h-7 border-transparent bg-red-600 px-2.5 text-xs text-white hover:bg-red-700 focus-visible:ring-red-500/40"
                 disabled={deleteMutation.isPending}
                 onClick={() => setDeleteConfirmOpen(true)}
               >
-                <Trash2 className="mr-2 size-4" />
+                <Trash2 className="mr-1.5 size-3.5" />
                 삭제
               </Button>
             </div>
@@ -1647,9 +1654,9 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
     <>
     <BookWorkspaceShell
       titleArea={
-        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:gap-x-3">
           <Input
-            className="h-9 min-w-[10rem] max-w-md flex-1 rounded-md border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/25 focus-visible:bg-muted/20 focus-visible:ring-1 focus-visible:ring-ring/50 sm:text-lg"
+            className="h-8 min-w-[10rem] max-w-md flex-1 rounded-md border-transparent bg-transparent pl-2.5 pr-2 text-sm font-semibold shadow-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/25 focus-visible:bg-muted/20 focus-visible:ring-1 focus-visible:ring-ring/50 sm:text-base"
             value={bookTitle}
             onChange={(e) => setBookTitle(e.target.value)}
             placeholder="북 제목"
@@ -1666,35 +1673,41 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       }
       actions={
         <>
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Button type="button" size="sm" variant="outline" asChild>
+          <div className="flex flex-wrap items-center justify-end gap-1.5">
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              className="h-7 px-2 text-xs"
+              asChild
+            >
               <Link to={`/books/${bookId}/preview`} target="_blank" rel="noreferrer">
-                <MonitorPlay className="mr-2 size-4" />
+                <MonitorPlay className="mr-1.5 size-3.5" />
                 미리보기
               </Link>
             </Button>
             <Button
               type="button"
               size="sm"
-              className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
+              className="h-7 border-transparent bg-blue-600 px-2.5 text-xs text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
               onClick={() => saveMutation.mutate()}
               disabled={saveMutation.isPending}
             >
               {saveMutation.isPending ? (
-                <Spinner className="mr-2 size-4 text-white" />
+                <Spinner className="mr-1.5 size-3.5 text-white" />
               ) : (
-                <Save className="mr-2 size-4" />
+                <Save className="mr-1.5 size-3.5" />
               )}
               저장
             </Button>
             <Button
               type="button"
               size="sm"
-              className="border-transparent bg-red-600 text-white hover:bg-red-700 focus-visible:ring-red-500/40"
+              className="h-7 border-transparent bg-red-600 px-2.5 text-xs text-white hover:bg-red-700 focus-visible:ring-red-500/40"
               disabled={deleteMutation.isPending}
               onClick={() => setDeleteConfirmOpen(true)}
             >
-              <Trash2 className="mr-2 size-4" />
+              <Trash2 className="mr-1.5 size-3.5" />
               삭제
             </Button>
           </div>
@@ -1780,7 +1793,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
       center={
         <>
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            <div className="flex shrink-0 justify-start border-b border-border/60 bg-muted/15 px-2 py-2 sm:px-3">
+            <div className={bookCanvasToolbarRowClass()}>
               <BookCanvasToolbar
                 zoomPercent={zoomPercent}
                 onZoomIn={zoomIn}
@@ -1800,7 +1813,7 @@ function BookDetailOwnerView({ bookId, serverBook }: { bookId: number; serverBoo
             <div
               ref={canvasWrapRef}
               className={bookCanvasStageMatClass(
-                "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 pb-24",
+                "relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden p-2",
               )}
               onWheel={handleWheel}
               onPointerDown={(e) => {
@@ -2129,7 +2142,7 @@ function BookDetailGuestBookView({
   const guestCanvasScale = useBookCanvasDisplayScale(canvasWrapRef, {
     slideWidth: guestSlideW,
     slideHeight: guestSlideH,
-    bottomPad: 48,
+    ...BOOK_CANVAS_STAGE_DISPLAY_OPTS,
   });
 
   const safeIndex = Math.min(pageIndex, Math.max(0, sortedPagesView.length - 1));
@@ -2163,10 +2176,16 @@ function BookDetailGuestBookView({
         </div>
       }
       actions={
-        <div className="flex flex-wrap items-center justify-end gap-2">
-          <Button type="button" size="sm" variant="outline" asChild>
+        <div className="flex flex-wrap items-center justify-end gap-1.5">
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            className="h-7 px-2 text-xs"
+            asChild
+          >
             <Link to={`/books/${data.id}/preview`} target="_blank" rel="noreferrer">
-              <MonitorPlay className="mr-2 size-4" />
+              <MonitorPlay className="mr-1.5 size-3.5" />
               미리보기
             </Link>
           </Button>
@@ -2187,7 +2206,7 @@ function BookDetailGuestBookView({
       }
       center={
         <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex shrink-0 justify-start border-b border-border/60 bg-muted/15 px-2 py-2 sm:px-3">
+          <div className={bookCanvasToolbarRowClass()}>
             <BookCanvasToolbar
               zoomPercent={guestCanvasScale.zoomPercent}
               onZoomIn={guestCanvasScale.zoomIn}
@@ -2198,7 +2217,7 @@ function BookDetailGuestBookView({
           <div
             ref={canvasWrapRef}
             className={bookCanvasStageMatClass(
-              "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4",
+              "relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden p-2",
             )}
             onWheel={guestCanvasScale.handleWheel}
           >

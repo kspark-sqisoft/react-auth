@@ -663,17 +663,11 @@ export function BookPageSidebar({
       )}
     >
       <div
-        className={cn(
-          bookDockedPanelHeaderRowClass(),
-          fluid ? "py-3" : "py-2.5",
-        )}
+        className={bookDockedPanelHeaderRowClass()}
         title={reorder ? "슬라이드 줄 전체를 드래그해 순서를 바꿀 수 있습니다." : undefined}
       >
-        <FileStack
-          className={cn(bookDockedPanelHeaderIconClass(), fluid && "size-[1.125rem]")}
-          aria-hidden
-        />
-        <span className={cn(bookDockedPanelHeadingClass(), fluid && "text-sm")}>페이지</span>
+        <FileStack className={bookDockedPanelHeaderIconClass()} aria-hidden />
+        <span className={bookDockedPanelHeadingClass()}>페이지</span>
       </div>
       {/* basis-0: flex 자식이 콘텐츠 높이만큼 밀고 늘어나지 않게 — 목록만 스크롤, 하단 버튼 고정 */}
       <div className="min-h-0 flex-1 basis-0 overflow-y-auto overflow-x-hidden overscroll-contain [-webkit-overflow-scrolling:touch]">

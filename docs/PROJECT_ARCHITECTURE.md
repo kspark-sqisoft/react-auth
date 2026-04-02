@@ -305,14 +305,15 @@ flowchart TB
 | `/books` | `BookListPage` | 무한 스크롤 UI이나 API는 **`skip`/`take`/`total`** (6.3절) |
 | `/books/new` | `BookEditorPage` | 로그인 필요, 저장 후 상세로 이동 가능 |
 | `/books/:id` | `BookDetailPage` | 공개 URL; 작성자면 편집 UI, 비작성자는 보기·레이어 패널·**미리보기(슬라이드쇼)** |
-| `/books/:id/preview` | `BookPresentationPage` | 공개; 헤더 아래 북 스테이지는 **바깥 CSS·맞춤 패딩 없이** 가장자리까지 사용. 창 미리보기와 **브라우저 전체 화면**(슬라이드 영역만 `requestFullscreen`)이 **동일한 표시 모드**(헤더 토글: 전체/contain·덮기/cover·꽉/fill; 줌 **초기**는 배율·줌 리셋). 전체 화면 즉시 진입·Esc 종료; 슬라이드 영역은 **진입 직후** 커서·**비디오·미디어 바** 숨김, 짧은 **포인터 유예(ms)** 뒤 실제 움직임에서만 다시 표시 후 유휴 시 재숨김(`book-pres-fs-hide-cursor`·`viewModeHideMediaChrome`·`PRESENTATION_FULLSCREEN_POINTER_GRACE_MS`). **전환 효과**·`BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS`·줌 — 편집 스테이지는 `BOOK_CANVAS_STAGE_DISPLAY_OPTS`(maxFit 1, contain) |
+| `/books/:id/preview` | `BookPresentationPage` | 공개; 헤더 아래 북 스테이지는 **바깥 CSS·맞춤 패딩 없이** 가장자리까지 사용. 창 미리보기와 **브라우저 전체 화면**(슬라이드 영역만 `requestFullscreen`)이 **동일한 표시 모드**(헤더 토글: 전체/contain·덮기/cover·꽉/fill; 줌 **초기**는 배율·줌 리셋). 전체 화면 즉시 진입·Esc 종료; 슬라이드 영역은 **진입 직후** 커서·**비디오·미디어 바** 숨김, 짧은 **포인터 유예(ms)** 뒤 실제 움직임에서만 다시 표시 후 유휴 시 재숨김(`book-pres-fs-hide-cursor`·`viewModeHideMediaChrome`·`PRESENTATION_FULLSCREEN_POINTER_GRACE_MS`). **전환 효과**·`BOOK_CANVAS_PRESENTATION_DISPLAY_OPTS`·줌 — 편집 스테이지는 `BOOK_CANVAS_STAGE_DISPLAY_OPTS`(contain·옵션 맞춤 패딩 0) + 래퍼 **얇은 CSS 패딩**(`p-2`, `ResizeObserver`가 반영); 좌우 패널 접기 시 중앙 열 리사이즈로 맞춤 재계산, 맞춤 버튼은 줌 1 + 재측정 |
 | `/books/:id/edit` | → `/books/:id` 리다이렉트 | 레거시 |
 | `/me` | `MyInfoPage` | |
 | `/cats`, `/cats/:id` | Cats 데모 | |
 
 ### 6.2 공통 UI
 
-- `AppLayout`: 헤더·채팅 독(`ChatDock`) 등 껍데기
+- `AppLayout`: 헤더·**컴팩트 푸터**(얇은 세로 패딩)·채팅 독(`ChatDock`) 등 껍데기. **`/books/new`·`/books/:id`(숫자 id만)** 에서는 사이트 **헤더·푸터를 각각 접기**해 북 영역 세로를 최대화; **펼친 상태** 토글은 헤더 오른쪽 **로그아웃(비로그인 시 회원가입) 바로 옆**, 푸터 내비에서 **내 정보(비로그인 시 회원가입) 바로 옆**(`max-w-3xl` 열 안). **접힘** 시 **보이는 건 토글 버튼만**(헤더·푸터 막대·배경 없음). `fixed` 투명 래퍼(`…CollapsedStrip*`)는 펼친 때와 **같은 세로·가로 착지**만 맞추고 `pointer-events-none`이라 그 밑 북 UI는 그대로 조작된다 — 버튼만 `floatingDockBookSiteChromeToggleClass`에 `pointer-events-auto`. 헤더: `top-0`·`h-12`·`items-center`·`justify-end` 열; 푸터: `bottom-0`·`px-4 py-2 sm:py-2.5`. `size="icon-sm"`은 로그아웃 `sm`과 같은 `h-7`/`w-7`. 헤더 `z-[260]`은 `BookWorkspaceShell`(`z-[250]`) 위. 상태는 `localStorage` `book-workspace-chrome-header-collapsed` / `book-workspace-chrome-footer-collapsed`. 플로팅 채팅(`ChatDock`)·북 AI FAB는 `floating-dock-chrome.ts`에서 **좌우 미러 인셋**(`start-4`·`end-4`, sm `7`)·**동일 하단**·버튼·아이콘 크기를 맞추고, `bottom`은 컴팩트 푸터 안쪽에 가깝게 잡음. `ChatDock`은 `flex-1` 정렬 래퍼를 `pointer-events-none`으로 두고 **열린 패널·닫힌 FAB만** `pointer-events-auto` — 그렇지 않으면 오른쪽 가늘 띠 전체가 히트 영역이 되어 북 속성 패널이 가려진 것처럼 동작할 수 있음. 북 AI FAB는 패널 **닫힌 상태**에서만 `index.css`의 `book-ai-fab-attention`(이중 펄스·글로우, `prefers-reduced-motion` 시 비활성)으로 시선 유도
+- 북 워크스페이스 `book-workspace-ui.ts`: 속성·레이어·**페이지**(`BookPageSidebar`) 제목 행과 가운데 **캔버스 툴바 행**을 같은 **`h-12` 헤더 밴드**로 맞춤 — `AppLayout` 사이트 헤더·`BookWorkspaceShell` 제목 줄(`h-12`·`px-4`)과 동일 높이(`bookDockedPanelHeaderRowClass` / `bookCanvasToolbarRowClass`)
 - `ProtectedRoute`: 비로그인 시 로그인으로 이동
 - API 래퍼: `frontend/src/lib/api.ts` (토큰·에러 처리)
 

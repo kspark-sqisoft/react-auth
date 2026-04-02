@@ -15,11 +15,19 @@ export function bookDockedPanelRootClass(className?: string) {
   return cn("flex h-full min-h-0 flex-col overflow-hidden bg-card/50", className);
 }
 
+/**
+ * 도킹 패널 제목 행·가운데 캔버스 툴바 행 공통 — `AppLayout` 사이트 헤더와 동일 `h-12`로 한 줄로 맞음.
+ */
+const bookWorkspaceHeaderBandClass =
+  "flex h-12 shrink-0 items-center gap-2.5 border-b border-border/70 bg-muted/[0.07] px-3 backdrop-blur-[8px]";
+
 export function bookDockedPanelHeaderRowClass(className?: string) {
-  return cn(
-    "flex shrink-0 items-center gap-2.5 border-b border-border/70 bg-muted/[0.07] px-3 py-2.5 backdrop-blur-[8px]",
-    className,
-  );
+  return cn(bookWorkspaceHeaderBandClass, className);
+}
+
+/** 가운데 열: Undo/Redo·줌 툴바 줄(패널 헤더와 동일 밴드) */
+export function bookCanvasToolbarRowClass(className?: string) {
+  return cn(bookWorkspaceHeaderBandClass, "justify-start", className);
 }
 
 /** 헤더 제목 — 본문 톤에 가깝게 */

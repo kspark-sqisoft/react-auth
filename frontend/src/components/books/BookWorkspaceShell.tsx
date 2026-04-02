@@ -121,16 +121,16 @@ export function BookWorkspaceShell({
         className,
       )}
     >
-      <header className="relative z-[250] flex min-h-[3.25rem] shrink-0 items-center gap-2 border-b border-border/80 bg-card/95 px-2 py-2 shadow-sm backdrop-blur-md sm:gap-3 sm:px-4">
+      <header className="relative z-[250] flex h-12 shrink-0 items-center gap-2 border-b border-border/80 bg-card/95 px-4 shadow-sm backdrop-blur-md sm:gap-3">
         <Button
           type="button"
           variant="ghost"
           size="icon"
-          className="shrink-0 rounded-lg text-muted-foreground hover:bg-muted/80 hover:text-foreground"
+          className="size-8 shrink-0 rounded-md text-muted-foreground hover:bg-muted/80 hover:text-foreground"
           onClick={() => void navigate("/books")}
           aria-label="북 목록으로"
         >
-          <ArrowLeft className="size-5" />
+          <ArrowLeft className="size-4" />
         </Button>
         <div className="min-w-0 flex-1">{titleArea}</div>
         <div className="relative z-20 flex shrink-0 flex-wrap items-center justify-end gap-1.5 sm:gap-2">

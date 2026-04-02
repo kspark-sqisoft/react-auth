@@ -50,6 +50,7 @@ import {
 } from "@/lib/book-floating-ui-prefs";
 import {
   bookCanvasStageMatClass,
+  bookCanvasToolbarRowClass,
   bookLeftDockContentColumnClass,
 } from "@/lib/book-workspace-ui";
 import { bookKeys } from "@/lib/query-keys";
@@ -967,9 +968,9 @@ export function BookEditorPage() {
     <>
       <BookWorkspaceShell
         titleArea={
-          <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2 sm:gap-x-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 sm:gap-x-3">
             <Input
-              className="h-9 min-w-[10rem] max-w-md flex-1 rounded-md border-transparent bg-transparent pl-3 pr-2 text-base font-semibold shadow-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/25 focus-visible:bg-muted/20 focus-visible:ring-1 focus-visible:ring-ring/50 sm:text-lg"
+              className="h-8 min-w-[10rem] max-w-md flex-1 rounded-md border-transparent bg-transparent pl-2.5 pr-2 text-sm font-semibold shadow-none transition-colors placeholder:text-muted-foreground/60 hover:bg-muted/25 focus-visible:bg-muted/20 focus-visible:ring-1 focus-visible:ring-ring/50 sm:text-base"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder="북 제목"
@@ -988,14 +989,14 @@ export function BookEditorPage() {
           <Button
             type="button"
             size="sm"
-            className="border-transparent bg-blue-600 text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
+            className="h-7 border-transparent bg-blue-600 px-2.5 text-xs text-white hover:bg-blue-700 focus-visible:ring-blue-500/40 disabled:opacity-100"
             onClick={() => saveMutation.mutate()}
             disabled={saveMutation.isPending}
           >
             {saveMutation.isPending ? (
-              <Spinner className="mr-2 size-4 text-white" />
+              <Spinner className="mr-1.5 size-3.5 text-white" />
             ) : (
-              <Save className="mr-2 size-4" />
+              <Save className="mr-1.5 size-3.5" />
             )}
             저장
           </Button>
@@ -1072,7 +1073,7 @@ export function BookEditorPage() {
         center={
           <>
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="flex shrink-0 justify-start border-b border-border/60 bg-muted/15 px-2 py-2 sm:px-3">
+              <div className={bookCanvasToolbarRowClass()}>
                 <BookCanvasToolbar
                   zoomPercent={zoomPercent}
                   onZoomIn={zoomIn}
@@ -1092,7 +1093,7 @@ export function BookEditorPage() {
               <div
                 ref={canvasWrapRef}
                 className={bookCanvasStageMatClass(
-                  "relative flex min-h-0 flex-1 items-center justify-center overflow-hidden p-4 pb-24",
+                  "relative flex min-h-0 min-w-0 flex-1 items-center justify-center overflow-hidden p-2",
                 )}
                 onWheel={handleWheel}
                 onPointerDown={(e) => {

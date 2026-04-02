@@ -14,13 +14,16 @@ const MAX_USER_ZOOM = 4;
 export type BookCanvasDisplayFitMode = "contain" | "cover" | "fill";
 
 /**
- * 북 편집 스테이지(`BookDetailPage`·`BookEditorPage`)와 슬라이드쇰 미리보기에서 같은 맞춤 규칙을 쓰면
- * `BookSlideCanvas` 논리 좌표·텍스트 HTML 오버레이가 동일 배율로 그려진다.
+ * 편집·작성자 상세 스테이지 옵션. `BookDetailPage`·`BookEditorPage`에서 쓰이며,
+ * contain으로 슬라이드 전체가 보이게 하고, 맞춤 계산용 추가 패딩은 0(가장자리 여백은 래퍼 `p-2` 등 CSS).
+ * 좌우 패널을 접으면 중앙 열이 넓어지고 ResizeObserver로 맞춤 배율이 갱신됨.
  */
 export const BOOK_CANVAS_STAGE_DISPLAY_OPTS = {
-  bottomPad: 120,
-  horizontalPad: 48,
-  maxFitScale: 1,
+  bottomPad: 0,
+  horizontalPad: 0,
+  /** 뷰포트가 슬라이드보다 클 때 확대 상한(과도한 픽셀 밀도 방지). */
+  maxFitScale: 64,
+  fitMode: "contain" as const,
 } as const;
 
 /**
@@ -114,7 +117,10 @@ export function useBookCanvasDisplayScale(
   useLayoutEffect(() => {
     const el = wrapRef.current;
     if (!el) return;
-    measureFitScale();
+    /* 초기 측정만 microtask로 분리 — effect 본문 동기 setState 린트 회피 */
+    queueMicrotask(() => {
+      measureFitScale();
+    });
     const ro = new ResizeObserver(() => measureFitScale());
     ro.observe(el);
     return () => ro.disconnect();
