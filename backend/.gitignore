@@ -58,5 +58,5 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
-# Local SQLite database (default DATABASE_PATH)
+# Legacy local SQLite (이전 버전)
 /db.sqlite

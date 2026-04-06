@@ -9,7 +9,25 @@ function positiveInt(v: string | undefined, fallback: number): number {
 
 export const PORT = positiveInt(process.env.PORT, 3000);
 
-export const DATABASE_PATH = process.env.DATABASE_PATH ?? 'db.sqlite';
+/** PostgreSQL (로컬·Docker 공통). `docker-compose*.yml` 기본값과 맞춤 */
+export const DB_HOST = process.env.DB_HOST?.trim() || 'localhost';
+export const DB_PORT = positiveInt(process.env.DB_PORT, 5432);
+export const DB_USERNAME = process.env.DB_USERNAME?.trim() || 'reactauth';
+export const DB_PASSWORD = process.env.DB_PASSWORD?.trim() || 'reactauth';
+export const DB_NAME = process.env.DB_NAME?.trim() || 'reactauth';
+
+/**
+ * 스키마 자동 동기화. 운영에서는 `TYPEORM_SYNC=false` + 마이그레이션 권장.
+ * 미설정 시: NODE_ENV=production 이면 false, 아니면 true.
+ */
+export const TYPEORM_SYNCHRONIZE = (() => {
+  const v = process.env.TYPEORM_SYNC?.trim().toLowerCase();
+  if (v === 'true' || v === '1') return true;
+  if (v === 'false' || v === '0') return false;
+  return process.env.NODE_ENV !== 'production';
+})();
+
+export const TYPEORM_LOGGING = process.env.TYPEORM_LOGGING === 'true';
 
 /** 업로드 파일 루트 (절대 또는 cwd 기준). 정적 제공: /uploads → 이 디렉터리 */
 export const UPLOAD_ROOT =

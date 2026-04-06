@@ -1,0 +1,71 @@
+# 운영 스타일: 멀티스테이지 이미지 + nginx 정적 서빙 (핫 리로드 없음)
+# 개발(핫 리로드): docker compose -f docker-compose.dev.yml up
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: react-auth-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-reactauth}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-reactauth}
+      POSTGRES_DB: ${DB_NAME:-reactauth}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build: ./backend
+    container_name: react-auth-api
+    restart: unless-stopped
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: production
+      TYPEORM_SYNC: ${TYPEORM_SYNC:-true}
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-reactauth}
+      DB_PASSWORD: ${DB_PASSWORD:-reactauth}
+      DB_NAME: ${DB_NAME:-reactauth}
+      PORT: 3000
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-react_auth_jwt_access_dev_key_32chars_min!!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-react_auth_jwt_refresh_dev_key_32chars!!}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:8080}
+      UPLOAD_ROOT: /app/uploads
+    volumes:
+      - backend_uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+
+  frontend:
+    build: ./frontend
+    container_name: react-auth-web
+    restart: unless-stopped
+    ports:
+      - '8080:80'
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data:
+  backend_uploads:

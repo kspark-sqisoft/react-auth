@@ -23,6 +23,10 @@ export class Post {
   @Column('text')
   content: string;
 
+  /** `post-categories.ts`의 값 중 하나 */
+  @Column({ type: 'varchar', length: 32, default: 'general' })
+  category: string;
+
   @ManyToOne(() => User, { onDelete: 'CASCADE' })
   author: User;
 

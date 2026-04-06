@@ -1,13 +1,13 @@
 /**
  * 개발용: IT 주제 글 20개를 가장 오래된 사용자에게 연결해 삽입합니다.
- * 무한 스크롤·커서 목록 테스트용. 재실행할 때마다 20개가 추가됩니다.
+ * 각 글에는 `post-categories.ts` 중 하나가 무작위로 배정됩니다.
  *
- * 실행: backend 디렉터리에서 `npm run seed:posts`
+ * 실행: backend 디렉터리에서 `npm run seed:posts` (PostgreSQL 가동·`.env` DB 설정 필요)
  */
 import 'reflect-metadata';
-import { join } from 'path';
-import { DataSource } from 'typeorm';
-import { DATABASE_PATH } from '../src/env.constants';
+import { DataSource, type DataSourceOptions } from 'typeorm';
+import { typeOrmRootOptions } from '../src/typeorm-root.options';
+import { randomPostCategory } from '../src/posts/post-categories';
 import { Post } from '../src/posts/post.entity';
 import { User } from '../src/users/user.entity';
 
@@ -33,9 +33,9 @@ const ROWS: { title: string; content: string }[] = [
       '<p>목록·상세처럼 공개지만, 로그인 시에만 채워지는 필드(예: 좋아요 여부)가 있을 때 선택 JWT 가드로 동일 엔드포인트에서 분기할 수 있습니다.</p>',
   },
   {
-    title: 'SQLite + TypeORM synchronize는 개발 전용',
+    title: 'PostgreSQL + TypeORM synchronize는 개발 전용',
     content:
-      '<p>스키마를 자동 맞춰 주어 편하지만, 운영에서는 마이그레이션으로 버전 관리하고 <code>synchronize: false</code>로 두는 것이 안전합니다.</p>',
+      '<p>스키마를 자동 맞춰 주어 편하지만, 운영에서는 마이그레이션으로 버전 관리하고 <code>TYPEORM_SYNC=false</code>로 두는 것이 안전합니다.</p>',
   },
   {
     title: 'Vite 환경 변수는 VITE_ 접두사',
@@ -63,9 +63,9 @@ const ROWS: { title: string; content: string }[] = [
       '<p>나중에 로그만 읽어도 “무엇을·왜” 바꿨는지 드러나야 합니다. 티켓 번호와 한 줄 요약, 필요하면 본문에 맥락을 덧붙이는 방식이 협업에 유리합니다.</p>',
   },
   {
-    title: 'Docker 없이 로컬 풀스택 개발 팁',
+    title: 'Docker Compose로 풀스택 개발',
     content:
-      '<p>백엔드 포트와 Vite 프록시(또는 환경의 API URL)만 통일하면 됩니다. DB는 SQLite 한 파일로 시작하면 설치 부담이 적습니다.</p>',
+      '<p><code>docker-compose.dev.yml</code>로 DB·백엔드·프론트를 한 번에 띄우고, 소스 볼륨 마운트로 Nest/Vite 핫 리로드를 쓸 수 있습니다.</p>',
   },
   {
     title: 'Socket.IO 네임스페이스와 path',
@@ -115,15 +115,9 @@ const ROWS: { title: string; content: string }[] = [
 ];
 
 async function main() {
-  const dbPath = DATABASE_PATH.includes('/') || DATABASE_PATH.includes('\\')
-    ? DATABASE_PATH
-    : join(process.cwd(), DATABASE_PATH);
-
-  const root = join(__dirname, '..');
+  const base = typeOrmRootOptions() as DataSourceOptions;
   const ds = new DataSource({
-    type: 'sqlite',
-    database: dbPath,
-    entities: [join(root, 'src/**/*.entity.{ts,js}')],
+    ...base,
     synchronize: false,
   });
 
@@ -151,6 +145,7 @@ async function main() {
       const p = postRepo.create({
         title: row.title,
         content: row.content,
+        category: randomPostCategory(),
         author: { id: author.id },
       });
       p.createdAt = createdAt;
@@ -159,8 +154,15 @@ async function main() {
     });
 
     await postRepo.save(posts);
+    const byCat = posts.reduce(
+      (acc, p) => {
+        acc[p.category] = (acc[p.category] ?? 0) + 1;
+        return acc;
+      },
+      {} as Record<string, number>,
+    );
     console.log(
-      `[seed:posts] 사용자 id=${author.id} (${author.email}) 에 글 ${posts.length}개를 넣었습니다.`,
+      `[seed:posts] 사용자 id=${author.id} (${author.email}) 에 글 ${posts.length}개를 넣었습니다. 카테고리 분포: ${JSON.stringify(byCat)}`,
     );
   } finally {
     await ds.destroy();

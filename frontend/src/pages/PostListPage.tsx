@@ -18,6 +18,11 @@ import {
   type PostLikeState,
   type PostsPageResponse,
 } from "@/lib/api";
+import {
+  isPostCategoryId,
+  POST_CATEGORY_LABELS,
+  POST_CATEGORY_VALUES,
+} from "@/lib/post-categories";
 import { SITE_APP_MAIN_SCROLL_ID } from "@/lib/app-layout-scroll";
 import { appLog } from "@/lib/app-log";
 import { toast } from "sonner";
@@ -26,6 +31,7 @@ import { PostListItem } from "@/components/posts/PostListItem";
 import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Spinner } from "@/components/ui/spinner";
 
 /** 뷰포트 하단에서 이 픽셀 안이면 “다음 페이지”로 간주 */
@@ -45,13 +51,15 @@ export function PostListPage() {
   const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
   const urlSearchRaw = searchParams.get("search") ?? "";
+  const urlCategoryRaw = searchParams.get("category")?.trim().toLowerCase() ?? "";
+  const categoryFilterParam = isPostCategoryId(urlCategoryRaw) ? urlCategoryRaw : "";
 
   const [loadMoreScheduled, setLoadMoreScheduled] = useState(false);
   const [likeActionError, setLikeActionError] = useState<string | null>(null);
   const [searchInput, setSearchInput] = useState(urlSearchRaw);
   const [searchQuery, setSearchQuery] = useState(urlSearchRaw.trim());
 
-  const listQueryKey = postKeys.list(searchQuery);
+  const listQueryKey = postKeys.list(searchQuery, categoryFilterParam);
 
   const {
     data,
@@ -69,6 +77,7 @@ export function PostListPage() {
         cursor: pageParam,
         take: POST_PAGE_DEFAULT,
         search: q,
+        ...(categoryFilterParam ? { category: categoryFilterParam } : {}),
       });
       appLog(
         "posts",
@@ -163,7 +172,7 @@ export function PostListPage() {
       clearLoadMoreDebounce();
     });
     scrollArmedRef.current = false;
-  }, [searchQuery, clearLoadMoreDebounce]);
+  }, [searchQuery, categoryFilterParam, clearLoadMoreDebounce]);
 
   const runFetchNextPage = useCallback(() => {
     void fetchNextPage();
@@ -286,7 +295,7 @@ export function PostListPage() {
           <div>
             <h1 className="font-heading text-2xl font-semibold tracking-tight">글 목록</h1>
             <p className="mt-1 text-sm text-muted-foreground">
-              제목·본문으로 검색할 수 있습니다. 처음 {POST_PAGE_DEFAULT}개만 불러오며, 더 보기·스크롤로
+              카테고리·제목·본문으로 좁힐 수 있습니다. 처음 {POST_PAGE_DEFAULT}개만 불러오며, 더 보기·스크롤로
               이어서 불러옵니다.
             </p>
           </div>
@@ -329,6 +338,36 @@ export function PostListPage() {
               </button>
             ) : null}
           </div>
+          <div className="flex max-w-md flex-col gap-1.5">
+            <Label htmlFor="post-list-category" className="text-muted-foreground">
+              카테고리
+            </Label>
+            <select
+              id="post-list-category"
+              value={categoryFilterParam}
+              onChange={(e) => {
+                const v = e.target.value;
+                setSearchParams(
+                  (prev) => {
+                    const p = new URLSearchParams(prev);
+                    if (v) p.set("category", v);
+                    else p.delete("category");
+                    return p;
+                  },
+                  { replace: true },
+                );
+              }}
+              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50"
+              aria-label="글 카테고리 필터"
+            >
+              <option value="">전체</option>
+              {POST_CATEGORY_VALUES.map((id) => (
+                <option key={id} value={id}>
+                  {POST_CATEGORY_LABELS[id]}
+                </option>
+              ))}
+            </select>
+          </div>
           {searchQuery && !isPending && total !== null ? (
             <p className="text-sm text-muted-foreground" aria-live="polite">
               검색 결과{" "}
@@ -368,7 +407,9 @@ export function PostListPage() {
         <p className="text-sm text-muted-foreground">
           {searchQuery
             ? `「${searchQuery}」에 맞는 글이 없습니다.`
-            : "아직 글이 없습니다."}
+            : categoryFilterParam
+              ? `이 카테고리(「${POST_CATEGORY_LABELS[categoryFilterParam]}」)에 글이 없습니다.`
+              : "아직 글이 없습니다."}
         </p>
       ) : null}
 

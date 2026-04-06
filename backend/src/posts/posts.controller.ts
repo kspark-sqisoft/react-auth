@@ -48,6 +48,11 @@ const multipartPostBody = {
     properties: {
       title: { type: 'string', example: '제목' },
       content: { type: 'string', example: '본문' },
+      category: {
+        type: 'string',
+        example: 'tech',
+        description: 'tech | life | study | chat | general (선택)',
+      },
       attachments: {
         type: 'array',
         items: { type: 'string', format: 'binary' },
@@ -69,6 +74,10 @@ const multipartPatchBody = {
     properties: {
       title: { type: 'string' },
       content: { type: 'string' },
+      category: {
+        type: 'string',
+        description: 'tech | life | study | chat | general',
+      },
       mediaPlan: {
         type: 'string',
         description:
@@ -139,16 +148,22 @@ export class PostsController {
     required: false,
     description: '제목·본문 부분 일치(공백 제거, 최대 120자)',
   })
+  @ApiQuery({
+    name: 'category',
+    required: false,
+    description: 'tech | life | study | chat | general',
+  })
   findPage(
     @Req() req: Request & { user?: JwtPayload },
     @Query('take', new DefaultValuePipe(12), ParseIntPipe) takeRaw: number,
     @Query('search') search?: string,
+    @Query('category') category?: string,
     @Query('cursor') cursor?: string,
   ) {
     this.logger.log('[POSTS·컨트롤러] findPage() 핸들러 진입');
     const take = Math.min(50, Math.max(1, takeRaw));
     const c = cursor?.trim() ? cursor.trim() : undefined;
-    return this.postsService.findPage(take, req.user?.sub, search, c);
+    return this.postsService.findPage(take, req.user?.sub, search, category, c);
   }
 
   @Get(':id/comments')
@@ -258,6 +273,7 @@ export class PostsController {
         req.user.sub,
         body.title,
         body.content,
+        body.category,
         attachmentFiles,
         posterFiles,
       );
@@ -297,6 +313,7 @@ export class PostsController {
     const {
       title,
       content,
+      category,
       mediaPlan: mediaPlanRaw,
       removeMedia,
       removeImage,
@@ -340,6 +357,7 @@ export class PostsController {
       return await this.postsService.updatePost(req.user.sub, id, {
         title,
         content,
+        category,
         clearAllMedia: clearAllMedia || undefined,
         mediaPlan,
         newFiles,

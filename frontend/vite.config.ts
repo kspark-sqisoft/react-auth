@@ -19,53 +19,57 @@ function spaHtmlBypass(req: IncomingMessage) {
   }
 }
 
+/** Docker dev: `VITE_API_PROXY_TARGET=http://backend:3000` (compose에서 설정) */
+const apiProxyTarget =
+  process.env.VITE_API_PROXY_TARGET?.trim() || "http://localhost:3000";
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
     proxy: {
       "/auth": {
-        target: "http://localhost:3000",
+        target: apiProxyTarget,
         changeOrigin: true,
         bypass: spaHtmlBypass,
       },
       "/users": {
-        target: "http://localhost:3000",
+        target: apiProxyTarget,
         changeOrigin: true,
         bypass: spaHtmlBypass,
       },
       "/posts": {
-        target: "http://localhost:3000",
+        target: apiProxyTarget,
         changeOrigin: true,
         bypass: spaHtmlBypass,
       },
       "/books": {
-        target: "http://localhost:3000",
+        target: apiProxyTarget,
         changeOrigin: true,
         bypass: spaHtmlBypass,
       },
       "/weather": {
-        target: "http://localhost:3000",
+        target: apiProxyTarget,
         changeOrigin: true,
         bypass: spaHtmlBypass,
       },
       "/news": {
-        target: "http://localhost:3000",
+        target: apiProxyTarget,
         changeOrigin: true,
         bypass: spaHtmlBypass,
       },
       "/cats": {
-        target: "http://localhost:3000",
+        target: apiProxyTarget,
         changeOrigin: true,
         bypass: spaHtmlBypass,
       },
       "/uploads": {
-        target: "http://localhost:3000",
+        target: apiProxyTarget,
         changeOrigin: true,
         bypass: spaHtmlBypass,
       },
       "/socket.io": {
-        target: "http://localhost:3000",
+        target: apiProxyTarget,
         changeOrigin: true,
         ws: true,
       },

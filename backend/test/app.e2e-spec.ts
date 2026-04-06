@@ -1,5 +1,5 @@
 /**
- * `setup-e2e-env.ts`에서 `DATABASE_PATH=:memory:` 설정 후 이 파일이 로드됨.
+ * `setup-e2e-env.ts`에서 PostgreSQL 연결(DB_*)을 설정한 뒤 이 파일이 로드됨.
  */
 import { INestApplication } from '@nestjs/common';
 import { Test, TestingModule } from '@nestjs/testing';

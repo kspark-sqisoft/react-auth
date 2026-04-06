@@ -13,6 +13,6 @@ export class RefreshToken {
   @Column({ unique: true })
   tokenHash: string;
 
-  @Column({ type: 'datetime' })
+  @Column({ type: 'timestamp' })
   expiresAt: Date;
 }

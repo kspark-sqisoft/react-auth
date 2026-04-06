@@ -20,7 +20,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
 import { CenteredSpinner } from "@/components/layout/CenteredSpinner";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { POST_CATEGORY_LABELS, isPostCategoryId } from "@/lib/post-categories";
 import { PostMediaCarousel } from "@/components/posts/PostMediaCarousel";
 import { formatDateFullShort } from "@/lib/format-date";
 import { postBodyHtmlForRender } from "@/lib/post-html";
@@ -129,7 +131,14 @@ export function PostDetailPage() {
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight">{post.title}</h1>
+          <div className="flex flex-wrap items-center gap-2">
+            <h1 className="font-heading min-w-0 text-2xl font-semibold tracking-tight">
+              {post.title}
+            </h1>
+            {isPostCategoryId(post.category) ? (
+              <Badge variant="secondary">{POST_CATEGORY_LABELS[post.category]}</Badge>
+            ) : null}
+          </div>
           <p className="mt-2 text-sm text-muted-foreground">
             <AuthorAvatarInline author={post.author} size="md">
               {" "}

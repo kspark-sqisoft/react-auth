@@ -4,7 +4,7 @@ import { TypeOrmModule } from '@nestjs/typeorm';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { AuthModule } from './auth/auth.module';
-import { DATABASE_PATH } from './env.constants';
+import { typeOrmRootOptions } from './typeorm-root.options';
 import { ChatModule } from './chat/chat.module';
 import { BooksModule } from './books/books.module';
 import { NewsModule } from './news/news.module';
@@ -20,12 +20,7 @@ import {
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
-    TypeOrmModule.forRoot({
-      type: 'sqlite',
-      database: DATABASE_PATH,
-      entities: [__dirname + '/**/*.entity{.ts,.js}'],
-      synchronize: true, // 개발용만!
-    }),
+    TypeOrmModule.forRoot(typeOrmRootOptions()),
     UsersModule,
     AuthModule,
     PostsModule,

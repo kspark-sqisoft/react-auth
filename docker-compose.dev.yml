@@ -1,0 +1,86 @@
+# 개발: 소스 볼륨 마운트 + Nest/Vite watch (핫 리로드)
+# 사용: docker compose -f docker-compose.dev.yml up
+name: react-auth-dev
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: react-auth-db-dev
+    environment:
+      POSTGRES_USER: ${DB_USERNAME:-reactauth}
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-reactauth}
+      POSTGRES_DB: ${DB_NAME:-reactauth}
+    ports:
+      - '5432:5432'
+    volumes:
+      - postgres_data_dev:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.dev
+    container_name: react-auth-api-dev
+    ports:
+      - '3000:3000'
+    environment:
+      NODE_ENV: development
+      TYPEORM_SYNC: 'true'
+      DB_HOST: db
+      DB_PORT: 5432
+      DB_USERNAME: ${DB_USERNAME:-reactauth}
+      DB_PASSWORD: ${DB_PASSWORD:-reactauth}
+      DB_NAME: ${DB_NAME:-reactauth}
+      PORT: 3000
+      CHOKIDAR_USEPOLLING: 'true'
+      JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-react_auth_jwt_access_dev_key_32chars_min!!}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-react_auth_jwt_refresh_dev_key_32chars!!}
+      JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
+      JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173,http://localhost:8080}
+      UPLOAD_ROOT: /app/uploads
+    volumes:
+      - ./backend:/app
+      - backend_node_modules:/app/node_modules
+      - backend_uploads_dev:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD-SHELL',
+          'wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1',
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile.dev
+    container_name: react-auth-web-dev
+    ports:
+      - '5173:5173'
+      - '8080:5173'
+    environment:
+      VITE_API_PROXY_TARGET: http://backend:3000
+      DOCKER_DEV: 'true'
+    volumes:
+      - ./frontend:/app
+      - frontend_node_modules:/app/node_modules
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  postgres_data_dev:
+  backend_node_modules:
+  frontend_node_modules:
+  backend_uploads_dev:

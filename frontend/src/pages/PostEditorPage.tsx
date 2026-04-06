@@ -15,6 +15,12 @@ import { postKeys } from "@/lib/query-keys";
 import { appLog } from "@/lib/app-log";
 import { formDataGetString } from "@/lib/form-data-utils";
 import { fieldErrorsFromZodIssues } from "@/lib/zod-form";
+import {
+  isPostCategoryId,
+  POST_CATEGORY_LABELS,
+  POST_CATEGORY_VALUES,
+  type PostCategoryId,
+} from "@/lib/post-categories";
 import { postEditorSchema, type PostEditorFormValues } from "@/lib/schemas/forms";
 import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
 import { FormFieldError } from "@/components/forms/FormFieldError";
@@ -96,6 +102,7 @@ export function PostEditorPage() {
   const [addBusy, setAddBusy] = useState(false);
   const [forbidden, setForbidden] = useState(false);
   const [title, setTitle] = useState("");
+  const [category, setCategory] = useState<PostCategoryId>("general");
 
   const initialState: PostEditorActionState = {
     serverError: null,
@@ -110,6 +117,7 @@ export function PostEditorPage() {
     const parsed = postEditorSchema.safeParse({
       title: formDataGetString(formData, "title"),
       content: formDataGetString(formData, "content"),
+      category: formDataGetString(formData, "category") || "general",
     });
     if (!parsed.success) {
       return {
@@ -127,6 +135,7 @@ export function PostEditorPage() {
           const updated = await updatePost(postId, {
             title: parsed.data.title.trim(),
             content: parsed.data.content,
+            category: parsed.data.category,
             mediaPlan: [],
           });
           queryClient.setQueryData(postKeys.detail(updated.id, viewerKey), updated);
@@ -152,6 +161,7 @@ export function PostEditorPage() {
         const updated = await updatePost(postId, {
           title: parsed.data.title.trim(),
           content: parsed.data.content,
+          category: parsed.data.category,
           mediaPlan,
           newFiles,
           newPosters,
@@ -178,6 +188,7 @@ export function PostEditorPage() {
       const created = await createPost({
         title: parsed.data.title.trim(),
         content: parsed.data.content,
+        category: parsed.data.category,
         attachmentFiles,
         posterFiles,
       });
@@ -247,6 +258,7 @@ export function PostEditorPage() {
     startTransition(() => {
       if (!isEdit || !Number.isFinite(postId)) {
         setTitle("");
+        setCategory("general");
         setSlots([]);
         setForbidden(false);
         return;
@@ -259,6 +271,9 @@ export function PostEditorPage() {
       }
       setForbidden(false);
       setTitle(loadedPost.title);
+      setCategory(
+        isPostCategoryId(loadedPost.category) ? loadedPost.category : "general",
+      );
     });
   }, [isEdit, postId, loadedPost, postLoading, user]);
 
@@ -408,6 +423,29 @@ export function PostEditorPage() {
           </CardHeader>
           <CardContent className="space-y-4 pb-6">
             <FormErrorAlert message={optimisticState.serverError} />
+            <div className="space-y-2">
+              <Label htmlFor="post-category">카테고리</Label>
+              <select
+                id="post-category"
+                name="category"
+                value={category}
+                onChange={(e) =>
+                  setCategory((e.target.value as PostCategoryId) || "general")
+                }
+                aria-invalid={Boolean(optimisticState.fieldErrors.category)}
+                className={cn(
+                  "flex h-9 w-full max-w-xs rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-xs transition-[color,box-shadow] outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50",
+                  optimisticState.fieldErrors.category && "border-destructive",
+                )}
+              >
+                {POST_CATEGORY_VALUES.map((id) => (
+                  <option key={id} value={id}>
+                    {POST_CATEGORY_LABELS[id]}
+                  </option>
+                ))}
+              </select>
+              <FormFieldError message={optimisticState.fieldErrors.category} />
+            </div>
             <div className="space-y-2">
               <Label htmlFor="post-title">제목</Label>
               <Input

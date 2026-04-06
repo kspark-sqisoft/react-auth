@@ -48,19 +48,19 @@ describe('PostsService', () => {
   describe('createWithAttachments', () => {
     it('제목 없으면 BadRequestException', async () => {
       await expect(
-        service.createWithAttachments(1, '  ', '<p>x</p>', [], []),
+        service.createWithAttachments(1, '  ', '<p>x</p>', undefined, [], []),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('본문이 비어 있으면 BadRequestException', async () => {
       await expect(
-        service.createWithAttachments(1, '제목', '', [], []),
+        service.createWithAttachments(1, '제목', '', undefined, [], []),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
     it('본문이 태그만 있으면 BadRequestException', async () => {
       await expect(
-        service.createWithAttachments(1, '제목', '<p></p>', [], []),
+        service.createWithAttachments(1, '제목', '<p></p>', undefined, [], []),
       ).rejects.toBeInstanceOf(BadRequestException);
     });
 
@@ -74,6 +74,7 @@ describe('PostsService', () => {
         id: 10,
         title: '제목',
         content: '<p>hello</p>',
+        category: 'general',
         createdAt: new Date(),
         updatedAt: new Date(),
         author,
@@ -84,12 +85,14 @@ describe('PostsService', () => {
         1,
         '제목',
         '<p>hello</p>',
+        undefined,
         [],
         [],
       );
 
       expect(out.id).toBe(10);
       expect(out.title).toBe('제목');
+      expect(out.category).toBe('general');
       expect(repo.save).toHaveBeenCalled();
       expect(attRepo.save).not.toHaveBeenCalled();
     });

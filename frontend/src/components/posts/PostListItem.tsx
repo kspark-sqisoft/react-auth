@@ -5,7 +5,9 @@ import { formatDateMediumShort } from "@/lib/format-date";
 import { plainTextFromPostHtml } from "@/lib/post-html";
 import { AuthorAvatarInline } from "@/components/posts/AuthorAvatarInline";
 import { PostLikeButton } from "@/components/posts/PostLikeButton";
+import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { POST_CATEGORY_LABELS, isPostCategoryId } from "@/lib/post-categories";
 import { SafeImage } from "@/components/ui/safe-image";
 
 type Props = {
@@ -69,9 +71,16 @@ export function PostListItem({
               to={`/posts/${post.id}`}
               className="flex min-h-[7.5rem] min-w-0 flex-col justify-center gap-1.5 px-4 py-3 pb-10 pr-14 sm:py-3.5"
             >
-              <h3 className="font-heading line-clamp-1 h-6 shrink-0 text-base font-semibold leading-6 text-foreground transition-colors group-hover/card:text-primary">
-                {post.title}
-              </h3>
+              <div className="flex min-h-6 shrink-0 flex-wrap items-center gap-2">
+                <h3 className="font-heading line-clamp-1 min-w-0 flex-1 text-base font-semibold leading-6 text-foreground transition-colors group-hover/card:text-primary">
+                  {post.title}
+                </h3>
+                {isPostCategoryId(post.category) ? (
+                  <Badge variant="secondary" className="shrink-0 text-[10px] font-medium">
+                    {POST_CATEGORY_LABELS[post.category]}
+                  </Badge>
+                ) : null}
+              </div>
               <p className="flex h-8 min-h-8 shrink-0 items-center text-xs text-muted-foreground">
                 <AuthorAvatarInline author={post.author} size="xs">
                   {" "}

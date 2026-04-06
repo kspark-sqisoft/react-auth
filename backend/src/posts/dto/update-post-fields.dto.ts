@@ -9,6 +9,12 @@ export class UpdatePostFieldsDto {
   content?: string;
 
   @ApiPropertyOptional({
+    example: 'life',
+    description: 'tech | life | study | chat | general',
+  })
+  category?: string;
+
+  @ApiPropertyOptional({
     description:
       'JSON: {"items":[{"t":"e","id":1},{"t":"n","i":0}]} — 기존(e)·새(n) 순서',
   })

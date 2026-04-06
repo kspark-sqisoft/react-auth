@@ -25,7 +25,9 @@ export const catKeys = {
 export const postKeys = {
   all: ["posts"] as const,
   lists: () => [...postKeys.all, "list"] as const,
-  list: (search: string) => [...postKeys.lists(), search] as const,
+  /** `category` 빈 문자열 = 전체 */
+  list: (search: string, category: string) =>
+    [...postKeys.lists(), search, category] as const,
   details: () => [...postKeys.all, "detail"] as const,
   /** `viewerKey`: 로그인 시 likedByMe 등이 바뀌므로 구분 */
   detail: (id: number, viewerKey: number | "anon") =>

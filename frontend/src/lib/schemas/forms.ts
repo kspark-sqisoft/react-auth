@@ -33,7 +33,9 @@ function postContentPlainLen(html: string): number {
     .trim().length;
 }
 
-/** 글 작성·수정(제목·본문만; 이미지는 별도 state). 본문은 리치 HTML 문자열 */
+const postCategoryEnum = z.enum(["tech", "life", "study", "chat", "general"]);
+
+/** 글 작성·수정(제목·본문·카테고리; 첨부는 별도 state). 본문은 리치 HTML 문자열 */
 export const postEditorSchema = z.object({
   title: z
     .string()
@@ -44,6 +46,7 @@ export const postEditorSchema = z.object({
     .string()
     .max(POST_CONTENT_MAX, "본문이 너무 깁니다.")
     .refine((s) => postContentPlainLen(s) > 0, "본문을 입력해 주세요."),
+  category: postCategoryEnum,
 });
 
 export type PostEditorFormValues = z.infer<typeof postEditorSchema>;

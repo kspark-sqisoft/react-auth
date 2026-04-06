@@ -77,6 +77,8 @@ export type Post = {
   id: number;
   title: string;
   content: string;
+  /** tech | life | study | chat | general */
+  category: string;
   /** 순서대로 첨부 */
   media: PostMediaItem[];
   /** 목록 썸네일(첫 첨부) */
@@ -304,14 +306,18 @@ export async function fetchPostsPage(params?: {
   take?: number;
   /** 제목·본문 부분 일치 */
   search?: string;
+  /** tech | life | study | chat | general */
+  category?: string;
 }): Promise<PostsPageResponse> {
   try {
     const search = params?.search?.trim();
+    const category = params?.category?.trim();
     const { data } = await api.get<PostsPageResponse>("/posts", {
       params: {
         take: params?.take ?? POST_PAGE_DEFAULT,
         ...(params?.cursor ? { cursor: params.cursor } : {}),
         ...(search ? { search } : {}),
+        ...(category ? { category } : {}),
       },
     });
     return data;
@@ -396,12 +402,16 @@ export async function unlikePost(id: number): Promise<PostLikeState> {
 export async function createPost(input: {
   title: string;
   content: string;
+  category?: string;
   attachmentFiles: File[];
   posterFiles: File[];
 }): Promise<Post> {
   const fd = new FormData();
   fd.append("title", input.title);
   fd.append("content", input.content);
+  if (input.category?.trim()) {
+    fd.append("category", input.category.trim());
+  }
   for (const f of input.attachmentFiles) {
     fd.append("attachments", f);
   }
@@ -422,6 +432,7 @@ export async function updatePost(
   input: {
     title: string;
     content: string;
+    category?: string;
     clearAllMedia?: boolean;
     mediaPlan?: Array<{ t: "e"; id: number } | { t: "n"; i: number }>;
     newFiles?: File[];
@@ -431,6 +442,9 @@ export async function updatePost(
   const fd = new FormData();
   fd.append("title", input.title);
   fd.append("content", input.content);
+  if (input.category?.trim()) {
+    fd.append("category", input.category.trim());
+  }
   if (input.clearAllMedia) fd.append("removeMedia", "1");
   if (input.mediaPlan != null) {
     fd.append("mediaPlan", JSON.stringify({ items: input.mediaPlan }));

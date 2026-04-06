@@ -29,6 +29,7 @@ import {
   postContentPlainLength,
   sanitizePostContentHtml,
 } from './post-content-sanitize';
+import { normalizePostCategory } from './post-categories';
 
 const IMAGE_MIME = new Set([
   'image/jpeg',
@@ -55,6 +56,7 @@ export type PostPublic = {
   id: number;
   title: string;
   content: string;
+  category: string;
   /** 순서대로 첨부(이미지·동영상) */
   media: PostMediaItemPublic[];
   /** 목록 썸네일(첫 첨부 기준) */
@@ -191,6 +193,7 @@ export class PostsService {
       id: post.id,
       title: post.title,
       content: post.content,
+      category: post.category ?? 'general',
       media,
       coverThumbUrl,
       coverKind,
@@ -309,6 +312,7 @@ export class PostsService {
     take: number,
     viewerId: number | undefined,
     search: string | undefined,
+    category: string | undefined,
     cursor?: string | null,
   ): Promise<{
     items: PostPublic[];
@@ -321,10 +325,13 @@ export class PostsService {
       raw.length > PostsService.SEARCH_MAX_LEN
         ? raw.slice(0, PostsService.SEARCH_MAX_LEN)
         : raw;
+    const catFilter = category?.trim()
+      ? normalizePostCategory(category.trim())
+      : undefined;
 
     const cursorLabel = cursor?.trim() ? '(있음)' : '(없음)';
     this.logger.log(
-      `[POSTS·서비스] 목록 커서 조회 take=${take} cursor=${cursorLabel} search=${term ? `"${term.slice(0, 40)}${term.length > 40 ? '…' : ''}"` : '(없음)'}`,
+      `[POSTS·서비스] 목록 커서 조회 take=${take} cursor=${cursorLabel} category=${catFilter ?? '(전체)'} search=${term ? `"${term.slice(0, 40)}${term.length > 40 ? '…' : ''}"` : '(없음)'}`,
     );
 
     const applySearch = (
@@ -339,12 +346,21 @@ export class PostsService {
       }
     };
 
+    const applyCategory = (
+      qb: ReturnType<Repository<Post>['createQueryBuilder']>,
+    ) => {
+      if (catFilter) {
+        qb.andWhere('post.category = :catFilter', { catFilter });
+      }
+    };
+
     const idQb = this.repo
       .createQueryBuilder('post')
       .select(['post.id', 'post.createdAt'])
       .orderBy('post.createdAt', 'DESC')
       .addOrderBy('post.id', 'DESC');
     applySearch(idQb);
+    applyCategory(idQb);
 
     if (cursor?.trim()) {
       const { createdAt, id } = this.decodePostListCursor(cursor.trim());
@@ -364,6 +380,7 @@ export class PostsService {
     if (!cursor?.trim()) {
       const countQb = this.repo.createQueryBuilder('post');
       applySearch(countQb);
+      applyCategory(countQb);
       total = await countQb.getCount();
     }
 
@@ -442,6 +459,7 @@ export class PostsService {
     authorId: number,
     titleRaw: string,
     contentRaw: string,
+    categoryRaw: string | undefined,
     attachmentFiles: Express.Multer.File[],
     posterFiles: Express.Multer.File[],
   ): Promise<PostPublic> {
@@ -481,10 +499,13 @@ export class PostsService {
       );
     }
 
+    const category = normalizePostCategory(categoryRaw);
+
     const saved = await this.repo.save(
       this.repo.create({
         title,
         content,
+        category,
         author: { id: authorId },
       }),
     );
@@ -525,6 +546,7 @@ export class PostsService {
     body: {
       title?: string;
       content?: string;
+      category?: string;
       clearAllMedia?: boolean;
       mediaPlan?: MediaPlanItem[];
       newFiles?: Express.Multer.File[];
@@ -643,7 +665,8 @@ export class PostsService {
     }
 
     /** 첨부는 attRepo로만 다룸. post.attachments는 로드 시점 스냅샷이라 save(post) cascade 시 postId가 깨질 수 있음 */
-    const titleContentPatch: Partial<Pick<Post, 'title' | 'content'>> = {};
+    const titleContentPatch: Partial<Pick<Post, 'title' | 'content' | 'category'>> =
+      {};
     if (body.title !== undefined) {
       const t = body.title.trim();
       if (!t) throw new BadRequestException('제목이 비어 있을 수 없습니다.');
@@ -661,6 +684,11 @@ export class PostsService {
       }
       post.content = cleaned;
       titleContentPatch.content = cleaned;
+    }
+    if (body.category !== undefined) {
+      const c = normalizePostCategory(body.category);
+      post.category = c;
+      titleContentPatch.category = c;
     }
     if (Object.keys(titleContentPatch).length > 0) {
       await this.repo.update({ id: post.id }, titleContentPatch);
