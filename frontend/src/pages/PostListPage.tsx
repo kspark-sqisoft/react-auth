@@ -135,7 +135,7 @@ export function PostListPage() {
       loadMoreDebounceRef.current = null;
     }
     setLoadMoreScheduled(false);
-  }, []);
+  }, [setLoadMoreScheduled]);
 
   useEffect(() => {
     const id = window.setTimeout(() => {
@@ -187,7 +187,7 @@ export function PostListPage() {
       loadMoreDebounceRef.current = null;
       runFetchNextPage();
     }, LOAD_MORE_DEBOUNCE_MS);
-  }, [runFetchNextPage]);
+  }, [runFetchNextPage, setLoadMoreScheduled]);
 
   const scheduleAppendPostsRef = useRef(scheduleAppendPosts);
 

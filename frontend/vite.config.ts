@@ -23,10 +23,16 @@ function spaHtmlBypass(req: IncomingMessage) {
 const apiProxyTarget =
   process.env.VITE_API_PROXY_TARGET?.trim() || "http://localhost:3000";
 
+/** Windows 등에서 호스트 ↔ 컨테이너 볼륨 마운트 시 inotify가 안 먹는 경우 폴링으로 HMR 복구 */
+const dockerDev = process.env.DOCKER_DEV === "true";
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react(), tailwindcss()],
   server: {
+    ...(dockerDev
+      ? { watch: { usePolling: true, interval: 300 } }
+      : {}),
     proxy: {
       "/auth": {
         target: apiProxyTarget,
