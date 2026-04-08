@@ -8,6 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { BookAiChatMessage } from './book-ai-chat-message.entity';
+import type { AuthActor } from '../auth/auth-policy';
 import { BooksService } from './books.service';
 import { PexelsService } from './pexels.service';
 import { BOOK_AI_USER_GUIDE_BLOCK } from './book-ai-user-guide';
@@ -1414,12 +1415,12 @@ ${msg}`;
    */
   async tryPersistChatTurn(
     bookId: number,
-    userId: number,
+    actor: AuthActor,
     userMessage: string,
     assistantReply: string,
   ): Promise<void> {
     try {
-      await this.booksService.assertBookOwner(bookId, userId);
+      await this.booksService.assertBookOwner(bookId, actor);
     } catch {
       return;
     }
@@ -1438,7 +1439,7 @@ ${msg}`;
 
   async listLayoutChat(
     bookId: number,
-    userId: number,
+    actor: AuthActor,
   ): Promise<
     {
       id: number;
@@ -1447,7 +1448,7 @@ ${msg}`;
       createdAt: string;
     }[]
   > {
-    await this.booksService.assertBookOwner(bookId, userId);
+    await this.booksService.assertBookOwner(bookId, actor);
     const rows = await this.chatMsgRepo.find({
       where: { book: { id: bookId } },
       order: { createdAt: 'ASC' },

@@ -27,8 +27,9 @@ import { PostMediaCarousel } from "@/components/posts/PostMediaCarousel";
 import { formatDateFullShort } from "@/lib/format-date";
 import { postBodyHtmlForRender } from "@/lib/post-html";
 import { toast } from "sonner";
+import { canEditAsOwnerOrAdmin } from "@/lib/authz";
 
-/** 공개 상세; 작성자에게만 수정·삭제 버튼 */
+/** 공개 상세; 작성자·관리자에게 수정·삭제 버튼 */
 export function PostDetailPage() {
   const { id: idParam } = useParams();
   const id = idParam ? Number(idParam) : NaN;
@@ -115,7 +116,7 @@ export function PostDetailPage() {
     return <CenteredSpinner className="min-h-0 py-16" />;
   }
 
-  const isOwner = user && user.sub === post.author.id;
+  const canMutatePost = canEditAsOwnerOrAdmin(user, post.author.id);
 
   function onDelete() {
     if (!Number.isFinite(id)) return;
@@ -163,7 +164,7 @@ export function PostDetailPage() {
             />
           </div>
         </div>
-        {isOwner ? (
+        {canMutatePost ? (
           <div className="flex flex-wrap gap-2">
             <Button asChild variant="outline" size="sm">
               <Link to={`/posts/${post.id}/edit`}>수정</Link>

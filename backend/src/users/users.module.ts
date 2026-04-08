@@ -3,6 +3,7 @@ import {
   forwardRef,
   MiddlewareConsumer,
   NestModule,
+  OnModuleInit,
 } from '@nestjs/common';
 import { UsersService } from './users.service';
 import { UsersController } from './users.controller';
@@ -24,7 +25,16 @@ import { AuthModule } from '../auth/auth.module';
   controllers: [UsersController],
   exports: [UsersService],
 })
-export class UsersModule implements NestModule {
+export class UsersModule implements NestModule, OnModuleInit {
+  constructor(private readonly usersService: UsersService) {}
+
+  onModuleInit(): void {
+    void (async () => {
+      await this.usersService.ensureUserRoleDefaults();
+      await this.usersService.ensureBootstrapAdminRoles();
+    })();
+  }
+
   configure(consumer: MiddlewareConsumer) {
     consumer.apply(UsersDomainSpanMiddleware).forRoutes(UsersController);
   }

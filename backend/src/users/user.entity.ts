@@ -1,6 +1,7 @@
 import { Entity, PrimaryGeneratedColumn, Column, OneToMany } from 'typeorm';
 import type { Book } from '../books/book.entity';
 import type { Post } from '../posts/post.entity';
+import { UserRole } from './user-role';
 
 @Entity()
 export class User {
@@ -9,6 +10,9 @@ export class User {
 
   @Column({ unique: true })
   email: string;
+
+  @Column({ type: 'varchar', length: 16, default: UserRole.User })
+  role: UserRole;
 
   @Column({ default: '' })
   name: string;

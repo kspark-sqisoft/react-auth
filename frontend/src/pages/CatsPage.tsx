@@ -51,6 +51,7 @@ import {
 import { formatDateMediumShort } from "@/lib/format-date";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
+import { canEditCatAsOwnerOrAdmin } from "@/lib/authz";
 
 /**
  * 고양이 목록은 누구나 조회. 등록·삭제·사진 업로드는 로그인 사용자만 (백엔드 JwtAuthGuard와 동일).
@@ -176,7 +177,7 @@ export function CatsPage() {
           Cats (학습)
         </h1>
         <p className="text-sm text-muted-foreground">
-          목록·상세는 공개입니다. 등록·삭제·사진 업로드는 로그인한 사용자만 할 수 있습니다.
+          목록·상세는 공개입니다. 등록은 로그인 사용자만, 삭제·수정은 해당 고양이를 등록한 사람 또는 관리자만 할 수 있습니다.
         </p>
       </div>
 
@@ -346,7 +347,8 @@ export function CatsPage() {
                       {formatDateMediumShort(c.createdAt)}
                     </TableCell>
                     <TableCell className="text-right">
-                      {user ? (
+                      {user &&
+                      canEditCatAsOwnerOrAdmin(user, c.ownerId ?? null) ? (
                         <Button
                           type="button"
                           variant="ghost"

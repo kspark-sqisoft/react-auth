@@ -18,6 +18,7 @@ import { Book } from './book.entity';
 import type { BookPageInputDto } from './dto/book-page-input.dto';
 import type { CreateBookDto } from './dto/create-book.dto';
 import type { UpdateBookDto } from './dto/update-book.dto';
+import { type AuthActor, canMutateOwnedResource } from '../auth/auth-policy';
 
 const TITLE_MAX = 200;
 const MAX_PAGES = 80;
@@ -1632,18 +1633,18 @@ export class BooksService {
 
   async update(
     bookId: number,
-    userId: number,
+    actor: AuthActor,
     body: UpdateBookDto,
   ): Promise<BookPublic> {
     this.logger.log(
-      `[BOOKS·서비스] update | bookId=${bookId} userId=${userId}`,
+      `[BOOKS·서비스] update | bookId=${bookId} actorId=${actor.id}`,
     );
     const book = await this.bookRepo.findOne({
       where: { id: bookId },
       relations: ['author'],
     });
     if (!book) throw new NotFoundException('북을 찾을 수 없습니다.');
-    if (Number(book.author.id) !== Number(userId)) {
+    if (!canMutateOwnedResource(actor, book.author.id)) {
       throw new ForbiddenException('수정 권한이 없습니다.');
     }
 
@@ -1698,16 +1699,16 @@ export class BooksService {
     return updated;
   }
 
-  async remove(bookId: number, userId: number): Promise<void> {
+  async remove(bookId: number, actor: AuthActor): Promise<void> {
     this.logger.log(
-      `[BOOKS·서비스] remove | bookId=${bookId} userId=${userId}`,
+      `[BOOKS·서비스] remove | bookId=${bookId} actorId=${actor.id}`,
     );
     const book = await this.bookRepo.findOne({
       where: { id: bookId },
       relations: ['author'],
     });
     if (!book) throw new NotFoundException('북을 찾을 수 없습니다.');
-    if (Number(book.author.id) !== Number(userId)) {
+    if (!canMutateOwnedResource(actor, book.author.id)) {
       throw new ForbiddenException('삭제 권한이 없습니다.');
     }
     /* DB에 ON DELETE CASCADE가 없으면 페이지 행 때문에 삭제가 실패할 수 있어 명시적으로 먼저 제거 */
@@ -1716,13 +1717,13 @@ export class BooksService {
     this.logger.log(`[BOOKS·서비스] remove 완료 | bookId=${bookId}`);
   }
 
-  async assertBookOwner(bookId: number, userId: number): Promise<Book> {
+  async assertBookOwner(bookId: number, actor: AuthActor): Promise<Book> {
     const b = await this.bookRepo.findOne({
       where: { id: bookId },
       relations: ['author'],
     });
     if (!b) throw new NotFoundException('북을 찾을 수 없습니다.');
-    if (Number(b.author.id) !== Number(userId)) {
+    if (!canMutateOwnedResource(actor, b.author.id)) {
       throw new ForbiddenException('업로드 권한이 없습니다.');
     }
     return b;

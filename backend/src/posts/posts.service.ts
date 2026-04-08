@@ -30,6 +30,7 @@ import {
   sanitizePostContentHtml,
 } from './post-content-sanitize';
 import { normalizePostCategory } from './post-categories';
+import { type AuthActor, canMutateOwnedResource } from '../auth/auth-policy';
 
 const IMAGE_MIME = new Set([
   'image/jpeg',
@@ -541,7 +542,7 @@ export class PostsService {
   }
 
   async updatePost(
-    authorId: number,
+    actor: AuthActor,
     id: number,
     body: {
       title?: string;
@@ -561,15 +562,15 @@ export class PostsService {
       this.logger.warn(`[POSTS·서비스] 수정 실패: 없음 postId=${id}`);
       throw new NotFoundException();
     }
-    if (post.author.id !== authorId) {
+    if (!canMutateOwnedResource(actor, post.author.id)) {
       this.logger.warn(
-        `[POSTS·서비스] 수정 거절: 권한 없음 postId=${id} 요청자=${authorId} 작성자=${post.author.id}`,
+        `[POSTS·서비스] 수정 거절: 권한 없음 postId=${id} 요청자=${actor.id} 작성자=${post.author.id}`,
       );
       throw new ForbiddenException();
     }
 
     this.logger.log(
-      `[POSTS·서비스] 수정 시도 postId=${id} authorId=${authorId}`,
+      `[POSTS·서비스] 수정 시도 postId=${id} actorId=${actor.id}`,
     );
 
     const newFiles = body.newFiles ?? [];
@@ -665,8 +666,9 @@ export class PostsService {
     }
 
     /** 첨부는 attRepo로만 다룸. post.attachments는 로드 시점 스냅샷이라 save(post) cascade 시 postId가 깨질 수 있음 */
-    const titleContentPatch: Partial<Pick<Post, 'title' | 'content' | 'category'>> =
-      {};
+    const titleContentPatch: Partial<
+      Pick<Post, 'title' | 'content' | 'category'>
+    > = {};
     if (body.title !== undefined) {
       const t = body.title.trim();
       if (!t) throw new BadRequestException('제목이 비어 있을 수 없습니다.');
@@ -698,12 +700,12 @@ export class PostsService {
       where: { id },
       relations: ['author', 'attachments'],
     });
-    const likeState = await this.getLikeState(id, authorId);
+    const likeState = await this.getLikeState(id, actor.id);
     this.logger.log(`[POSTS·서비스] 수정 완료 postId=${id}`);
     return this.toPublic(refreshed, likeState);
   }
 
-  async remove(authorId: number, id: number): Promise<void> {
+  async remove(actor: AuthActor, id: number): Promise<void> {
     const post = await this.repo.findOne({
       where: { id },
       relations: ['author', 'attachments'],
@@ -712,14 +714,14 @@ export class PostsService {
       this.logger.warn(`[POSTS·서비스] 삭제 실패: 없음 postId=${id}`);
       throw new NotFoundException();
     }
-    if (post.author.id !== authorId) {
+    if (!canMutateOwnedResource(actor, post.author.id)) {
       this.logger.warn(
-        `[POSTS·서비스] 삭제 거절: 권한 없음 postId=${id} 요청자=${authorId} 작성자=${post.author.id}`,
+        `[POSTS·서비스] 삭제 거절: 권한 없음 postId=${id} 요청자=${actor.id} 작성자=${post.author.id}`,
       );
       throw new ForbiddenException();
     }
     this.logger.log(
-      `[POSTS·서비스] 삭제 완료 postId=${id} authorId=${authorId}`,
+      `[POSTS·서비스] 삭제 완료 postId=${id} actorId=${actor.id}`,
     );
     for (const a of this.sortedAttachments(post)) {
       await this.unlinkAttachmentRow(a);

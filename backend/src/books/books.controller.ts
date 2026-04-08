@@ -92,7 +92,9 @@ export class BooksController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @Patch(':id')
-  @ApiOperation({ summary: '북 수정(작성자만). pages내면 페이지 전체 교체' })
+  @ApiOperation({
+    summary: '북 수정(작성자 또는 관리자). pages내면 페이지 전체 교체',
+  })
   @ApiBody({ type: UpdateBookDto })
   update(
     @Req() req: Request & { user: JwtPayload },
@@ -100,19 +102,29 @@ export class BooksController {
     @Body() body: UpdateBookDto,
   ) {
     this.logger.log(`[BOOKS·컨트롤러] update(${id}) 핸들러 진입`);
-    return this.booksService.update(id, req.user.sub, body);
+    return this.booksService.update(
+      id,
+      {
+        id: req.user.sub,
+        role: req.user.role,
+      },
+      body,
+    );
   }
 
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @Delete(':id')
-  @ApiOperation({ summary: '북 삭제(작성자만)' })
+  @ApiOperation({ summary: '북 삭제(작성자 또는 관리자)' })
   async remove(
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
   ) {
     this.logger.log(`[BOOKS·컨트롤러] remove(${id}) 핸들러 진입`);
-    await this.booksService.remove(id, req.user.sub);
+    await this.booksService.remove(id, {
+      id: req.user.sub,
+      role: req.user.role,
+    });
     return { ok: true };
   }
 
@@ -147,7 +159,7 @@ export class BooksController {
     ),
   )
   @Post(':id/upload')
-  @ApiOperation({ summary: '북용 미디어 업로드(작성자만)' })
+  @ApiOperation({ summary: '북용 미디어 업로드(작성자 또는 관리자)' })
   async uploadMedia(
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
@@ -155,7 +167,10 @@ export class BooksController {
     files?: { file?: Express.Multer.File[]; poster?: Express.Multer.File[] },
   ) {
     this.logger.log(`[BOOKS·컨트롤러] uploadMedia(${id}) 핸들러 진입`);
-    await this.booksService.assertBookOwner(id, req.user.sub);
+    await this.booksService.assertBookOwner(id, {
+      id: req.user.sub,
+      role: req.user.role,
+    });
     const file = files?.file?.[0];
     if (!file?.path) {
       throw new BadRequestException('file 필드가 필요합니다.');

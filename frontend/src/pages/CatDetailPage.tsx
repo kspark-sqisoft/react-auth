@@ -38,6 +38,7 @@ import { SafeImage } from "@/components/ui/safe-image";
 import { Spinner } from "@/components/ui/spinner";
 import { formatDateFullShort } from "@/lib/format-date";
 import { toast } from "sonner";
+import { canEditCatAsOwnerOrAdmin } from "@/lib/authz";
 
 /**
  * 서버에서 cat이 바뀔 때마다 `key`로 리마운트되어 폼 초기값이 맞춰짐 (effect 동기화 불필요).
@@ -276,13 +277,15 @@ export function CatDetailPage() {
     );
   }
 
+  const canMutateCat = canEditCatAsOwnerOrAdmin(user, cat.ownerId ?? null);
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Button asChild variant="ghost" size="sm" className="-ml-2">
           <Link to="/cats">← 목록</Link>
         </Button>
-        {user ? (
+        {user && canMutateCat ? (
           <Button
             type="button"
             variant="destructive"
@@ -310,7 +313,7 @@ export function CatDetailPage() {
           )}
         </div>
 
-        {user ? (
+        {user && canMutateCat ? (
           <CatDetailEditor
             key={`${cat.id}-${cat.updatedAt}`}
             cat={cat}
@@ -339,7 +342,11 @@ export function CatDetailPage() {
               로그인
             </Link>
           </Button>
-          후 이용할 수 있습니다.
+          후, 등록자 또는 관리자만 이용할 수 있습니다.
+        </p>
+      ) : !canMutateCat ? (
+        <p className="text-sm text-muted-foreground">
+          이 고양이 정보를 수정·삭제할 권한이 없습니다. (등록자 또는 관리자만 가능)
         </p>
       ) : null}
 

@@ -10,6 +10,7 @@ import * as bcrypt from 'bcrypt';
 import { UsersService } from '../users/users.service';
 import { AuthService } from './auth.service';
 import { RefreshToken } from './refresh-token.entity';
+import { UserRole } from '../users/user-role';
 
 function fakeJwtWithExp(expSec: number): string {
   const header = Buffer.from(
@@ -84,6 +85,7 @@ describe('AuthService', () => {
         email: 'a@b.com',
         password: 'x',
         name: 'Old',
+        role: UserRole.User,
       });
       await expect(
         service.signup('a@b.com', 'password123', '홍길동'),
@@ -140,6 +142,7 @@ describe('AuthService', () => {
         email: 'u@u.com',
         password: hash,
         name: 'U',
+        role: UserRole.User,
       });
       await expect(service.signin('u@u.com', 'wrong')).rejects.toBeInstanceOf(
         UnauthorizedException,
@@ -153,6 +156,7 @@ describe('AuthService', () => {
         email: 'ok@ok.com',
         password: hash,
         name: 'OK',
+        role: UserRole.User,
       });
 
       const out = await service.signin('ok@ok.com', 'good');

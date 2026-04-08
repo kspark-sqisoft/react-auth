@@ -39,7 +39,7 @@ class BookLayoutAiBodyDto {
   /** 단일 이미지/비디오 선택 시에만 — 교체·바꿔줘 요청에 replace_widget_media로 연결 */
   selection?: BookLayoutAiSelectionDto;
   /**
-   * 저장된 북 id. 넣으면 성공한 user/assistant 한 턴을 DB에 남깁니다(작성자만).
+   * 저장된 북 id. 넣으면 성공한 user/assistant 한 턴을 DB에 남깁니다(작성자·관리자).
    * OpenAI 요청에는 이전 대화를 넣지 않으므로 토큰 사용은 늘지 않습니다.
    */
   bookId?: number;
@@ -58,14 +58,17 @@ export class BooksAiController {
   @Get('chat')
   @ApiOperation({
     summary: '북 AI 대화 기록',
-    description: '해당 북 작성자만. 시간순 최대 200줄.',
+    description: '해당 북 작성자 또는 관리자. 시간순 최대 200줄.',
   })
   @ApiQuery({ name: 'bookId', required: true, type: Number })
   chatHistory(
     @Req() req: Request & { user: JwtPayload },
     @Query('bookId', ParseIntPipe) bookId: number,
   ) {
-    return this.bookAiService.listLayoutChat(bookId, req.user.sub);
+    return this.bookAiService.listLayoutChat(bookId, {
+      id: req.user.sub,
+      role: req.user.role,
+    });
   }
 
   @Post('layout')
@@ -99,7 +102,12 @@ export class BooksAiController {
       const id = Math.floor(Number(bid));
       if (Number.isFinite(id) && id > 0) {
         await this.bookAiService
-          .tryPersistChatTurn(id, req.user.sub, body.message, result.reply)
+          .tryPersistChatTurn(
+            id,
+            { id: req.user.sub, role: req.user.role },
+            body.message,
+            result.reply,
+          )
           .catch((e) => {
             this.logger.warn(
               `[books/ai] 대화 저장 생략 bookId=${id}: ${String(e)}`,

@@ -1,4 +1,7 @@
 import { Test, TestingModule } from '@nestjs/testing';
+import type { Request } from 'express';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
+import { UserRole } from '../users/user-role';
 import { CatsController } from './cats.controller';
 import { CatsService } from './cats.service';
 import type { CatsClientSnapshot } from './decorators/cats-client-meta.decorator';
@@ -16,6 +19,15 @@ describe('CatsController', () => {
     ip: '127.0.0.1',
     userAgent: 'jest',
   };
+
+  const mockReq = {
+    user: {
+      sub: 99,
+      email: 't@t.com',
+      name: 'T',
+      role: UserRole.User,
+    },
+  } as Request & { user: JwtPayload };
 
   beforeEach(async () => {
     service = {
@@ -43,8 +55,8 @@ describe('CatsController', () => {
   });
 
   describe('studyGuardSample', () => {
-    it('Guard 통과를 가정한 응답 형태', async () => {
-      const out = await controller.studyGuardSample();
+    it('Guard 통과를 가정한 응답 형태', () => {
+      const out = controller.studyGuardSample();
       expect(out.ok).toBe(true);
       expect(out.hint).toContain('REQUEST_FLOW');
     });
@@ -65,18 +77,21 @@ describe('CatsController', () => {
     it('DTO 로 서비스 create 위임', async () => {
       const dto = { name: 'c', age: 1, breed: 'mixed' };
       service.create.mockResolvedValue({ id: 3, ...dto });
-      await expect(controller.create(dto)).resolves.toMatchObject({
+      await expect(controller.create(mockReq, dto)).resolves.toMatchObject({
         id: 3,
         name: 'c',
       });
-      expect(service.create).toHaveBeenCalledWith(dto);
+      expect(service.create).toHaveBeenCalledWith(dto, 99);
     });
   });
 
   describe('remove', () => {
     it('삭제 후 deletedId 반환', async () => {
-      const out = await controller.remove(5);
-      expect(service.remove).toHaveBeenCalledWith(5);
+      const out = await controller.remove(mockReq, 5);
+      expect(service.remove).toHaveBeenCalledWith(5, {
+        id: 99,
+        role: UserRole.User,
+      });
       expect(out).toEqual({ deletedId: 5 });
     });
   });

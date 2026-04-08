@@ -25,6 +25,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Spinner } from "@/components/ui/spinner";
 import { toast } from "sonner";
+import { canEditAsOwnerOrAdmin } from "@/lib/authz";
 
 type CommentFormState = {
   error: string | null;
@@ -51,7 +52,7 @@ function CommentItem({
   const [replyOpen, setReplyOpen] = useState(false);
   const [isDeletePending, startDeleteTransition] = useTransition();
 
-  const isOwner = user?.sub === comment.author.id;
+  const canDeleteComment = canEditAsOwnerOrAdmin(user, comment.author.id);
   const maxVisualDepth = 14;
   const indent = Math.min(depth, maxVisualDepth);
 
@@ -141,7 +142,7 @@ function CommentItem({
               답글
             </Button>
           ) : null}
-          {isOwner ? (
+          {canDeleteComment ? (
             <Button
               type="button"
               variant="ghost"

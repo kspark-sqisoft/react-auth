@@ -15,6 +15,7 @@ import { UsersModule } from '../users/users.module';
 import { JwtModule } from '@nestjs/jwt';
 import { JwtStrategy } from './jwt.strategy';
 import { OptionalJwtAuthGuard } from './jwt-optional.guard';
+import { RolesGuard } from './roles.guard';
 import { JWT_ACCESS_EXPIRES_IN, JWT_ACCESS_SECRET } from '../env.constants';
 import { RefreshToken } from './refresh-token.entity';
 
@@ -31,11 +32,12 @@ import { RefreshToken } from './refresh-token.entity';
     AuthService,
     JwtStrategy,
     OptionalJwtAuthGuard,
+    RolesGuard,
     AuthDomainSpanMiddleware,
     AuthDomainSpanInterceptor,
   ],
   controllers: [AuthController],
-  exports: [JwtModule, OptionalJwtAuthGuard],
+  exports: [JwtModule, OptionalJwtAuthGuard, RolesGuard],
 })
 export class AuthModule implements NestModule {
   configure(consumer: MiddlewareConsumer) {

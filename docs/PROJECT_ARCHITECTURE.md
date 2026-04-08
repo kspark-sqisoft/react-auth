@@ -18,6 +18,7 @@
 8. [북(Book) 편집기 심화](#8-북book-편집기-심화)
 9. [디렉터리 구조 (요약)](#9-디렉터리-구조-요약)
 10. [개발·배포 시 참고](#10-개발배포-시-참고)
+11. [역할 기반 접근 제어 (RBAC)](#11-역할-기반-접근-제어-rbac)
 
 ---
 
@@ -33,6 +34,7 @@
 | **뉴스** | 북 편집기 뉴스 위젯용 [NewsAPI](https://newsapi.org/) 헤드라인 프록시 (`NEWSAPI_KEY`) |
 | **Cats** | 학습용 CRUD (`study_cats` 테이블) |
 | **사용자** | 내 정보 조회/수정, 아바타 |
+| **역할(RBAC)** | `user` / `admin`, DB·JWT·가드·도메인 정책으로 수정·삭제 권한 분리 |
 
 ---
 
@@ -137,6 +139,7 @@ erDiagram
     int id PK
     string email UK
     string password
+    string role
   }
   Book {
     int id PK
@@ -160,7 +163,7 @@ erDiagram
 
 | 엔티티 | 테이블(기본) | 핵심 필드 / 관계 |
 |--------|----------------|------------------|
-| `User` | `user` | email(유니크), name, password, profileImageFilename |
+| `User` | `user` | email(유니크), name, password, **role**(`user`\|`admin`), profileImageFilename |
 | `RefreshToken` | `refresh_token` | userId, tokenHash(SHA-256), expiresAt |
 | `Post` | `post` | title, content, author → User |
 | `PostAttachment` | `post_attachment` | postId, kind(image\|video), fileFilename, posterFilename |
@@ -212,8 +215,10 @@ flowchart LR
 
 | 메서드 | 경로 | 설명 |
 |--------|------|------|
-| GET | `/users/me` | 내 프로필 |
-| PATCH | `/users/me` | 내 정보 수정 |
+| GET | `/users/me` | 내 프로필(역할·아바타 URL 포함) |
+| PATCH | `/users/me` | 내 정보 수정(multipart). 역할: 본인을 `admin`으로 올리기 불가, 관리자는 본인을 `user`로 강등 가능(마지막 관리자는 불가) |
+| GET | `/users/admin` | **관리자만** — 전체 사용자 목록(역할·아바타 URL 등, 비밀번호 없음) |
+| POST | `/users/admin/set-role` | **관리자만** — JSON `{ email, role }`로 타 계정 역할 저장 |
 
 **게시글** — `@Controller('posts')`
 
@@ -486,6 +491,190 @@ react-auth/
 | 뉴스 위젯 | `NEWSAPI_KEY` — [NewsAPI](https://newsapi.org/) 개발자 키 |
 | 정적·업로드 | `uploads/` 아바타·북 미디어·글 첨부 등 |
 | 글 시드(개발) | `backend`에서 `npm run seed:posts` — 가장 오래된 사용자에게 IT 주제 글 20개 삽입(무한 스크롤 테스트용). **재실행 시 20개씩 추가** |
+| 최초 관리자 | `BOOTSTRAP_ADMIN_EMAILS`(쉼표 구분) 또는 DB에서 `role = 'admin'` 직접 설정 후, 이후에는 관리자 UI/API로 역할 관리 |
+
+---
+
+## 11. 역할 기반 접근 제어 (RBAC)
+
+> **학습용 요약:** “로그인했는가?”는 **인증(Authentication)** 이고, “이 글을 지울 수 있는가?”는 **인가(Authorization)** 입니다. 이 프로젝트는 역할이 **`user`(일반)** 과 **`admin`(관리자)** 두 가지이며, **진짜 권한은 DB의 `User.role`** 에 두고, 요청마다 JWT 검증 후 DB에서 다시 읽어 맞춥니다.
+
+### 11.1 역할 정의와 저장
+
+역할은 문자열 enum으로 고정합니다.
+
+```typescript
+// backend/src/users/user-role.ts
+export enum UserRole {
+  User = 'user',
+  Admin = 'admin',
+}
+```
+
+`User` 엔티티에 컬럼으로 저장됩니다(기본값 일반 사용자).
+
+```typescript
+// backend/src/users/user.entity.ts (발췌)
+@Column({ type: 'varchar', length: 16, default: UserRole.User })
+role: UserRole;
+```
+
+### 11.2 JWT와 “매 요청마다 DB 역할”
+
+액세스 토큰 payload 형식은 다음과 같습니다.
+
+```typescript
+// backend/src/auth/types/jwt-payload.type.ts
+export interface JwtPayload {
+  sub: number;
+  email: string;
+  name: string;
+  role: UserRole;
+}
+```
+
+로그인·리프레시 시 토큰에 `role`을 넣지만, **Passport JWT 전략의 `validate`에서는 DB를 다시 조회**해 `req.user`를 채웁니다. 그래서 DB에서 관리자로 올린 뒤에는 **재로그인 없이도** 다음 요청부터 관리자 권한이 반영됩니다(토큰 안의 role과 잠시 어긋날 수 있어도 `validate` 결과가 우선).
+
+```typescript
+// backend/src/auth/jwt.strategy.ts (핵심만)
+async validate(payload: JwtPayload): Promise<JwtPayload> {
+  const sub = assertJwtSubToUserId(payload.sub);
+  const user = await this.usersService.findByIdForAuth(sub);
+  if (!user) throw new UnauthorizedException();
+  return {
+    sub: user.id,
+    email: user.email,
+    name: user.name ?? '',
+    role: user.role ?? UserRole.User,
+  };
+}
+```
+
+### 11.3 라우트 보호: `JwtAuthGuard` + `RolesGuard`
+
+- **`JwtAuthGuard`**: Bearer JWT 검증 후 `validate` 결과를 `req.user`에 붙입니다.
+- **`RolesGuard`**: 핸들러에 붙은 `@Roles(...)` 메타데이터를 읽고, `req.user.role`이 허용 목록에 없으면 **403**입니다.
+
+```typescript
+// backend/src/auth/roles.decorator.ts
+export const ROLES_KEY = 'roles';
+export const Roles = (...roles: UserRole[]) => SetMetadata(ROLES_KEY, roles);
+```
+
+```typescript
+// backend/src/auth/roles.guard.ts (핵심만)
+canActivate(context: ExecutionContext): boolean {
+  const required = this.reflector.getAllAndOverride<UserRole[]>(ROLES_KEY, [
+    context.getHandler(),
+    context.getClass(),
+  ]);
+  if (!required?.length) return true;
+
+  const req = context.switchToHttp().getRequest<{ user?: JwtPayload }>();
+  const user = req.user;
+  if (!user || !required.includes(user.role)) {
+    throw new ForbiddenException('이 작업은 관리자만 할 수 있습니다.');
+  }
+  return true;
+}
+```
+
+관리자 전용 사용자 API 예시:
+
+```typescript
+// backend/src/users/users.controller.ts (패턴 발췌)
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.Admin)
+@Get('admin')
+async adminListUsers() {
+  return this.usersService.listUsersForAdmin();
+}
+
+@UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(UserRole.Admin)
+@Post('admin/set-role')
+async adminSetRole(@Body() body: AdminSetRoleDto) {
+  return this.usersService.setRoleByEmail(body.email ?? '', body.role);
+}
+```
+
+`RolesGuard`는 `AuthModule`에서 `providers`/`exports` 되고, `UsersModule`이 `AuthModule`을 import 하면 컨트롤러에서 사용할 수 있습니다.
+
+### 11.4 도메인 정책: 작성자 vs 관리자
+
+HTTP 라우트마다 “관리자만”을 거는 대신, **글·북·댓글·캣** 등에서는 “소유자이거나 관리자” 같은 공통 규칙을 함수로 둡니다.
+
+```typescript
+// backend/src/auth/auth-policy.ts
+export type AuthActor = { id: number; role: UserRole };
+
+export function isAdminRole(role: UserRole): boolean {
+  return role === UserRole.Admin;
+}
+
+export function canMutateOwnedResource(
+  actor: AuthActor,
+  ownerUserId: number,
+): boolean {
+  return (
+    isAdminRole(actor.role) || Number(actor.id) === Number(ownerUserId)
+  );
+}
+
+/** Cats: owner 가 없는 레거시 행은 일반 사용자는 수정·삭제 불가 */
+export function canMutateCatResource(
+  actor: AuthActor,
+  ownerUserId: number | null | undefined,
+): boolean {
+  if (isAdminRole(actor.role)) return true;
+  if (ownerUserId == null) return false;
+  return Number(actor.id) === Number(ownerUserId);
+}
+```
+
+각 서비스/컨트롤러는 `req.user.sub`·`req.user.role`로 `AuthActor`를 만들고 위 함수로 수정·삭제 여부를 판단합니다.
+
+### 11.5 관리자 역할 변경과 안전장치
+
+- **`POST /users/admin/set-role`**: 이메일로 대상 사용자를 찾아 `role`을 DB에 저장.
+- **`PATCH /users/me`**: 본인이 스스로 **`admin`으로 승격하는 것은 금지**(다른 관리자가 지정). 관리자는 본인을 `user`로 내릴 수 있으나, **시스템에 관리자가 한 명뿐일 때 강등은 거절**합니다(`UsersService`의 `assertNotLastAdminWhenDemotingAdmin`).
+- **`BOOTSTRAP_ADMIN_EMAILS`**: 부팅 시 해당 이메일(들)을 `admin`으로 맞추는 **선택 시드**. 비우면 동작하지 않음. 상수는 `backend/src/env.constants.ts`의 `BOOTSTRAP_ADMIN_EMAILS` 참고.
+
+### 11.6 프론트엔드
+
+- **`AuthUser.role`**: `GET /users/me` 응답에 포함(`frontend/src/lib/api.ts`).
+- **`authz` 헬퍼**: UI에서 버튼 노출·편집 가능 여부를 맞출 때 사용합니다.
+
+```typescript
+// frontend/src/lib/authz.ts
+export function isAdminUser(user: AuthUser | null | undefined): boolean {
+  return user?.role === "admin";
+}
+
+export function canEditAsOwnerOrAdmin(
+  user: AuthUser | null,
+  authorId: number,
+): boolean {
+  if (!user) return false;
+  if (isAdminUser(user)) return true;
+  return Number(user.sub) === Number(authorId);
+}
+```
+
+- **내 정보 화면**: 관리자에게만 “다른 사용자 역할” 목록(`GET /users/admin`)·행별 저장(`POST /users/admin/set-role`)을 노출합니다(`MyInfoPage.tsx`).
+
+### 11.7 학습 시 따라가기 좋은 파일 목록
+
+| 구분 | 경로 |
+|------|------|
+| 역할 enum | `backend/src/users/user-role.ts` |
+| DB 필드 | `backend/src/users/user.entity.ts` |
+| JWT payload·전략 | `backend/src/auth/types/jwt-payload.type.ts`, `jwt.strategy.ts` |
+| 가드·데코레이터 | `backend/src/auth/roles.guard.ts`, `roles.decorator.ts`, `jwt.guard.ts` |
+| 소유자/관리자 판별 | `backend/src/auth/auth-policy.ts` |
+| 관리자 API·내 프로필 | `backend/src/users/users.controller.ts`, `users.service.ts` |
+| 프론트 권한 헬퍼 | `frontend/src/lib/authz.ts` |
+| 관리자 UI | `frontend/src/pages/MyInfoPage.tsx` |
 
 ---
 

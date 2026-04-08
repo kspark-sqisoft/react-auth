@@ -227,7 +227,9 @@ export class PostsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @Delete(':id/comments/:commentId')
-  @ApiOperation({ summary: '댓글 삭제(작성자만, 하위 대댓글도 함께 삭제)' })
+  @ApiOperation({
+    summary: '댓글 삭제(댓글 작성자 또는 관리자, 하위 대댓글도 함께 삭제)',
+  })
   async removeComment(
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
@@ -236,7 +238,10 @@ export class PostsController {
     this.logger.log(
       `[POSTS·컨트롤러] removeComment(post ${id}, comment ${commentId}) 핸들러 진입`,
     );
-    await this.commentsService.remove(id, commentId, req.user.sub);
+    await this.commentsService.remove(id, commentId, {
+      id: req.user.sub,
+      role: req.user.role,
+    });
     return { ok: true };
   }
 
@@ -297,7 +302,7 @@ export class PostsController {
     ),
   )
   @Patch(':id')
-  @ApiOperation({ summary: '글 수정(작성자만)' })
+  @ApiOperation({ summary: '글 수정(작성자 또는 관리자)' })
   async update(
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
@@ -354,15 +359,19 @@ export class PostsController {
     }
 
     try {
-      return await this.postsService.updatePost(req.user.sub, id, {
-        title,
-        content,
-        category,
-        clearAllMedia: clearAllMedia || undefined,
-        mediaPlan,
-        newFiles,
-        newPosters,
-      });
+      return await this.postsService.updatePost(
+        { id: req.user.sub, role: req.user.role },
+        id,
+        {
+          title,
+          content,
+          category,
+          clearAllMedia: clearAllMedia || undefined,
+          mediaPlan,
+          newFiles,
+          newPosters,
+        },
+      );
     } catch (e) {
       await cleanupUploadedFiles(files);
       throw e;
@@ -372,13 +381,16 @@ export class PostsController {
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth('JWT-auth')
   @Delete(':id')
-  @ApiOperation({ summary: '글 삭제(작성자만)' })
+  @ApiOperation({ summary: '글 삭제(작성자 또는 관리자)' })
   async remove(
     @Req() req: Request & { user: JwtPayload },
     @Param('id', ParseIntPipe) id: number,
   ) {
     this.logger.log(`[POSTS·컨트롤러] remove(${id}) 핸들러 진입`);
-    await this.postsService.remove(req.user.sub, id);
+    await this.postsService.remove(
+      { id: req.user.sub, role: req.user.role },
+      id,
+    );
     return { ok: true };
   }
 }

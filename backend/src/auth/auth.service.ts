@@ -12,6 +12,7 @@ import { Repository } from 'typeorm';
 import { JWT_REFRESH_EXPIRES_IN, JWT_REFRESH_SECRET } from '../env.constants';
 import { JwtPayload } from './types/jwt-payload.type';
 import { UsersService } from '../users/users.service';
+import { UserRole } from '../users/user-role';
 import { RefreshToken } from './refresh-token.entity';
 import { hashRefreshToken } from './refresh-token-hash';
 
@@ -119,6 +120,7 @@ export class AuthService {
       sub: user.id,
       email: user.email,
       name: user.name,
+      role: user.role ?? UserRole.User,
     };
 
     const access_token = this.signAccessToken(payload);
@@ -178,6 +180,7 @@ export class AuthService {
             sub: user.id,
             email: user.email,
             name: user.name,
+            role: user.role ?? UserRole.User,
           };
           const next = this.signRefreshToken(nextPayload);
           const expiresAt = this.decodeRefreshExp(next);
@@ -208,6 +211,7 @@ export class AuthService {
         sub: user.id,
         email: user.email,
         name: user.name,
+        role: user.role ?? UserRole.User,
       }),
       refresh_token: newRefreshToken,
     };

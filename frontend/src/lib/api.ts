@@ -54,6 +54,8 @@ export type AuthUser = {
   name: string;
   /** `/uploads/avatars/...` 또는 null */
   imageUrl: string | null;
+  /** 미응답·구버전 API 호환 시 생략되면 일반 사용자로 간주 */
+  role?: "user" | "admin";
 };
 
 export type PostAuthor = {
@@ -271,11 +273,13 @@ export async function fetchMe(): Promise<AuthUser | null> {
   }
 }
 
-/** JWT 필요; 표시 이름·프로필 이미지 교체 또는 `removeImage`로 제거(최소 한 항목) */
+/** JWT 필요; 표시 이름·프로필 이미지·역할 중 최소 한 항목 */
 export async function updateMyProfile(input: {
   name?: string;
   image?: File | null;
   removeImage?: boolean;
+  /** 관리자만 user로 강등 가능. 일반 사용자가 admin 지정 시 403 */
+  role?: "user" | "admin";
 }): Promise<AuthUser> {
   try {
     const fd = new FormData();
@@ -284,7 +288,53 @@ export async function updateMyProfile(input: {
     }
     if (input.image) fd.append("image", input.image);
     if (input.removeImage) fd.append("removeImage", "1");
+    if (input.role != null) fd.append("role", input.role);
     const { data } = await api.patch<AuthUser>("/users/me", fd);
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+/** 관리자 전용: 다른 계정의 역할을 DB에 저장 */
+export type AdminSetUserRoleResponse = {
+  id: number;
+  email: string;
+  name: string;
+  role: "user" | "admin";
+};
+
+/** 관리자 전용: 전체 사용자 목록(역할 관리) */
+export type AdminUserListItem = {
+  id: number;
+  email: string;
+  name: string;
+  /** `/uploads/avatars/...` 또는 null */
+  imageUrl: string | null;
+  role: "user" | "admin";
+};
+
+export async function fetchAdminUsersList(): Promise<AdminUserListItem[]> {
+  try {
+    const { data } = await api.get<AdminUserListItem[]>("/users/admin");
+    return data;
+  } catch (e) {
+    rethrowAsApiError(e);
+  }
+}
+
+export async function adminSetUserRoleByEmail(input: {
+  email: string;
+  role: "user" | "admin";
+}): Promise<AdminSetUserRoleResponse> {
+  try {
+    const { data } = await api.post<AdminSetUserRoleResponse>(
+      "/users/admin/set-role",
+      {
+        email: input.email.trim(),
+        role: input.role,
+      },
+    );
     return data;
   } catch (e) {
     rethrowAsApiError(e);
@@ -550,6 +600,8 @@ export type Cat = {
   breed: string;
   /** `/uploads/cat-images/...` 또는 null */
   imageUrl: string | null;
+  /** 등록자; 레거시 데이터는 null */
+  ownerId: number | null;
   createdAt: string;
   updatedAt: string;
 };

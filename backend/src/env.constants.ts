@@ -17,6 +17,17 @@ export const DB_PASSWORD = process.env.DB_PASSWORD?.trim() || 'reactauth';
 export const DB_NAME = process.env.DB_NAME?.trim() || 'reactauth';
 
 /**
+ * (선택) 부팅 시 해당 이메일을 admin으로 맞춤. 역할의 본질은 DB이며,
+ * 관리자는 API·UI로 다른 계정 역할을 변경합니다. 초기 관리자가 없을 때만 env로 시드.
+ */
+export const BOOTSTRAP_ADMIN_EMAILS = (
+  process.env.BOOTSTRAP_ADMIN_EMAILS?.trim() ?? ''
+)
+  .split(',')
+  .map((s) => s.trim().toLowerCase())
+  .filter(Boolean);
+
+/**
  * 스키마 자동 동기화. 운영에서는 `TYPEORM_SYNC=false` + 마이그레이션 권장.
  * 미설정 시: NODE_ENV=production 이면 false, 아니면 true.
  */

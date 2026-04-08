@@ -2,9 +2,11 @@ import {
   Column,
   CreateDateColumn,
   Entity,
+  ManyToOne,
   PrimaryGeneratedColumn,
   UpdateDateColumn,
 } from 'typeorm';
+import { User } from '../users/user.entity';
 
 /**
  * ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
@@ -33,6 +35,10 @@ export class Cat {
 
   @Column({ default: 'mixed' })
   breed: string;
+
+  /** 등록한 사용자(레거시 행은 null → 관리자만 수정·삭제) */
+  @ManyToOne(() => User, { onDelete: 'CASCADE', nullable: true })
+  owner: User | null;
 
   /** `uploads/cat-images/` 아래 파일명(확장자 포함). 없으면 null */
   @Column({ type: 'varchar', length: 255, nullable: true })

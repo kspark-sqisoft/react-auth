@@ -8,6 +8,7 @@ import {
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 import { AVATARS_SUBDIR } from '../env.constants';
+import { type AuthActor, canMutateOwnedResource } from '../auth/auth-policy';
 import { Post } from './post.entity';
 import { PostComment } from './post-comment.entity';
 
@@ -153,10 +154,10 @@ export class CommentsService {
   async remove(
     postId: number,
     commentId: number,
-    userId: number,
+    actor: AuthActor,
   ): Promise<void> {
     this.logger.log(
-      `[POSTS·댓글] remove | postId=${postId} commentId=${commentId} userId=${userId}`,
+      `[POSTS·댓글] remove | postId=${postId} commentId=${commentId} actorId=${actor.id}`,
     );
     const c = await this.commentRepo.findOne({
       where: { id: commentId, post: { id: postId } },
@@ -165,7 +166,7 @@ export class CommentsService {
     if (!c) {
       throw new NotFoundException();
     }
-    if (c.author.id !== userId) {
+    if (!canMutateOwnedResource(actor, c.author.id)) {
       throw new ForbiddenException();
     }
     await this.commentRepo.remove(c);

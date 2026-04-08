@@ -22,6 +22,7 @@ import {
   type PostCategoryId,
 } from "@/lib/post-categories";
 import { postEditorSchema, type PostEditorFormValues } from "@/lib/schemas/forms";
+import { canEditAsOwnerOrAdmin } from "@/lib/authz";
 import { FormErrorAlert } from "@/components/forms/FormErrorAlert";
 import { FormFieldError } from "@/components/forms/FormFieldError";
 import { FormStatusSubmitButton } from "@/components/forms/FormStatusSubmitButton";
@@ -264,7 +265,7 @@ export function PostEditorPage() {
         return;
       }
       if (postLoading || !loadedPost) return;
-      if (user && loadedPost.author.id !== user.sub) {
+      if (user && !canEditAsOwnerOrAdmin(user, loadedPost.author.id)) {
         appLog("posts", "수정 권한 없음 — 상세로 이동", { postId });
         setForbidden(true);
         return;

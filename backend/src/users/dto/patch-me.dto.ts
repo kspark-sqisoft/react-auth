@@ -12,4 +12,11 @@ export class PatchMeDto {
     description: '기존 프로필 이미지 제거(새 파일 없을 때)',
   })
   removeImage?: string;
+
+  @ApiPropertyOptional({
+    enum: ['user', 'admin'],
+    description:
+      '계정 역할. 일반 사용자는 admin으로 올릴 수 없음(서버 부트스트랩만). 관리자만 user로 강등 가능.',
+  })
+  role?: string;
 }

@@ -4,6 +4,8 @@
 export const userKeys = {
   all: ["users"] as const,
   me: () => [...userKeys.all, "me"] as const,
+  /** 응답에 imageUrl 등 스키마가 바뀌면 세그먼트를 올려 캐시 무효화 */
+  adminList: () => [...userKeys.all, "admin", "list", "v3"] as const,
 };
 
 export const bookKeys = {

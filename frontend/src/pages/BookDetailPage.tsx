@@ -82,6 +82,7 @@ import {
 } from "@/lib/use-book-canvas-display-scale";
 import { useBookDocumentHistory } from "@/lib/use-book-document-history";
 import { useBookPageThumbnails } from "@/lib/use-book-page-thumbnails";
+import { canEditAsOwnerOrAdmin } from "@/lib/authz";
 import { useAuth } from "@/stores/auth-store";
 import { BookCanvasToolbar } from "@/components/books/BookCanvasToolbar";
 import { BookHeaderSlideDimensions } from "@/components/books/BookHeaderSlideDimensions";
@@ -2253,11 +2254,9 @@ export function BookDetailPage() {
     enabled: Number.isFinite(id) && id > 0,
   });
 
-  /** JWT `sub`·API `author.id`가 숫자/문자열로 섞여도 소유자 판별 */
+  /** 작성자 또는 관리자만 편집 UI */
   const canEdit = Boolean(
-    user &&
-      data &&
-      Number(user.sub) === Number(data.author.id),
+    user && data && canEditAsOwnerOrAdmin(user, data.author.id),
   );
 
   const sortedPagesView = useMemo(() => {

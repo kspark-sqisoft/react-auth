@@ -8,6 +8,7 @@ import {
   Param,
   Patch,
   Post,
+  Req,
   UploadedFile,
   UseFilters,
   UseGuards,
@@ -21,6 +22,8 @@ import {
   ApiOperation,
   ApiTags,
 } from '@nestjs/swagger';
+import type { Request } from 'express';
+import type { JwtPayload } from '../auth/types/jwt-payload.type';
 import { CreateCatDto } from './dto/create-cat.dto';
 import { UpdateCatDto } from './dto/update-cat.dto';
 import {
@@ -120,15 +123,20 @@ export class CatsController {
   @ApiBearerAuth('JWT-auth')
   @ApiBody({ type: UpdateCatDto })
   @ApiOperation({
-    summary: '[학습] 정보 수정 (로그인 필요)',
-    description: 'name, age, breed 중 최소 하나. 생략한 필드는 그대로 둡니다.',
+    summary: '[학습] 정보 수정 (소유자 또는 관리자)',
+    description:
+      'name, age, breed 중 최소 하나. 생략한 필드는 그대로 둡니다. 본인이 등록한 고양이 또는 관리자만 가능합니다.',
   })
   update(
+    @Req() req: Request & { user: JwtPayload },
     @Param('id', CatsParseIntIdPipe) id: number,
     @Body(ParseUpdateCatPipe) dto: UpdateCatDto,
   ) {
     this.logger.log(`[CATS·컨트롤러] patch(${id}) 핸들러 진입`);
-    return this.catsService.update(id, dto);
+    return this.catsService.update(id, dto, {
+      id: req.user.sub,
+      role: req.user.role,
+    });
   }
 
   @Post(':id/image')
@@ -150,11 +158,12 @@ export class CatsController {
   })
   @UseInterceptors(FileInterceptor('image', catImageMulterOptions()))
   @ApiOperation({
-    summary: '[학습] 고양이 사진 업로드·교체 (로그인 필요)',
+    summary: '[학습] 고양이 사진 업로드·교체 (소유자 또는 관리자)',
     description:
       'multipart 필드명 `image`. 기존 파일이 있으면 서버에서 삭제 후 교체합니다.',
   })
   uploadImage(
+    @Req() req: Request & { user: JwtPayload },
     @Param('id', CatsParseIntIdPipe) id: number,
     @UploadedFile() file?: Express.Multer.File,
   ) {
@@ -162,7 +171,10 @@ export class CatsController {
     if (!file?.filename) {
       throw new BadRequestException('image 파일이 필요합니다.');
     }
-    return this.catsService.uploadImage(id, file.filename);
+    return this.catsService.uploadImage(id, file.filename, {
+      id: req.user.sub,
+      role: req.user.role,
+    });
   }
 
   @Post()
@@ -178,17 +190,25 @@ export class CatsController {
    * @Body(ParseCreateCatPipe) : body 전체를 커스텀 Pipe에 통과시킨 뒤 CreateCatDto 형태로 받습니다.
    * Guard들이 먼저 실행되므로, 비로그인이면 Pipe·핸들러까지 오지 않습니다.
    */
-  create(@Body(ParseCreateCatPipe) dto: CreateCatDto) {
+  create(
+    @Req() req: Request & { user: JwtPayload },
+    @Body(ParseCreateCatPipe) dto: CreateCatDto,
+  ) {
     this.logger.log(`[CATS·컨트롤러] create() 핸들러 진입 | DTO로 서비스 호출`);
-    return this.catsService.create(dto);
+    return this.catsService.create(dto, req.user.sub);
   }
 
   @Delete(':id')
   @UseGuards(CatsBeforeJwtLogGuard, CatsJwtLogGuard, CatsAfterJwtLogGuard)
   @ApiBearerAuth('JWT-auth')
-  @ApiOperation({ summary: '[학습] 삭제 (로그인 필요)' })
-  remove(@Param('id', CatsParseIntIdPipe) id: number) {
+  @ApiOperation({ summary: '[학습] 삭제 (소유자 또는 관리자)' })
+  remove(
+    @Req() req: Request & { user: JwtPayload },
+    @Param('id', CatsParseIntIdPipe) id: number,
+  ) {
     this.logger.log(`[CATS·컨트롤러] remove(${id}) 핸들러 진입`);
-    return this.catsService.remove(id).then(() => ({ deletedId: id }));
+    return this.catsService
+      .remove(id, { id: req.user.sub, role: req.user.role })
+      .then(() => ({ deletedId: id }));
   }
 }
