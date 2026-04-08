@@ -1,0 +1,11 @@
+name: Hello World
+
+on: push
+
+jobs:
+  hello:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 변수 출력
+        run: echo "Hello ${{ github.actor }}"
