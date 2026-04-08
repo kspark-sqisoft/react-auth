@@ -1,52 +1,52 @@
-# 개발: 소스 볼륨 마운트 + Nest/Vite watch (핫 리로드)
+# 개발: 호스트 소스 볼륨 마운트 + Nest/Vite watch(핫 리로드)
 # 사용: docker compose -f docker-compose.dev.yml up
-name: react-auth-dev
+name: react-auth-dev # 프로젝트 이름(네트워크·볼륨 접두사에 사용)
 
-services:
-  db:
-    image: postgres:16-alpine
-    container_name: react-auth-db-dev
-    environment:
+services: # 개발용 3서비스
+  db: # 로컬 개발용 PostgreSQL
+    image: postgres:16-alpine # 릴리즈 compose와 동일 이미지
+    container_name: react-auth-db-dev # 릴리즈 DB와 이름 충돌 방지
+    environment: # 초기 DB·사용자
       POSTGRES_USER: ${DB_USERNAME:-reactauth}
       POSTGRES_PASSWORD: ${DB_PASSWORD:-reactauth}
       POSTGRES_DB: ${DB_NAME:-reactauth}
     ports:
-      - '5432:5432'
+      - '5432:5432' # 호스트 도구·로컬 백엔드에서 접속
     volumes:
-      - postgres_data_dev:/var/lib/postgresql/data
+      - postgres_data_dev:/var/lib/postgresql/data # 릴리즈 볼륨과 분리된 dev 데이터
     healthcheck:
       test: ['CMD-SHELL', 'pg_isready -U "$$POSTGRES_USER" -d "$$POSTGRES_DB"']
       interval: 5s
       timeout: 5s
       retries: 5
 
-  backend:
-    build:
-      context: ./backend
-      dockerfile: Dockerfile.dev
+  backend: # Nest start:dev(watch)
+    build: # 이미지 빌드 설정
+      context: ./backend # 빌드 컨텍스트 경로
+      dockerfile: Dockerfile.dev # 개발 전용 Dockerfile
     container_name: react-auth-api-dev
     ports:
-      - '3000:3000'
+      - '3000:3000' # API 및 Swagger
     environment:
-      NODE_ENV: development
-      TYPEORM_SYNC: 'true'
-      DB_HOST: db
+      NODE_ENV: development # 개발 모드
+      TYPEORM_SYNC: 'true' # 스키마 자동 맞춤(개발 편의)
+      DB_HOST: db # Compose 서비스명으로 DB 연결
       DB_PORT: 5432
       DB_USERNAME: ${DB_USERNAME:-reactauth}
       DB_PASSWORD: ${DB_PASSWORD:-reactauth}
       DB_NAME: ${DB_NAME:-reactauth}
       PORT: 3000
-      CHOKIDAR_USEPOLLING: 'true'
+      CHOKIDAR_USEPOLLING: 'true' # 볼륨 마운트 환경에서 파일 변경 감지 안정화
       JWT_ACCESS_SECRET: ${JWT_ACCESS_SECRET:-react_auth_jwt_access_dev_key_32chars_min!!}
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-react_auth_jwt_refresh_dev_key_32chars!!}
       JWT_ACCESS_EXPIRES_IN: ${JWT_ACCESS_EXPIRES_IN:-15m}
       JWT_REFRESH_EXPIRES_IN: ${JWT_REFRESH_EXPIRES_IN:-7d}
-      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173,http://localhost:8080}
+      FRONTEND_ORIGIN: ${FRONTEND_ORIGIN:-http://localhost:5173,http://localhost:8080} # Vite 이중 포트 허용
       UPLOAD_ROOT: /app/uploads
-    volumes:
-      - ./backend:/app
-      - backend_node_modules:/app/node_modules
-      - backend_uploads_dev:/app/uploads
+    volumes: # 소스는 호스트와 공유, node_modules는 별도 볼륨
+      - ./backend:/app # 소스 핫 리로드
+      - backend_node_modules:/app/node_modules # 호스트와 충돌 방지(컨테이너 전용 node_modules)
+      - backend_uploads_dev:/app/uploads # 업로드 영속
     depends_on:
       db:
         condition: service_healthy
@@ -59,30 +59,30 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-      start_period: 90s
+      start_period: 90s # npm ci + 첫 컴파일까지 여유(개발 이미지)
 
-  frontend:
+  frontend: # Vite dev 서버
     build:
       context: ./frontend
       dockerfile: Dockerfile.dev
     container_name: react-auth-web-dev
     ports:
-      - '5173:5173'
-      - '8080:5173'
+      - '5173:5173' # Vite 기본 포트
+      - '8080:5173' # 동일 dev 서버를 8080으로도 노출(습관·CORS 정렬용)
     environment:
-      VITE_API_PROXY_TARGET: http://backend:3000
-      DOCKER_DEV: 'true'
+      VITE_API_PROXY_TARGET: http://backend:3000 # Vite 프록시 대상(Compose DNS)
+      DOCKER_DEV: 'true' # 프론트 코드에서 Docker 개발 여부 판별 시 사용 가능
       # chokidar/Vite 외부 도구 호환 (Windows 볼륨 마운트 시 파일 감지)
       CHOKIDAR_USEPOLLING: 'true'
     volumes:
-      - ./frontend:/app
+      - ./frontend:/app # 소스 HMR
       - frontend_node_modules:/app/node_modules
     depends_on:
       backend:
         condition: service_healthy
 
-volumes:
-  postgres_data_dev:
-  backend_node_modules:
-  frontend_node_modules:
-  backend_uploads_dev:
+volumes: # dev 전용 named volumes
+  postgres_data_dev: # DB 데이터
+  backend_node_modules: # 백엔드 node_modules 캐시
+  frontend_node_modules: # 프론트 node_modules 캐시
+  backend_uploads_dev: # 업로드 파일
