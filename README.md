@@ -13,6 +13,7 @@ NestJS + React(Vite) 풀스택 **인증·게시글·북·채팅** 등을 포함�
 | **DB** | PostgreSQL(로컬·Docker). 개발 시 `TYPEORM_SYNC`로 스키마 자동 맞춤 가능 |
 | **문서** | [docs/PROJECT_ARCHITECTURE.md](docs/PROJECT_ARCHITECTURE.md) — 모듈·API·RBAC·북 편집기 등 |
 | **Docker** | [docs/DOCKER.md](docs/DOCKER.md) — Compose 파일별 실행 방법 |
+| **테스트** | [docs/TESTING.md](docs/TESTING.md) — Jest CLI·watch·커버리지·E2E |
 
 ---
 
@@ -103,7 +104,7 @@ react-auth/
 | 위치 | 명령 | 설명 |
 |------|------|------|
 | `backend/` | `npm run start:dev` | Nest watch 모드 |
-| `backend/` | `npm test` | 단위 테스트 |
+| `backend/` | `npm test` | 단위 테스트 (`test:watch`, `test:cov`, `test:e2e` 등은 [docs/TESTING.md](docs/TESTING.md)) |
 | `backend/` | `npm run seed:posts` | 개발용 글 시드(반복 시 누적) |
 | `frontend/` | `npm run dev` | Vite 개발 서버 |
 | `frontend/` | `npm run build` | 프로덕션 빌드 |

@@ -125,14 +125,144 @@ $env:VITE_API_BASE_URL="http://localhost:3000"; npm run dev
 
 ---
 
-## 자주 쓰는 명령
+## 자주 쓰는 명령 (요약)
+
+아래 표는 **개발용 Compose**(`docker-compose.dev.yml`) 기준입니다. 운영 스타일은 `-f docker-compose.dev.yml`을 빼고 같은 패턴으로 쓰면 됩니다.
 
 | 목적 | 명령 |
 |------|------|
 | dev 전체 로그 보며 실행 | `docker compose -f docker-compose.dev.yml up` |
 | dev 백그라운드 | `docker compose -f docker-compose.dev.yml up -d` |
-| 로그만 보기 | `docker compose -f docker-compose.dev.yml logs -f backend` |
+| 특정 서비스만 기동 | `docker compose -f docker-compose.dev.yml up -d db` |
+| 로그 스트림 | `docker compose -f docker-compose.dev.yml logs -f` |
+| 한 서비스 로그만 | `docker compose -f docker-compose.dev.yml logs -f backend` |
 | 컨테이너 상태 | `docker compose -f docker-compose.dev.yml ps` |
+| 컨테이너 안에서 셸 | `docker compose -f docker-compose.dev.yml exec backend sh` |
+| Postgres 콘솔 | `docker compose -f docker-compose.dev.yml exec db psql -U reactauth -d reactauth` |
+
+**서비스 이름**(Compose): `db`, `backend`, `frontend`  
+**컨테이너 이름**(참고): dev는 `react-auth-db-dev`, `react-auth-api-dev`, `react-auth-web-dev` — `docker exec`에 직접 넣을 때 사용합니다.
+
+---
+
+## Docker / Compose CLI 유용 정리
+
+### `docker compose exec` — 이미 떠 있는 컨테이너에서 명령 실행
+
+스택이 `up -d` 등으로 올라간 뒤, **호스트 터미널에서** 컨테이너 안 명령을 실행합니다. 시드 스크립트·일회성 점검에 자주 씁니다.
+
+```bash
+# 백엔드 컨테이너에서 npm 스크립트 (예: 게시글 시드)
+docker compose -f docker-compose.dev.yml exec backend npm run seed:posts
+
+# 대화형 셸 (Alpine 이미지는 보통 sh)
+docker compose -f docker-compose.dev.yml exec backend sh
+docker compose -f docker-compose.dev.yml exec frontend sh
+
+# TTY가 필요한 대화형 도구는 -it
+docker compose -f docker-compose.dev.yml exec -it db psql -U reactauth -d reactauth
+```
+
+- **한 줄 요약**: `exec`는 “같은 Compose 프로젝트·같은 실행 중 서비스”에 붙을 때 경로가 짧습니다.
+- 서비스가 꺼져 있으면 실패하므로, 먼저 `docker compose ... ps`로 상태를 확인합니다.
+
+### `docker exec` — 컨테이너 이름/ID로 직접 실행
+
+Compose 없이 **컨테이너 이름**만 알 때 씁니다.
+
+```bash
+docker exec -it react-auth-api-dev sh
+docker exec react-auth-db-dev psql -U reactauth -d reactauth -c "SELECT 1"
+```
+
+`docker ps`로 이름·ID를 확인한 뒤 사용하면 됩니다.
+
+### 로그: `logs`
+
+```bash
+# 전체 서비스 팔로우
+docker compose -f docker-compose.dev.yml logs -f
+
+# backend만, 최근 200줄부터
+docker compose -f docker-compose.dev.yml logs -f --tail=200 backend
+
+# 타임스탬프 포함
+docker compose -f docker-compose.dev.yml logs -f -t backend
+```
+
+### 상태·리소스: `ps`, `top`, `stats`
+
+```bash
+docker compose -f docker-compose.dev.yml ps
+docker compose -f docker-compose.dev.yml ps -a   # 종료된 것까지
+
+docker top react-auth-api-dev          # 컨테이너 안 프로세스
+docker stats                           # 실시간 CPU/메모리 (전체)
+docker stats react-auth-api-dev react-auth-db-dev
+```
+
+### 시작·중지·재시작
+
+```bash
+# 서비스만 재시작 (이미지 다시 빌드는 안 함)
+docker compose -f docker-compose.dev.yml restart backend
+
+docker compose -f docker-compose.dev.yml stop
+docker compose -f docker-compose.dev.yml start
+
+# 설정/이미지를 바꾼 뒤 재생성
+docker compose -f docker-compose.dev.yml up -d --force-recreate backend
+```
+
+### 빌드·이미지
+
+```bash
+docker compose -f docker-compose.dev.yml build backend
+docker compose -f docker-compose.dev.yml build --no-cache backend
+docker compose -f docker-compose.dev.yml pull db   # 이미지가 레지스트리에서 올 때
+docker images | findstr react-auth                 # Windows: 로컬 이미지 확인
+```
+
+### `inspect` — 포트·환경·마운트 확인
+
+```bash
+docker inspect react-auth-api-dev --format '{{json .NetworkSettings.Ports}}'
+docker inspect react-auth-api-dev
+```
+
+JSON이 길면 `--format`으로 필요한 필드만 뽑는 편이 읽기 쉽습니다.
+
+### `cp` — 호스트 ↔ 컨테이너 파일 복사
+
+```bash
+docker cp react-auth-api-dev:/app/package.json ./package.json.from-container
+docker cp ./local.file react-auth-api-dev:/app/tmp/
+```
+
+업로드 볼륨을 쓰는 경우 대부분은 호스트의 `backend/` 마운트로 충분하고, `cp`는 일회성 복구·점검용으로 두면 됩니다.
+
+### `run` — 일회성 컨테이너 (DB 클라이언트 등)
+
+`exec`와 달리 **새 컨테이너**를 띄웁니다. 같은 Compose 네트워크에 붙이려면 네트워크 이름이 필요합니다.
+
+```bash
+docker network ls   # react-auth-dev_default 같은 이름 확인 후
+docker run --rm -it --network react-auth-dev_default postgres:16-alpine \
+  psql -h db -U reactauth -d reactauth
+```
+
+네트워크 이름은 프로젝트 폴더명·Compose `name:`에 따라 달라지므로 `docker network ls`로 확인하는 것이 안전합니다.
+
+### 정리·디스크 (`prune` 등)
+
+```bash
+docker compose -f docker-compose.dev.yml down -v   # 이 프로젝트 볼륨까지 삭제 (DB 데이터 초기화)
+docker system df                                   # 디스크 사용량 요약
+docker builder prune                               # 빌드 캐시 정리
+docker system prune                                # 사용 안 하는 네트워크·중단 컨테이너 등 (주의)
+```
+
+`system prune`은 다른 프로젝트의 중지 컨테이너까지 지울 수 있으므로, 공유 PC에서는 옵션(`-a`, `--volumes`)을 꼭 읽고 실행합니다.
 
 ---
 
